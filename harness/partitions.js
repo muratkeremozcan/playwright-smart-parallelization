@@ -1,8 +1,9 @@
 'use strict';
 
 /**
- * Partitions. A partition is an array of shards and a shard is `{ args }`, the Playwright CLI
- * arguments that select that shard's tests. Any engine can supply its own `{ args }` shards.
+ * Partitions. A partition is an array of shards and a shard is `{ args, env? }`: the Playwright CLI
+ * arguments that select that shard's tests and, optionally, extra environment for its run. Any
+ * engine can supply its own shards.
  */
 
 const fs = require('node:fs');

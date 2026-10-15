@@ -69,10 +69,35 @@ jobs:
             exit 1
           fi
 
+  # Each harness run is independent and spends most of its time in the fixture's serial sleeps, so
+  # the runs are matrix legs that execute in parallel. A leg fails on any violation, and the
+  # negative legs also fail when a control does not behave as expected.
   harness:
-    name: qualification harness
+    name: qualification harness, ${{ matrix.name }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: native sharding, 2 shards
+            id: native-2
+            command: npm run harness -- --shards 2 --report harness-report.json
+          - name: native sharding, 3 shards
+            id: native-3
+            command: npm run harness -- --shards 3 --report harness-report.json
+          - name: native sharding, 3 shards with repeat-each 2
+            id: native-3-repeat
+            command: npm run harness -- --shards 3 --repeat-each 2 --report harness-report.json
+          - name: native sharding, setup project selected by name
+            id: native-setup
+            command: npm run harness -- --shards 2 --report harness-report.json -- --project=setup
+          - name: negative control
+            id: negative
+            command: npm run harness:negative -- --report harness-report.json
+          - name: negative control with repeat-each 2
+            id: negative-repeat
+            command: npm run harness:negative -- --repeat-each 2 --report harness-report.json
     steps:
       - uses: actions/checkout@v7
         with:
@@ -88,25 +113,13 @@ jobs:
         working-directory: fixtures/consumer
         run: npm ci
 
-      - name: Native sharding, 2 shards
-        run: npm run harness -- --shards 2 --report harness-report-2.json
+      - name: Run the harness
+        run: ${{ matrix.command }}
 
-      - name: Native sharding, 3 shards
-        run: npm run harness -- --shards 3 --report harness-report-3.json
-
-      - name: Native sharding, 3 shards with repeat-each 2
-        run: npm run harness -- --shards 3 --repeat-each 2 --report harness-report-3-repeat.json
-
-      - name: Negative control
-        run: npm run harness:negative -- --report harness-report-negative.json
-
-      - name: Negative control with repeat-each 2
-        run: npm run harness:negative -- --repeat-each 2 --report harness-report-negative-repeat.json
-
-      - name: Upload reports
+      - name: Upload report
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: harness-reports
-          path: harness-report-*.json
+          name: harness-report-${{ matrix.id }}
+          path: harness-report.json
           if-no-files-found: ignore

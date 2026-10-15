@@ -1,13 +1,13 @@
 /** Tests for report assembly, negative-control verdicts and CLI exit codes, with stubbed runs. */
 
-const { test, describe, after } = require('node:test');
+const { test, describe, after, before } = require('node:test');
 const assert = require('node:assert');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const sample = require('./samples/list-repeat-each-2.json');
 const leaves = require('../harness/leaves.js');
-const { configArgs, qualify } = require('../harness/index.js');
+const { configArgs, listIntended, qualify, runPartition } = require('../harness/index.js');
 const { runNegativeControl } = require('../harness/negative-control.js');
 const { main } = require('../harness/cli.js');
 
@@ -40,7 +40,7 @@ function shardResult(index, runLeaves, extra = {}) {
     exitCode: 0,
     wallMs: 1000,
     durationMs: 900,
-    leaves: runLeaves,
+    leaves: runLeaves.map((leaf) => ({ outcome: 'expected', ...leaf })),
     output: '',
     ...extra,
   };
@@ -112,6 +112,21 @@ describe('qualify report', () => {
     );
   });
 
+  test('is not ok when every leaf skipped at runtime, and names each as not-executed', () => {
+    const skip = (shardRun) => ({
+      ...shardRun,
+      leaves: shardRun.leaves.map((leaf) => ({ ...leaf, outcome: 'skipped' })),
+    });
+    const { report } = run([skip(first), skip(second)]);
+    assert.strictEqual(report.ok, false);
+    const notExecuted = report.violations.filter((violation) => violation.kind === 'not-executed');
+    assert.strictEqual(notExecuted.length, first.leaves.length + second.leaves.length);
+    assert.deepStrictEqual(
+      new Set(report.violations.map((violation) => violation.kind)),
+      new Set(['not-executed'])
+    );
+  });
+
   test('is not ok when a shard failed', () => {
     const { report } = run([first, { ...second, exitCode: 1 }]);
     assert.strictEqual(report.ok, false);
@@ -141,29 +156,53 @@ describe('qualify report', () => {
 });
 
 describe('runNegativeControl verdicts', () => {
-  // Stub qualify keyed by control position: the clean one first, then missing, duplicate, serial.
-  function runWith(reports) {
+  // Stub qualify keyed by control position: the clean one first, then missing, duplicate, serial,
+  // not-executed, then the dependency selection pair: clean and missing.
+  const selectedListing = { ...listing, selected: true };
+
+  function runWith(reports, { options = { cwd: '/consumer' } } = {}) {
     let call = 0;
     const lines = [];
-    const result = runNegativeControl(
-      { cwd: '/consumer' },
-      {
-        log: (line) => lines.push(line),
-        deps: {
-          playwrightVersion: () => '9.9.9',
-          listIntended: () => listing,
-          qualify: () => reports[call++],
+    const qualified = [];
+    const listed = [];
+    const result = runNegativeControl(options, {
+      log: (line) => lines.push(line),
+      deps: {
+        playwrightVersion: () => '9.9.9',
+        listIntended: (given) => {
+          listed.push(given);
+          return listed.length === 1 ? listing : selectedListing;
         },
-      }
-    );
-    return { result, lines };
+        qualify: (given) => {
+          qualified.push(given);
+          return reports[call++];
+        },
+      },
+    });
+    return { result, lines, qualified, listed };
   }
 
   const accepted = { ok: true, violations: [] };
   const rejected = (kind) => ({ ok: false, violations: [{ kind }] });
-  const good = [accepted, rejected('missing'), rejected('duplicate'), rejected('serial-split')];
+  const everyPrimarySkipped = {
+    ok: false,
+    violations: primary.map((leaf) => ({ kind: 'not-executed', key: leaf.key })),
+  };
+  const good = [
+    accepted,
+    rejected('missing'),
+    rejected('duplicate'),
+    rejected('serial-split'),
+    everyPrimarySkipped,
+    accepted,
+    rejected('missing'),
+  ];
+  const clean = [0, 5];
+  const broken = [1, 2, 3, 4, 6];
+  const swap = (position, report) =>
+    good.map((item, index) => (index === position ? report : item));
 
-  test('passes when the clean one is accepted and each broken one shows its kind', () => {
+  test('passes when each clean one is accepted and each broken one shows its kind', () => {
     const { result } = runWith(good);
     assert.strictEqual(result.ok, true);
     assert.deepStrictEqual(
@@ -173,6 +212,9 @@ describe('runNegativeControl verdicts', () => {
         ['dropped leaf', 'missing', true],
         ['duplicated leaf', 'duplicate', true],
         ['split serial group', 'serial-split', true],
+        ['skipped at runtime', 'not-executed', true],
+        ['selected setup project, clean', 'none', true],
+        ['selected setup project, only teardown runs', 'missing', true],
       ]
     );
   });
@@ -184,62 +226,181 @@ describe('runNegativeControl verdicts', () => {
     assert.strictEqual(lines[0], `Playwright 9.9.9, Node ${process.version}`);
   });
 
-  test('fails when a broken partition is accepted', () => {
-    const { result } = runWith([
-      accepted,
-      accepted,
-      rejected('duplicate'),
-      rejected('serial-split'),
-    ]);
-    assert.strictEqual(result.ok, false);
-    assert.strictEqual(result.controls[1].passed, false);
-  });
+  for (const position of broken) {
+    test(`fails when broken control ${position} is accepted`, () => {
+      const { result } = runWith(swap(position, accepted));
+      assert.strictEqual(result.ok, false);
+      assert.strictEqual(result.controls[position].passed, false);
+    });
 
-  test('fails when a broken partition is rejected with the wrong kind', () => {
-    const { result } = runWith([
-      accepted,
-      rejected('shard-failed'),
-      rejected('duplicate'),
-      rejected('serial-split'),
-    ]);
-    assert.strictEqual(result.ok, false);
-    assert.strictEqual(result.controls[1].passed, false);
-  });
+    test(`fails when broken control ${position} is rejected with the wrong kind`, () => {
+      const { result } = runWith(swap(position, rejected('shard-failed')));
+      assert.strictEqual(result.ok, false);
+      assert.strictEqual(result.controls[position].passed, false);
+    });
+  }
+
+  for (const position of clean) {
+    test(`fails when clean control ${position} is rejected`, () => {
+      const { result } = runWith(swap(position, rejected('shard-failed')));
+      assert.strictEqual(result.ok, false);
+      assert.strictEqual(result.controls[position].passed, false);
+    });
+  }
 
   test('passes a broken partition that shows its kind among others', () => {
     const many = { ok: false, violations: [{ kind: 'shard-failed' }, { kind: 'serial-split' }] };
-    const { result } = runWith([accepted, rejected('missing'), rejected('duplicate'), many]);
+    const { result } = runWith(swap(3, many));
     assert.strictEqual(result.ok, true);
   });
 
-  test('fails when the clean partition is rejected', () => {
-    const { result } = runWith([
-      rejected('shard-failed'),
-      rejected('missing'),
-      rejected('duplicate'),
-      rejected('serial-split'),
-    ]);
+  test('fails when the skipped control flags only some of the primary leaves', () => {
+    const some = {
+      ok: false,
+      violations: [{ kind: 'not-executed', key: primary[0].key }],
+    };
+    const { result } = runWith(swap(4, some));
     assert.strictEqual(result.ok, false);
-    assert.strictEqual(result.controls[0].passed, false);
+    assert.strictEqual(result.controls[4].passed, false);
+  });
+
+  test('lists the controls of the forwarded selection from the first listing', () => {
+    const { qualified } = runWith(good);
+    for (const position of [0, 1, 2, 3, 4])
+      assert.strictEqual(qualified[position].listing, listing);
+  });
+
+  test('skips every test at runtime in the skipped control and no other', () => {
+    const { qualified } = runWith(good);
+    const skipEnv = { PSP_FIXTURE_SKIP_ALL: '1' };
+    assert.strictEqual(qualified[4].partition.length, 2);
+    for (const shard of qualified[4].partition) assert.deepStrictEqual(shard.env, skipEnv);
+    for (const position of [0, 1, 2, 3, 5, 6]) {
+      for (const shard of qualified[position].partition) assert.strictEqual(shard.env, undefined);
+    }
+  });
+
+  test('lists the dependency selection again and keeps the config selection only', () => {
+    const { qualified, listed } = runWith(good, {
+      options: { cwd: '/consumer', forward: ['--grep', 'cart', '-c', 'a.js'] },
+    });
+    assert.deepStrictEqual(listed[1].forward, ['-c', 'a.js', '--project=setup']);
+    assert.deepStrictEqual(qualified[0].forward, ['--grep', 'cart', '-c', 'a.js']);
+    assert.deepStrictEqual(qualified[5].forward, ['-c', 'a.js', '--project=setup']);
+    assert.deepStrictEqual(qualified[5].partition, [
+      { args: ['--shard=1/2'] },
+      { args: ['--shard=2/2'] },
+    ]);
+    assert.strictEqual(qualified[5].listing, selectedListing);
+    assert.deepStrictEqual(qualified[6].forward, ['-c', 'a.js']);
+    assert.deepStrictEqual(qualified[6].partition, [{ args: ['--project=teardown'] }]);
+    assert.strictEqual(qualified[6].listing, selectedListing);
   });
 
   test('throws when the suite cannot form the controls', () => {
-    assert.throws(
-      () =>
-        runNegativeControl(
-          { cwd: '/consumer' },
-          {
-            deps: {
-              playwrightVersion: () => '1',
-              listIntended: () => ({
-                leaves: intended.filter((leaf) => !leaf.serialGroup),
-                dependencies,
-              }),
-              qualify: () => accepted,
-            },
-          }
-        ),
-      /serial group/
+    const run = (given, map) =>
+      assert.throws(
+        () =>
+          runNegativeControl(
+            { cwd: '/consumer' },
+            {
+              deps: {
+                playwrightVersion: () => '1',
+                listIntended: () => given,
+                qualify: () => accepted,
+              },
+            }
+          ),
+        map
+      );
+    run({ leaves: intended.filter((leaf) => !leaf.serialGroup), dependencies }, /serial group/);
+    run(
+      { leaves: intended, dependencies: { setup: [], teardown: [], chromium: ['setup'] } },
+      /dependency project/
+    );
+  });
+});
+
+describe('listIntended and runPartition against a stub Playwright', () => {
+  // A consumer directory whose `@playwright/test/cli` lists a fixed suite (setup with a teardown
+  // project, chromium depending on setup) and, on a run, writes the shard's reporter file.
+  const cli = `
+    const fs = require('node:fs');
+    const args = process.argv.slice(3);
+    const dependencies = { setup: ['teardown'], chromium: ['setup', 'teardown'], teardown: [] };
+    const tests = [
+      ['setup', 'setup.js', 'prepare'],
+      ['teardown', 'teardown.js', 'clean up'],
+      ['chromium', 'a.spec.js', 'works'],
+    ];
+    if (args.includes('--list')) {
+      const named = args.filter((arg) => arg.startsWith('--project=')).map((arg) => arg.slice(10));
+      const wanted = named.length ? named.flatMap((name) => [name, ...dependencies[name]]) : null;
+      const chosen = tests.filter(([project]) => !wanted || wanted.includes(project));
+      const specs = chosen.map(([project, file, title]) => ({
+        title, file, line: 1, column: 1, tests: [{ projectName: project, annotations: [] }],
+      }));
+      const projects = tests.map(([name]) => ({ name, testDir: '/t' }));
+      process.stdout.write(JSON.stringify({
+        config: { projects },
+        suites: specs.map((spec) => ({ title: spec.file, file: spec.file, specs: [spec] })),
+      }));
+    } else {
+      const leaves = [{ key: process.env.PSP_STUB_MARK || 'unmarked' }];
+      fs.writeFileSync(process.env.PSP_HARNESS_RESULT, JSON.stringify({ durationMs: 5, leaves }));
+      process.exit(Number(process.env.PSP_STUB_EXIT || 0));
+    }
+  `;
+  let cwd;
+  before(() => {
+    cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'psp-stub-playwright-'));
+    tempDirs.push(cwd);
+    const pkg = path.join(cwd, 'node_modules', '@playwright', 'test');
+    fs.mkdirSync(pkg, { recursive: true });
+    fs.writeFileSync(path.join(pkg, 'package.json'), JSON.stringify({ name: '@playwright/test' }));
+    fs.writeFileSync(path.join(pkg, 'cli.js'), cli);
+  });
+
+  const roles = (listed) =>
+    listed.leaves.map((leaf) => [leaf.project, leaf.dependency ? 'dependency' : 'primary']);
+
+  test('treats setup and teardown as dependencies when no project is selected by name', () => {
+    assert.deepStrictEqual(roles(listIntended({ cwd })), [
+      ['setup', 'dependency'],
+      ['teardown', 'dependency'],
+      ['chromium', 'primary'],
+    ]);
+  });
+
+  test('makes a dependency project selected by name primary and keeps its teardown a dependency', () => {
+    assert.deepStrictEqual(roles(listIntended({ cwd, forward: ['--project=setup'] })), [
+      ['setup', 'primary'],
+      ['teardown', 'dependency'],
+    ]);
+  });
+
+  test('keeps setup a dependency when chromium, which needs it, is selected too', () => {
+    const forward = ['--project=chromium', '--project=setup'];
+    assert.deepStrictEqual(roles(listIntended({ cwd, forward })), [
+      ['setup', 'dependency'],
+      ['teardown', 'dependency'],
+      ['chromium', 'primary'],
+    ]);
+  });
+
+  test('runs each shard with its own env on top of the reporter path', () => {
+    const shards = runPartition({ cwd }, [
+      { args: [], env: { PSP_STUB_MARK: 'first' } },
+      { args: [], env: { PSP_STUB_MARK: 'second', PSP_STUB_EXIT: '3' } },
+      { args: [] },
+    ]);
+    assert.deepStrictEqual(
+      shards.map((shard) => [shard.index, shard.exitCode, shard.leaves[0].key]),
+      [
+        [1, 0, 'first'],
+        [2, 3, 'second'],
+        [3, 0, 'unmarked'],
+      ]
     );
   });
 });

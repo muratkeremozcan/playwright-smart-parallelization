@@ -50,10 +50,13 @@ parameterized tests, retries, serial suites (one of them oversized) and parallel
 launches a browser, so the project needs no browser download.
 
 `harness/` is a plain Node library and CLI. It lists the leaves a run is meant to cover (one test
-in one project at one repeat), runs a partition shard by shard, and checks that every leaf ran
-exactly once, that no serial group was split across shards, and that each shard ran the setup and
-teardown leaves its tests depend on exactly once. It writes a JSON report with the Playwright and
-Node versions, per-shard durations, the slowest shard and the imbalance.
+in one project at one repeat), runs a partition shard by shard, and checks that every leaf was
+selected exactly once, that each selected leaf ran to a result (a leaf that skipped or never ran is
+a `not-executed` violation), that no serial group was split across shards, and that each shard ran
+the setup and teardown leaves its tests depend on exactly once. A setup or teardown project that
+`--project` selects by name, and that no other selected project needs, is a project under test: its
+leaves get the exactly-once check too. It writes a JSON report with the Playwright and Node
+versions, per-shard durations, the slowest shard and the imbalance.
 
 ```sh
 (cd fixtures/consumer && npm ci)
@@ -63,9 +66,16 @@ npm run harness:negative
 
 `harness` accepts `--cwd`, `--shards`, `--repeat-each`, `--workers` (default 1), `--report` and
 `--negative-control`. Arguments after `--` go to both the list and the run commands. It exits 1 on
-any violation. `harness:negative` runs three deliberately broken partitions (a dropped leaf, a
-duplicated leaf and a split serial group) and exits 0 only if each one is rejected with the
-expected violation. Other engines plug in as `{ args }` shards through `harness/partitions.js`.
+any violation. `harness:negative` runs two clean partitions and five deliberately broken ones (a
+dropped leaf, a duplicated leaf, a split serial group, a run where every test skips at runtime, and
+a run of `--project=setup` that executes only the teardown) and exits 0 only if each clean one is
+accepted and each broken one is rejected with the expected violation. The skip run sets
+`PSP_FIXTURE_SKIP_ALL`, which makes every fixture test skip, and must flag every primary leaf. The
+setup pair selects `--project=<setup project>` on its own, so it drops the other forwarded
+arguments except the config selection, and it needs a suite whose setup project has a teardown
+project. A suite that skips tests by design fails the `not-executed` check: the harness has no
+allowance for a leaf that is meant to skip. Other engines plug in as `{ args, env }` shards through
+`harness/partitions.js`.
 
 ## License
 

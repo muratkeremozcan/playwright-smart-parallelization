@@ -6,8 +6,9 @@
  *   node harness/cli.js [--cwd DIR] [--shards N] [--repeat-each N] [--workers N]
  *                       [--report FILE] [--negative-control] [-- playwright args]
  *
- * Exit code 0 means the partition covers the intended leaves with no violation (or, with
- * `--negative-control`, that the clean partition was accepted and every broken one rejected).
+ * Exit code 0 means the partition selects every intended leaf once and runs each to a result, with
+ * no violation (or, with `--negative-control`, that every clean partition was accepted and every
+ * broken one rejected).
  * Exit code 1 means a violation, and exit code 2 a usage or runtime error.
  */
 

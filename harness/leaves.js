@@ -134,10 +134,61 @@ function dependencyProjects(dependencies) {
   return new Set(Object.values(dependencies).flat());
 }
 
-/** Returns leaves with `dependency` set from the dependency map. */
-function applyDependencies(leaves, dependencies) {
+/**
+ * Project patterns of the `--project` flags in Playwright CLI args. Playwright's option is variadic
+ * only in the spaced form: `--project a b` takes every following arg up to the next flag, while in
+ * `--project=a b` the `b` is a test filter.
+ */
+function projectPatterns(args) {
+  const patterns = [];
+  let collecting = false;
+  for (const arg of args) {
+    if (arg === '--project') {
+      collecting = true;
+    } else if (arg.startsWith('--project=')) {
+      patterns.push(arg.slice('--project='.length));
+      collecting = false;
+    } else if (arg.startsWith('-')) {
+      collecting = false;
+    } else if (collecting) {
+      patterns.push(arg);
+    }
+  }
+  return patterns;
+}
+
+function wildcardToRegExp(pattern) {
+  const literal = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`^${pattern.split('*').map(literal).join('.*')}$`);
+}
+
+/**
+ * The project names a run selects by name, in declaration order. Matching follows Playwright's
+ * `--project`: case-insensitive, `*` is a wildcard. Empty when the args select no project by name.
+ */
+function selectedProjects(args, names) {
+  const matchers = projectPatterns(args).map((pattern) => wildcardToRegExp(pattern.toLowerCase()));
+  return names.filter((name) => matchers.some((matcher) => matcher.test(name.toLowerCase())));
+}
+
+/**
+ * Returns leaves with `dependency` set from the dependency map. A dependency project that the run
+ * selects by name (`selected`) and that no other selected project needs is a project under test,
+ * so its leaves are primary. Playwright runs a project that another selected project needs once per
+ * dependent shard, so there it stays a dependency.
+ */
+function applyDependencies(leaves, dependencies, selected = []) {
+  const needed = new Set(
+    selected.flatMap((project) =>
+      (dependencies[project] || []).filter((dependency) => dependency !== project)
+    )
+  );
+  const underTest = new Set(selected.filter((project) => !needed.has(project)));
   const projects = dependencyProjects(dependencies);
-  return leaves.map((leaf) => ({ ...leaf, dependency: projects.has(leaf.project) }));
+  return leaves.map((leaf) => ({
+    ...leaf,
+    dependency: projects.has(leaf.project) && !underTest.has(leaf.project),
+  }));
 }
 
 /** The `--list` text form of a leaf, the line format `--test-list` accepts. */
@@ -156,7 +207,9 @@ module.exports = {
   listLine,
   parseList,
   projectNames,
+  projectPatterns,
   projectsOf,
+  selectedProjects,
   serialGroupId,
   testId,
   toPosix,

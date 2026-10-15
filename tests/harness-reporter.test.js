@@ -9,7 +9,16 @@ const Reporter = require('../harness/reporter.js');
 
 const testDir = path.join(os.tmpdir(), 'consumer', 'tests');
 
-function fakeTest({ file, project, titles, repeatEachIndex, annotations = [], results, line = 7 }) {
+function fakeTest({
+  file,
+  project,
+  titles,
+  repeatEachIndex,
+  annotations = [],
+  results,
+  line = 7,
+  outcome = results.length > 1 ? 'flaky' : 'expected',
+}) {
   return {
     location: { file: path.join(testDir, file), line, column: 3 },
     repeatEachIndex,
@@ -17,7 +26,7 @@ function fakeTest({ file, project, titles, repeatEachIndex, annotations = [], re
     results,
     parent: { project: () => ({ name: project, testDir }) },
     titlePath: () => ['', project, file, ...titles],
-    outcome: () => (results.length > 1 ? 'flaky' : 'expected'),
+    outcome: () => outcome,
   };
 }
 
@@ -88,6 +97,33 @@ describe('HarnessReporter', () => {
     assert.strictEqual(first.serialGroup, null);
     assert.strictEqual(second.serialGroup, 'firefox|serial-retry.spec.js|0:0|#0');
     assert.deepStrictEqual([first.line, first.column], [7, 3]);
+  });
+
+  test('records a test that skipped at runtime or never ran as skipped, so checks can reject it', () => {
+    const skipped = fakeTest({
+      file: 'cart.spec.js',
+      project: 'chromium',
+      titles: ['cart', 'adds an item'],
+      repeatEachIndex: 0,
+      results: [{ duration: 0 }],
+      outcome: 'skipped',
+    });
+    const neverRan = fakeTest({
+      file: 'cart.spec.js',
+      project: 'firefox',
+      titles: ['cart', 'adds an item'],
+      repeatEachIndex: 0,
+      results: [],
+      outcome: 'skipped',
+    });
+    const { read } = runReporter([skipped, neverRan], { duration: 1 });
+    assert.deepStrictEqual(
+      read().leaves.map((leaf) => [leaf.key, leaf.outcome, leaf.attempts]),
+      [
+        ['chromium|cart.spec.js|cart › adds an item|#0', 'skipped', 1],
+        ['firefox|cart.spec.js|cart › adds an item|#0', 'skipped', 0],
+      ]
+    );
   });
 
   test('falls back to elapsed time when the result has no duration', () => {

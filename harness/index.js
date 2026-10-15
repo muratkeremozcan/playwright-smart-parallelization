@@ -2,8 +2,8 @@
 
 /**
  * Qualification harness library. `listIntended` lists the leaves a run is meant to cover,
- * `runPartition` runs a partition shard by shard, and `qualify` checks coverage, serial integrity
- * and dependency accounting and returns the report.
+ * `runPartition` runs a partition shard by shard, and `qualify` checks coverage, execution
+ * outcomes, serial integrity and dependency accounting and returns the report.
  */
 
 const { spawnSync } = require('node:child_process');
@@ -13,12 +13,19 @@ const path = require('node:path');
 const {
   checkCoverage,
   checkDependencies,
+  checkExecution,
   checkSerialGroups,
   checkShardRuns,
   countDependencyExecutions,
   imbalance,
 } = require('./checks');
-const { applyDependencies, deriveDependencies, parseList, projectNames } = require('./leaves');
+const {
+  applyDependencies,
+  deriveDependencies,
+  parseList,
+  projectNames,
+  selectedProjects,
+} = require('./leaves');
 const { nativePartition } = require('./partitions');
 
 const REPORTER = path.join(__dirname, 'reporter.js');
@@ -76,7 +83,8 @@ function listJson(cwd, args) {
 /**
  * Lists the intended leaves and the project dependency map. The listing honors the forwarded
  * selection args and repeat count. Dependencies come from one `--project=P` listing per project,
- * which carries the repeat count and config selection only.
+ * which carries the repeat count and config selection only. A dependency project the forwarded
+ * `--project` selects by name has primary leaves unless another selected project needs it.
  */
 function listIntended({ cwd, repeatEach = 1, forward = [] }) {
   const base = [`--repeat-each=${repeatEach}`];
@@ -87,11 +95,13 @@ function listIntended({ cwd, repeatEach = 1, forward = [] }) {
     listsByProject[project] = parseList(probe);
   }
   const dependencies = deriveDependencies(listsByProject);
-  return { leaves: applyDependencies(parseList(json), dependencies), dependencies };
+  const selected = selectedProjects(forward, projectNames(json));
+  return { leaves: applyDependencies(parseList(json), dependencies, selected), dependencies };
 }
 
 /**
- * Runs each shard of a partition with the harness reporter and returns one result per shard:
+ * Runs each shard of a partition with the harness reporter and returns one result per shard. A
+ * shard is `{ args, env? }`; `env` is added to the environment of that shard's run. Each result is
  * `{ index, args, exitCode, wallMs, durationMs, leaves, output }`. `leaves` is null when the shard
  * wrote no leaves file.
  */
@@ -104,7 +114,7 @@ function runPartition({ cwd, repeatEach = 1, workers = 1, forward = [] }, partit
       const result = playwright(
         cwd,
         [...runArgs({ repeatEach, workers, forward }), `--add-reporter=${REPORTER}`, ...shard.args],
-        { PSP_HARNESS_RESULT: resultFile }
+        { ...shard.env, PSP_HARNESS_RESULT: resultFile }
       );
       const wallMs = Date.now() - started;
       let report = null;
@@ -135,6 +145,7 @@ function checkAll(intended, dependencies, shards) {
   return [
     ...checkShardRuns(shards),
     ...checkCoverage(intended, shards),
+    ...checkExecution(intended, shards),
     ...checkSerialGroups(intended, shards),
     ...checkDependencies(intended, shards, dependencies),
   ];

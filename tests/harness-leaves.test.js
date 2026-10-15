@@ -151,6 +151,35 @@ describe('dependency derivation', () => {
     );
   });
 
+  test('keeps a selected dependency project primary when no other selected project needs it', () => {
+    const dependencies = leaves.deriveDependencies(lists);
+    const projects = [{ project: 'setup' }, { project: 'chromium' }, { project: 'teardown' }];
+    const flags = (selected) =>
+      leaves
+        .applyDependencies(projects, dependencies, selected)
+        .map((leaf) => [leaf.project, leaf.dependency]);
+    assert.deepStrictEqual(flags(['setup']), [
+      ['setup', false],
+      ['chromium', false],
+      ['teardown', true],
+    ]);
+    assert.deepStrictEqual(flags(['teardown']), [
+      ['setup', true],
+      ['chromium', false],
+      ['teardown', false],
+    ]);
+  });
+
+  test('keeps a selected dependency project implicit when a selected project needs it', () => {
+    const dependencies = leaves.deriveDependencies(lists);
+    const projects = [{ project: 'setup' }, { project: 'chromium' }, { project: 'teardown' }];
+    const flags = (selected) =>
+      leaves.applyDependencies(projects, dependencies, selected).map((leaf) => leaf.dependency);
+    assert.deepStrictEqual(flags(['chromium', 'setup']), [true, false, true]);
+    assert.deepStrictEqual(flags(['setup', 'teardown']), [false, false, true]);
+    assert.deepStrictEqual(flags([]), [true, false, true]);
+  });
+
   test('derives dependencies from the recorded sample projects', () => {
     assert.deepStrictEqual(leaves.projectNames(sample), [
       'setup',
@@ -158,6 +187,54 @@ describe('dependency derivation', () => {
       'chromium',
       'firefox',
     ]);
+  });
+});
+
+describe('project selection', () => {
+  const names = ['setup', 'teardown', 'chromium', 'firefox'];
+
+  test('reads --project=name, --project name and repeated flags', () => {
+    assert.deepStrictEqual(leaves.selectedProjects(['--project=chromium'], names), ['chromium']);
+    assert.deepStrictEqual(
+      leaves.selectedProjects(['--project', 'firefox', 'setup', '--grep', 'x'], names),
+      ['setup', 'firefox']
+    );
+    assert.deepStrictEqual(
+      leaves.selectedProjects(['--project=teardown', '--project', 'chromium'], names),
+      ['teardown', 'chromium']
+    );
+  });
+
+  test('takes a positional after --project=name as a test filter, not a project', () => {
+    assert.deepStrictEqual(leaves.selectedProjects(['--project=chromium', 'setup'], names), [
+      'chromium',
+    ]);
+    assert.deepStrictEqual(
+      leaves.selectedProjects(['--project=chromium', 'firefox', '--project', 'setup'], names),
+      ['setup', 'chromium']
+    );
+  });
+
+  test('matches case-insensitively and with the * wildcard', () => {
+    assert.deepStrictEqual(leaves.selectedProjects(['--project=SETUP'], names), ['setup']);
+    assert.deepStrictEqual(leaves.selectedProjects(['--project=*down'], names), ['teardown']);
+    assert.deepStrictEqual(leaves.selectedProjects(['--project=*'], names), names);
+  });
+
+  test('selects nothing without --project, for an unknown name and for other flags', () => {
+    assert.deepStrictEqual(leaves.selectedProjects([], names), []);
+    assert.deepStrictEqual(leaves.selectedProjects(['--project=nope'], names), []);
+    assert.deepStrictEqual(
+      leaves.selectedProjects(['--grep=project', '-c', 'setup.config.js', 'setup'], names),
+      []
+    );
+  });
+
+  test('reads the selection from the recorded sample projects', () => {
+    assert.deepStrictEqual(
+      leaves.selectedProjects(['--project=setup'], leaves.projectNames(sample)),
+      ['setup']
+    );
   });
 });
 

@@ -9,7 +9,7 @@ const sample = require('./samples/list-repeat-each-2.json');
 const leaves = require('../harness/leaves.js');
 const checks = require('../harness/checks.js');
 const { nativePartition, testListPartition } = require('../harness/partitions.js');
-const { buildControls } = require('../harness/negative-control.js');
+const { buildControls, buildDependencyControls } = require('../harness/negative-control.js');
 const { parseArgs } = require('../harness/cli.js');
 
 const dependencies = {
@@ -89,10 +89,29 @@ describe('buildControls', () => {
     }));
   }
 
-  test('builds the clean control first, then the three broken ones with their kinds', () => {
+  test('builds the clean control first, then the four broken ones with their kinds', () => {
     assert.deepStrictEqual(
       controls.map((control) => control.expected),
-      ['none', 'missing', 'duplicate', 'serial-split']
+      ['none', 'missing', 'duplicate', 'serial-split', 'not-executed']
+    );
+  });
+
+  test('the skipped control assigns the clean partition and skips every test through the env', () => {
+    assert.deepStrictEqual(controls[4].assignment, controls[0].assignment);
+    assert.deepStrictEqual(controls[4].env, { PSP_FIXTURE_SKIP_ALL: '1' });
+    for (const control of controls.slice(0, 4)) assert.strictEqual(control.env, undefined);
+  });
+
+  test('the skipped control raises not-executed when every leaf it runs skipped', () => {
+    const shards = executed(controls[4].assignment).map((shard) => ({
+      ...shard,
+      leaves: shard.leaves.map((entry) => ({ ...entry, outcome: 'skipped' })),
+    }));
+    const found = checks.checkExecution(intended, shards);
+    assert.ok(found.length > 0);
+    assert.deepStrictEqual(
+      new Set(found.map((violation) => violation.kind)),
+      new Set(['not-executed'])
     );
   });
 
@@ -133,6 +152,42 @@ describe('buildControls', () => {
   test('refuses a suite without a serial group', () => {
     const plainOnly = intended.filter((leaf) => !leaf.serialGroup);
     assert.throws(() => buildControls(plainOnly), /serial group/);
+  });
+});
+
+describe('buildDependencyControls', () => {
+  test('selects the dependency project that has a dependency of its own', () => {
+    const { forward, controls } = buildDependencyControls(dependencies, ['-c', 'a.js']);
+    assert.deepStrictEqual(forward, ['-c', 'a.js', '--project=setup']);
+    assert.deepStrictEqual(
+      controls.map((control) => [control.expected, control.forward, control.partition]),
+      [
+        ['none', forward, nativePartition(2)],
+        ['missing', ['-c', 'a.js'], [{ args: ['--project=teardown'] }]],
+      ]
+    );
+  });
+
+  test('the broken control is caught only once the selected project has primary leaves', () => {
+    const setupKey = intended.find((leaf) => leaf.project === 'setup').key;
+    const missingKeys = (leavesOfRun, shards) =>
+      checks
+        .checkCoverage(leavesOfRun, shards)
+        .filter((violation) => violation.kind === 'missing')
+        .map((violation) => violation.key);
+    const teardownOnly = [
+      { index: 1, exitCode: 0, leaves: intended.filter((leaf) => leaf.project === 'teardown') },
+    ];
+    const selected = leaves.applyDependencies(intended, dependencies, ['setup']);
+    assert.ok(missingKeys(selected, teardownOnly).includes(setupKey));
+    assert.ok(!missingKeys(intended, teardownOnly).includes(setupKey));
+  });
+
+  test('refuses a suite without a dependency project that has a dependency', () => {
+    assert.throws(
+      () => buildDependencyControls({ setup: [], teardown: [], chromium: ['setup'] }, []),
+      /dependency project/
+    );
   });
 });
 
