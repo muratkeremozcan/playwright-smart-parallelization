@@ -1,0 +1,5 @@
+.DS_Store
+node_modules/
+_bmad-output/**/inputs/
+.v6-v7-migration-backup-*/
+*.log
