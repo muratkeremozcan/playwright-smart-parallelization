@@ -42,6 +42,31 @@ this repository is public. `npm run format` rewrites files with Prettier.
 The action has no runtime dependencies. ESLint, Prettier and `yaml` are development tools only, and
 all dependencies float to their latest versions with the lockfile committed.
 
+## Qualification harness
+
+`fixtures/consumer` is a browser-free Playwright project with every shape a balancing engine has
+to survive: setup and teardown projects, two browser projects, duplicate titles in different files,
+parameterized tests, retries, serial suites (one of them oversized) and parallel suites. No test
+launches a browser, so the project needs no browser download.
+
+`harness/` is a plain Node library and CLI. It lists the leaves a run is meant to cover (one test
+in one project at one repeat), runs a partition shard by shard, and checks that every leaf ran
+exactly once, that no serial group was split across shards, and that each shard ran the setup and
+teardown leaves its tests depend on exactly once. It writes a JSON report with the Playwright and
+Node versions, per-shard durations, the slowest shard and the imbalance.
+
+```sh
+(cd fixtures/consumer && npm ci)
+npm run harness -- --shards 3 --repeat-each 2
+npm run harness:negative
+```
+
+`harness` accepts `--cwd`, `--shards`, `--repeat-each`, `--workers` (default 1), `--report` and
+`--negative-control`. Arguments after `--` go to both the list and the run commands. It exits 1 on
+any violation. `harness:negative` runs three deliberately broken partitions (a dropped leaf, a
+duplicated leaf and a split serial group) and exits 0 only if each one is rejected with the
+expected violation. Other engines plug in as `{ args }` shards through `harness/partitions.js`.
+
 ## License
 
 [MIT](LICENSE)

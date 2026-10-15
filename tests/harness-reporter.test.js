@@ -1,0 +1,107 @@
+/** Tests for the harness reporter, driven with objects shaped like Playwright's public API. */
+
+const { test, describe, afterEach } = require('node:test');
+const assert = require('node:assert');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const Reporter = require('../harness/reporter.js');
+
+const testDir = path.join(os.tmpdir(), 'consumer', 'tests');
+
+function fakeTest({ file, project, titles, repeatEachIndex, annotations = [], results, line = 7 }) {
+  return {
+    location: { file: path.join(testDir, file), line, column: 3 },
+    repeatEachIndex,
+    annotations,
+    results,
+    parent: { project: () => ({ name: project, testDir }) },
+    titlePath: () => ['', project, file, ...titles],
+    outcome: () => (results.length > 1 ? 'flaky' : 'expected'),
+  };
+}
+
+const plain = fakeTest({
+  file: 'catalog.spec.js',
+  project: 'chromium',
+  titles: ['catalog', 'loads the page'],
+  repeatEachIndex: 1,
+  results: [{ duration: 120 }],
+});
+
+const serialMember = fakeTest({
+  file: 'serial-retry.spec.js',
+  project: 'firefox',
+  titles: ['two depends on the state from one'],
+  repeatEachIndex: 0,
+  annotations: [
+    {
+      type: 'serial',
+      location: { file: path.join(testDir, 'serial-retry.spec.js'), line: 0, column: 0 },
+    },
+  ],
+  results: [{ duration: 100 }, { duration: 40 }],
+});
+
+const tempDirs = [];
+afterEach(() => {
+  for (const dir of tempDirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
+  delete process.env.PSP_HARNESS_RESULT;
+});
+
+function runReporter(tests, result) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'psp-reporter-test-'));
+  tempDirs.push(dir);
+  const target = path.join(dir, 'out.json');
+  process.env.PSP_HARNESS_RESULT = target;
+  const reporter = new Reporter();
+  reporter.onBegin({}, { allTests: () => tests });
+  reporter.onEnd(result);
+  return { target, read: () => JSON.parse(fs.readFileSync(target, 'utf8')) };
+}
+
+describe('HarnessReporter', () => {
+  test('writes leaves with the same keys the list parser builds', () => {
+    const { read } = runReporter([plain, serialMember], { duration: 321.5 });
+    const written = read();
+    assert.strictEqual(written.durationMs, 321.5);
+    assert.deepStrictEqual(
+      written.leaves.map((leaf) => leaf.key),
+      [
+        'chromium|catalog.spec.js|catalog › loads the page|#1',
+        'firefox|serial-retry.spec.js|two depends on the state from one|#0',
+      ]
+    );
+  });
+
+  test('records outcome, attempts, duration, serial group and location', () => {
+    const { read } = runReporter([plain, serialMember], { duration: 1 });
+    const [first, second] = read().leaves;
+    assert.deepStrictEqual(
+      { outcome: first.outcome, attempts: first.attempts, durationMs: first.durationMs },
+      { outcome: 'expected', attempts: 1, durationMs: 120 }
+    );
+    assert.deepStrictEqual(
+      { outcome: second.outcome, attempts: second.attempts, durationMs: second.durationMs },
+      { outcome: 'flaky', attempts: 2, durationMs: 140 }
+    );
+    assert.strictEqual(first.serialGroup, null);
+    assert.strictEqual(second.serialGroup, 'firefox|serial-retry.spec.js|0:0|#0');
+    assert.deepStrictEqual([first.line, first.column], [7, 3]);
+  });
+
+  test('falls back to elapsed time when the result has no duration', () => {
+    const { read } = runReporter([plain], {});
+    assert.strictEqual(typeof read().durationMs, 'number');
+  });
+
+  test('writes nothing without a target path', () => {
+    const reporter = new Reporter();
+    reporter.onBegin({}, { allTests: () => [plain] });
+    assert.doesNotThrow(() => reporter.onEnd({ duration: 1 }));
+  });
+
+  test('does not print to stdio', () => {
+    assert.strictEqual(new Reporter().printsToStdio(), false);
+  });
+});

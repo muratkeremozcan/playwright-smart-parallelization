@@ -1,0 +1,10 @@
+{
+  "name": "psp-consumer-fixture",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Browser-free Playwright project used to qualify sharding engines.",
+  "license": "MIT",
+  "devDependencies": {
+    "@playwright/test": "latest"
+  }
+}

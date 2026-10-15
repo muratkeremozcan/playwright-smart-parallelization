@@ -1,0 +1,764 @@
+{
+  "config": {
+    "configFile": "/work/consumer/playwright.config.js",
+    "rootDir": "/work/consumer/tests",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/work/consumer/test-results",
+        "repeatEach": 1,
+        "retries": 2,
+        "id": "setup",
+        "name": "setup",
+        "testDir": "/work/consumer/tests",
+        "testIgnore": [],
+        "testMatch": ["/global\\.setup\\.js/"],
+        "timeout": 30000
+      },
+      {
+        "outputDir": "/work/consumer/test-results",
+        "repeatEach": 1,
+        "retries": 2,
+        "id": "teardown",
+        "name": "teardown",
+        "testDir": "/work/consumer/tests",
+        "testIgnore": [],
+        "testMatch": ["/global\\.teardown\\.js/"],
+        "timeout": 30000
+      },
+      {
+        "outputDir": "/work/consumer/test-results",
+        "repeatEach": 2,
+        "retries": 2,
+        "id": "chromium",
+        "name": "chromium",
+        "testDir": "/work/consumer/tests",
+        "testIgnore": [],
+        "testMatch": ["/.*\\.spec\\.js/"],
+        "timeout": 30000
+      },
+      {
+        "outputDir": "/work/consumer/test-results",
+        "repeatEach": 2,
+        "retries": 2,
+        "id": "firefox",
+        "name": "firefox",
+        "testDir": "/work/consumer/tests",
+        "testIgnore": [],
+        "testMatch": ["/.*\\.spec\\.js/"],
+        "timeout": 30000
+      }
+    ],
+    "filteredProjects": [
+      {
+        "grep": {},
+        "grepInvert": null,
+        "outputDir": "/work/consumer/test-results",
+        "repeatEach": 1,
+        "retries": 2,
+        "name": "setup",
+        "testDir": "/work/consumer/tests",
+        "snapshotDir": "/work/consumer/tests",
+        "testIgnore": [],
+        "testMatch": {},
+        "timeout": 30000,
+        "use": {},
+        "dependencies": [],
+        "teardown": "teardown",
+        "ignoreSnapshots": false,
+        "__projectId": "setup"
+      },
+      {
+        "grep": {},
+        "grepInvert": null,
+        "outputDir": "/work/consumer/test-results",
+        "repeatEach": 1,
+        "retries": 2,
+        "name": "teardown",
+        "testDir": "/work/consumer/tests",
+        "snapshotDir": "/work/consumer/tests",
+        "testIgnore": [],
+        "testMatch": {},
+        "timeout": 30000,
+        "use": {},
+        "dependencies": [],
+        "ignoreSnapshots": false,
+        "__projectId": "teardown"
+      },
+      {
+        "grep": {},
+        "grepInvert": null,
+        "outputDir": "/work/consumer/test-results",
+        "repeatEach": 2,
+        "retries": 2,
+        "name": "chromium",
+        "testDir": "/work/consumer/tests",
+        "snapshotDir": "/work/consumer/tests",
+        "testIgnore": [],
+        "testMatch": {},
+        "timeout": 30000,
+        "use": {},
+        "dependencies": ["setup"],
+        "ignoreSnapshots": false,
+        "__projectId": "chromium"
+      },
+      {
+        "grep": {},
+        "grepInvert": null,
+        "outputDir": "/work/consumer/test-results",
+        "repeatEach": 2,
+        "retries": 2,
+        "name": "firefox",
+        "testDir": "/work/consumer/tests",
+        "snapshotDir": "/work/consumer/tests",
+        "testIgnore": [],
+        "testMatch": {},
+        "timeout": 30000,
+        "use": {},
+        "dependencies": ["setup"],
+        "ignoreSnapshots": false,
+        "__projectId": "firefox"
+      }
+    ],
+    "quiet": false,
+    "shard": null,
+    "updateSnapshots": "default",
+    "version": "1.64.1",
+    "workers": 7
+  },
+  "suites": [
+    {
+      "title": "global.setup.js",
+      "file": "global.setup.js",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "prepare the environment",
+          "ok": true,
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "setup",
+              "projectName": "setup",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "3ddbcaf8b47669ab14b8-5815013f92fccb03d515",
+          "file": "global.setup.js",
+          "line": 6,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "global.teardown.js",
+      "file": "global.teardown.js",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "clean up the environment",
+          "ok": true,
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "teardown",
+              "projectName": "teardown",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "8b8e49cee66992a8d9d9-18733835b7e0731b602b",
+          "file": "global.teardown.js",
+          "line": 6,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "catalog.spec.js",
+      "file": "catalog.spec.js",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "catalog",
+          "file": "catalog.spec.js",
+          "line": 6,
+          "column": 6,
+          "specs": [
+            {
+              "title": "loads the page",
+              "ok": true,
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "d4514cd69630520b3123-926b1edd9a312b018a13",
+              "file": "catalog.spec.js",
+              "line": 7,
+              "column": 3
+            },
+            {
+              "title": "filters products by category",
+              "ok": true,
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "d4514cd69630520b3123-62be370a31788eb5503d",
+              "file": "catalog.spec.js",
+              "line": 12,
+              "column": 3
+            },
+            {
+              "title": "sorts products by price",
+              "ok": true,
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "d4514cd69630520b3123-c66f0d4900d0edd82b3d",
+              "file": "catalog.spec.js",
+              "line": 17,
+              "column": 3
+            },
+            {
+              "title": "loads the page",
+              "ok": true,
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "d4514cd69630520b3123-13f429a7d73af5942e35",
+              "file": "catalog.spec.js",
+              "line": 7,
+              "column": 3
+            },
+            {
+              "title": "filters products by category",
+              "ok": true,
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "d4514cd69630520b3123-a767edf364c448c40eb7",
+              "file": "catalog.spec.js",
+              "line": 12,
+              "column": 3
+            },
+            {
+              "title": "sorts products by price",
+              "ok": true,
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "d4514cd69630520b3123-c507bb35a98fca1f1a9c",
+              "file": "catalog.spec.js",
+              "line": 17,
+              "column": 3
+            },
+            {
+              "title": "loads the page",
+              "ok": true,
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "firefox",
+                  "projectName": "firefox",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "d4514cd69630520b3123-b34b74d2a0c3721c09cf",
+              "file": "catalog.spec.js",
+              "line": 7,
+              "column": 3
+            },
+            {
+              "title": "filters products by category",
+              "ok": true,
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "firefox",
+                  "projectName": "firefox",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "d4514cd69630520b3123-82c254067fb3c139ec46",
+              "file": "catalog.spec.js",
+              "line": 12,
+              "column": 3
+            },
+            {
+              "title": "sorts products by price",
+              "ok": true,
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "firefox",
+                  "projectName": "firefox",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "d4514cd69630520b3123-73296efc7f2fa3e7f8e2",
+              "file": "catalog.spec.js",
+              "line": 17,
+              "column": 3
+            },
+            {
+              "title": "loads the page",
+              "ok": true,
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "firefox",
+                  "projectName": "firefox",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "d4514cd69630520b3123-11485cacc5fbe42fca74",
+              "file": "catalog.spec.js",
+              "line": 7,
+              "column": 3
+            },
+            {
+              "title": "filters products by category",
+              "ok": true,
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "firefox",
+                  "projectName": "firefox",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "d4514cd69630520b3123-cbb3095d6bdf90dd6741",
+              "file": "catalog.spec.js",
+              "line": 12,
+              "column": 3
+            },
+            {
+              "title": "sorts products by price",
+              "ok": true,
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "firefox",
+                  "projectName": "firefox",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "d4514cd69630520b3123-709fce424537879598b8",
+              "file": "catalog.spec.js",
+              "line": 17,
+              "column": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "flaky.spec.js",
+      "file": "flaky.spec.js",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "recovers after a retry",
+          "ok": true,
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "26b9c2ac8c11c073437f-faa3fed79007303c114e",
+          "file": "flaky.spec.js",
+          "line": 6,
+          "column": 1
+        },
+        {
+          "title": "recovers after a retry",
+          "ok": true,
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "26b9c2ac8c11c073437f-dd3c5d960c39e43e6777",
+          "file": "flaky.spec.js",
+          "line": 6,
+          "column": 1
+        },
+        {
+          "title": "recovers after a retry",
+          "ok": true,
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "firefox",
+              "projectName": "firefox",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "26b9c2ac8c11c073437f-93bffaa3524c77e14e20",
+          "file": "flaky.spec.js",
+          "line": 6,
+          "column": 1
+        },
+        {
+          "title": "recovers after a retry",
+          "ok": true,
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "firefox",
+              "projectName": "firefox",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "26b9c2ac8c11c073437f-3c3cc0f5e63520b4f879",
+          "file": "flaky.spec.js",
+          "line": 6,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "serial-flow.spec.js",
+      "file": "serial-flow.spec.js",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "one signs in",
+          "ok": true,
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "/work/consumer/tests/serial-flow.spec.js",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "9dac0a5a510a6dc9dc50-93bdab3d4a2bbb999861",
+          "file": "serial-flow.spec.js",
+          "line": 10,
+          "column": 1
+        },
+        {
+          "title": "two uses the session from one",
+          "ok": true,
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "/work/consumer/tests/serial-flow.spec.js",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "9dac0a5a510a6dc9dc50-15c9ea09ee461cac9c71",
+          "file": "serial-flow.spec.js",
+          "line": 15,
+          "column": 1
+        },
+        {
+          "title": "one signs in",
+          "ok": true,
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "/work/consumer/tests/serial-flow.spec.js",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "9dac0a5a510a6dc9dc50-50a40731865810220e34",
+          "file": "serial-flow.spec.js",
+          "line": 10,
+          "column": 1
+        },
+        {
+          "title": "two uses the session from one",
+          "ok": true,
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "/work/consumer/tests/serial-flow.spec.js",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "9dac0a5a510a6dc9dc50-5c096501bd389babb2a5",
+          "file": "serial-flow.spec.js",
+          "line": 15,
+          "column": 1
+        },
+        {
+          "title": "one signs in",
+          "ok": true,
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "/work/consumer/tests/serial-flow.spec.js",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "firefox",
+              "projectName": "firefox",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "9dac0a5a510a6dc9dc50-04e862da67352ebdfcbe",
+          "file": "serial-flow.spec.js",
+          "line": 10,
+          "column": 1
+        },
+        {
+          "title": "two uses the session from one",
+          "ok": true,
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "/work/consumer/tests/serial-flow.spec.js",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "firefox",
+              "projectName": "firefox",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "9dac0a5a510a6dc9dc50-fc59520f1395f44cd2de",
+          "file": "serial-flow.spec.js",
+          "line": 15,
+          "column": 1
+        },
+        {
+          "title": "one signs in",
+          "ok": true,
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "/work/consumer/tests/serial-flow.spec.js",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "firefox",
+              "projectName": "firefox",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "9dac0a5a510a6dc9dc50-4103e7aa0947988ac959",
+          "file": "serial-flow.spec.js",
+          "line": 10,
+          "column": 1
+        },
+        {
+          "title": "two uses the session from one",
+          "ok": true,
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "/work/consumer/tests/serial-flow.spec.js",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "firefox",
+              "projectName": "firefox",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "9dac0a5a510a6dc9dc50-f57a8dcdcab935e0bfa9",
+          "file": "serial-flow.spec.js",
+          "line": 15,
+          "column": 1
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-10-15T20:11:26.409Z",
+    "duration": 8.87700000000001,
+    "expected": 0,
+    "skipped": 106,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}

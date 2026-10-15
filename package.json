@@ -18,6 +18,8 @@
     "format:check": "prettier --check .",
     "test": "node --test tests/*.test.js",
     "check:public": "node scripts/check-public.js",
+    "harness": "node harness/cli.js --cwd fixtures/consumer",
+    "harness:negative": "node harness/cli.js --cwd fixtures/consumer --negative-control",
     "validate": "npm run lint && npm run format:check && npm run test && npm run check:public"
   },
   "devDependencies": {
