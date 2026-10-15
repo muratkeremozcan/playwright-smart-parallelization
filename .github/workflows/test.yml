@@ -68,3 +68,45 @@ jobs:
             echo "Expected the stub action to fail, got outcome $OUTCOME." >&2
             exit 1
           fi
+
+  harness:
+    name: qualification harness
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: fixtures/consumer/package-lock.json
+
+      - name: Install the consumer fixture
+        working-directory: fixtures/consumer
+        run: npm ci
+
+      - name: Native sharding, 2 shards
+        run: npm run harness -- --shards 2 --report harness-report-2.json
+
+      - name: Native sharding, 3 shards
+        run: npm run harness -- --shards 3 --report harness-report-3.json
+
+      - name: Native sharding, 3 shards with repeat-each 2
+        run: npm run harness -- --shards 3 --repeat-each 2 --report harness-report-3-repeat.json
+
+      - name: Negative control
+        run: npm run harness:negative -- --report harness-report-negative.json
+
+      - name: Negative control with repeat-each 2
+        run: npm run harness:negative -- --repeat-each 2 --report harness-report-negative-repeat.json
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: harness-reports
+          path: harness-report-*.json
+          if-no-files-found: ignore
