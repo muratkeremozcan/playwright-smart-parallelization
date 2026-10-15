@@ -42,10 +42,28 @@ describe('scanText', () => {
     });
   }
 
+  test('flags a JSON-escaped Windows home path', () => {
+    const escaped = ['C:', 'Users', 'someone'].join('\\\\');
+    assert.deepStrictEqual(gate.scanText(`{"p": "${escaped}"}`, 'a.json'), [
+      { file: 'a.json', line: 1, rule: 'private Windows home path' },
+    ]);
+  });
+
+  test('flags home paths of accounts whose name only starts with runner', () => {
+    for (const text of [
+      `${slash}home${slash}runner-private${slash}x`,
+      `${slash}Users${slash}runner-private`,
+      `${slash}home${slash}runner2`,
+    ]) {
+      assert.strictEqual(gate.scanText(text, 'a.md').length, 1, text);
+    }
+  });
+
   test('allows public runner paths, tilde paths and plain prose', () => {
     const clean = [
       `${slash}home${slash}runner${slash}work`,
       `${slash}Users${slash}runner${slash}work`,
+      `${slash}home${slash}runner`,
       '~/opensource/couture-cast',
       'Users and home directories are fine as words',
     ].join('\n');
@@ -92,6 +110,21 @@ describe('check:public as a process', () => {
     const dir = gitRepoWith('notes.md', 'nothing private here\n');
     const result = spawnSync(process.execPath, [script], { cwd: dir, encoding: 'utf8' });
     assert.strictEqual(result.status, 0);
+  });
+
+  test('scans UTF-16 files in both byte orders instead of skipping them as binary', () => {
+    const text = `cd ${macHome}\n`;
+    const le = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(text, 'utf16le')]);
+    const be = Buffer.from(le.subarray(2)).swap16();
+    for (const [name, content] of [
+      ['le.txt', le],
+      ['be.txt', be],
+    ]) {
+      const dir = gitRepoWith(name, content, { track: true });
+      const result = spawnSync(process.execPath, [script], { cwd: dir, encoding: 'utf8' });
+      assert.strictEqual(result.status, 1, name);
+      assert.match(result.stderr, new RegExp(`${name}:1: private macOS home path`));
+    }
   });
 
   test('ignored files are not scanned', () => {

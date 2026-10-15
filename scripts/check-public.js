@@ -13,9 +13,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const RULES = [
-  { name: 'private macOS home path', pattern: /\/Users\/(?!runner\b)[^/\s'"]+/ },
-  { name: 'private Linux home path', pattern: /\/home\/(?!runner\b)[^/\s'"]+/ },
-  { name: 'private Windows home path', pattern: /[A-Za-z]:\\Users\\[^\\\s'"]+/ },
+  { name: 'private macOS home path', pattern: /\/Users\/(?!runner(?![\w.-]))[^/\s'"]+/ },
+  { name: 'private Linux home path', pattern: /\/home\/(?!runner(?![\w.-]))[^/\s'"]+/ },
+  { name: 'private Windows home path', pattern: /[A-Za-z]:\\{1,2}Users\\{1,2}[^\\\s'"]+/ },
   {
     name: 'GitHub token',
     pattern: /\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,})/,
@@ -54,8 +54,12 @@ function scanFiles(files, cwd) {
     const full = path.join(cwd, file);
     if (!fs.existsSync(full) || !fs.statSync(full).isFile()) continue;
     const buffer = fs.readFileSync(full);
-    if (buffer.includes(0)) continue;
-    findings.push(...scanText(buffer.toString('utf8'), file));
+    // UTF-16 text is full of NUL bytes. Dropping them leaves the ASCII a rule can match, in either
+    // byte order, so a private path in such a file is still found instead of skipped as binary.
+    const text = buffer.includes(0)
+      ? buffer.toString('latin1').replace(/\0/g, '')
+      : buffer.toString('utf8');
+    findings.push(...scanText(text, file));
   }
   return findings;
 }
