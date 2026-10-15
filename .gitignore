@@ -5,7 +5,7 @@ _bmad-output/**/inputs/
 *.log
 .claude/
 .agents/
-_bmad/render/
 fixtures/consumer/test-results/
 fixtures/consumer/playwright-report/
 harness-report*.json
+_bmad/
