@@ -1,0 +1,80 @@
+name: 'Playwright Smart Parallelization'
+description: 'Duration-balanced Playwright sharding for GitHub Actions. Not implemented yet: the action fails with a clear message.'
+author: muratkeremozcan
+branding:
+  icon: 'zap'
+  color: 'green'
+
+# Every input below is provisional. The names and defaults follow the planned
+# workflow (prepare, matrix execute, aggregate, history update, rollback) and
+# may change before the first release.
+inputs:
+  working-directory:
+    description: |
+      Provisional. Directory that holds the Playwright project, relative to the
+      repository root.
+    required: false
+    default: '.'
+  config-path:
+    description: |
+      Provisional. Path to the Playwright config file, relative to
+      working-directory. Empty means Playwright's own config discovery.
+    required: false
+    default: ''
+  projects:
+    description: |
+      Provisional. Space-separated Playwright project names to run. Empty
+      means every project in the config.
+    required: false
+    default: ''
+  filters:
+    description: |
+      Provisional. Extra Playwright selection arguments, for example
+      `--grep @smoke`. They keep the same meaning with and without balancing.
+    required: false
+    default: ''
+  shard-count:
+    description: |
+      Provisional. Number of shards in the matrix.
+    required: false
+    default: '2'
+  workers:
+    description: |
+      Provisional. Playwright workers per shard.
+    required: false
+    default: '1'
+  timing-artifact-name:
+    description: |
+      Provisional. Name of the Actions artifact that stores the timing history
+      in the consuming repository.
+    required: false
+    default: 'playwright-timings'
+  retention-days:
+    description: |
+      Provisional. Retention in days for the uploaded artifacts.
+    required: false
+    default: '30'
+  enabled:
+    description: |
+      Provisional. The single rollback switch. 'false' disables balancing for
+      the entire run and keeps native Playwright sharding.
+    required: false
+    default: 'true'
+
+runs:
+  using: composite
+  steps:
+    - name: Run Playwright Smart Parallelization
+      id: run
+      shell: bash
+      run: node "$GITHUB_ACTION_PATH/main.js"
+      env:
+        INPUT_WORKING-DIRECTORY: ${{ inputs.working-directory }}
+        INPUT_CONFIG-PATH: ${{ inputs.config-path }}
+        INPUT_PROJECTS: ${{ inputs.projects }}
+        INPUT_FILTERS: ${{ inputs.filters }}
+        INPUT_SHARD-COUNT: ${{ inputs.shard-count }}
+        INPUT_WORKERS: ${{ inputs.workers }}
+        INPUT_TIMING-ARTIFACT-NAME: ${{ inputs.timing-artifact-name }}
+        INPUT_RETENTION-DAYS: ${{ inputs.retention-days }}
+        INPUT_ENABLED: ${{ inputs.enabled }}

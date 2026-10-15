@@ -6,7 +6,7 @@ Decisions (owner, 2026-10-15): float every package and Action to latest and reco
 
 ## Stories
 
-- [ ] **S1 Repo skeleton (CAP-4 base).** Node action in the shape of `tea-test-review` (`action.yml`, `main.js`, `scripts/`, `tests/`, MIT `LICENSE`, README stub, lint, format, unit test runner, CI workflow running them). `action.yml` can be a stub that fails with a clear "not implemented" until S8.
+- [x] **S1 Repo skeleton (CAP-4 base).** Node action in the shape of `tea-test-review` (`action.yml`, `main.js`, `scripts/`, `tests/`, MIT `LICENSE`, README stub, lint, format, unit test runner, CI workflow running them). `action.yml` can be a stub that fails with a clear "not implemented" until S8. ([#1](https://github.com/muratkeremozcan/playwright-smart-parallelization/pull/1))
 - [ ] **S2 Consumer fixture and coverage harness (CAP-1).** `fixtures/consumer`: latest `@playwright/test`, covering every shape in `engine-qualification.md` "Consumer fixture". Harness that lists the intended leaf set (`--list --reporter=json`), runs a candidate partition, and asserts exactly-once coverage and serial-group integrity. Baseline: native `--shard`.
 - [ ] **S3 NSXBet qualification (CAP-1, CAP-5, CAP-6).** Run all 8 proofs plus damaged-timing and racing-publish cases against the latest `@nsxbet/playwright-orchestrator`. Automated where possible. Write `docs/qualification/nsxbet.md` with resolved versions, pass or reproduced fail per proof, runtime and footprint.
 - [ ] **S4 Flakiness qualification (CAP-1, CAP-5, CAP-6).** Same for the latest `@flakiness/playwright` with `disableUpload: true`. Add a network audit that proves no outbound vendor connection. Write `docs/qualification/flakiness.md`.

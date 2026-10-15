@@ -1,0 +1,30 @@
+{
+  "name": "playwright-smart-parallelization",
+  "version": "0.0.0",
+  "private": true,
+  "description": "GitHub Action for duration-balanced Playwright sharding.",
+  "license": "MIT",
+  "author": "Murat Kerem Ozcan",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/muratkeremozcan/playwright-smart-parallelization.git"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "node --test tests/*.test.js",
+    "check:public": "node scripts/check-public.js",
+    "validate": "npm run lint && npm run format:check && npm run test && npm run check:public"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.12.0",
+    "globals": "^17.13.0",
+    "prettier": "^3.9.10",
+    "yaml": "^2.9.1"
+  }
+}
