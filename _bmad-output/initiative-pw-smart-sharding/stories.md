@@ -15,6 +15,7 @@ Decisions (owner, 2026-10-15): float every package and Action to latest and reco
 - [ ] **S7 Decision record (CAP-3).** `docs/decision-record.md`: versions, fixture results, measurements, verdict (adopt, reject with reason, inconclusive), smallest remaining gap. Coordinator reviews and confirms before S8 starts.
 - [ ] **S8 The Action (CAP-4, CAP-5, CAP-6, or CAP-7 if the verdict demands it).** Implement `action.yml`: prepare, matrix-ready shard assignment, aggregate, history update, imbalance summary, single rollback switch. Unit tests plus an end-to-end run on the fixture in this repo's CI.
 - [ ] **S9 couture-cast integration and final before and after (CAP-2, CAP-4).** PR in couture-cast adopting the Action; final measurement; README with usage, cold start, refresh, diagnostics, rollback, and the real numbers.
+- [ ] **S10 Release lifecycle (CAP-4).** Mirror `~/opensource/tea-test-review`: `release.yml` (workflow_dispatch with patch/minor/major, runs unit suite plus a consumer smoke, derives `vX.Y.Z`, drafts a release, publication job moves the floating major tag), `scripts/release-version.js`, immutable exact tags, README release section and `@v1` usage. Read its git history first (`fix release tag ordering`, `fix release draft tag creation`, `releases 2`): those fixes are the known pain, so carry the corrected design over and test the tag-ordering and race cases. Verify with a dry run or prerelease path. Cutting the first stable `v1` is the owner's call.
 
 ## Protocol
 
