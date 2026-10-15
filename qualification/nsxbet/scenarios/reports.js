@@ -168,7 +168,7 @@ function reportProofs(ctx) {
       evidence: {
         exit: partial.exit,
         mergedTotal: partial.stats && sum(partial.stats),
-        completeTotal: sum(merged.stats),
+        completeTotal: merged.stats && sum(merged.stats),
       },
     },
   ];
