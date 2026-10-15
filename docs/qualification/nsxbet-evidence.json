@@ -1,0 +1,813 @@
+{
+  "generatedAt": "2026-10-15T22:31:26.014Z",
+  "versions": {
+    "engine": "@nsxbet/playwright-orchestrator@2.0.1",
+    "playwright": "1.64.1",
+    "node": "v22.20.0",
+    "platform": "darwin-arm64"
+  },
+  "rows": [
+    {
+      "subject": "engine",
+      "id": "1.combined",
+      "proof": 1,
+      "title": "one list for the whole config, as the Quick Start does",
+      "status": "fail",
+      "evidence": {
+        "coverageViolations": {
+          "duplicate": 36
+        },
+        "kinds": {
+          "duplicate": 36,
+          "serial-split": 6
+        }
+      }
+    },
+    {
+      "subject": "engine",
+      "id": "1.jobs",
+      "proof": 1,
+      "title": "one assignment and set of jobs per project",
+      "status": "pass",
+      "evidence": {
+        "coverageViolations": {},
+        "kinds": {},
+        "jobs": 4
+      }
+    },
+    {
+      "subject": "engine",
+      "id": "1.merged",
+      "proof": 1,
+      "title": "one assignment per project merged into one list per shard",
+      "status": "pass",
+      "evidence": {
+        "coverageViolations": {},
+        "kinds": {
+          "serial-split": 2
+        }
+      }
+    },
+    {
+      "subject": "engine",
+      "id": "1.repeat-each",
+      "proof": 1,
+      "title": "--repeat-each 2 on three shards",
+      "status": "fail",
+      "evidence": {
+        "coverageViolations": {
+          "duplicate": 76
+        },
+        "kinds": {
+          "shard-failed": 1,
+          "duplicate": 76,
+          "serial-split": 12
+        }
+      }
+    },
+    {
+      "subject": "integration",
+      "id": "1.grouped-repeat-each",
+      "proof": 1,
+      "title": "--repeat-each 2 on three shards, through the shim",
+      "status": "pass",
+      "evidence": {
+        "coverageViolations": {},
+        "kinds": {}
+      }
+    },
+    {
+      "subject": "engine",
+      "id": "2.cold",
+      "proof": 2,
+      "title": "no history, default file affinity",
+      "status": "fail",
+      "evidence": {
+        "splitGroups": ["chromium|oversized.spec.js|0:0|#0", "firefox|oversized.spec.js|0:0|#0"],
+        "failedShards": [],
+        "coverageViolations": {},
+        "failedTests": [],
+        "kinds": {
+          "serial-split": 2
+        }
+      }
+    },
+    {
+      "subject": "engine",
+      "id": "2.history",
+      "proof": 2,
+      "title": "with history, default file affinity",
+      "status": "fail",
+      "evidence": {
+        "splitGroups": ["chromium|oversized.spec.js|0:0|#0", "firefox|oversized.spec.js|0:0|#0"],
+        "failedShards": [],
+        "coverageViolations": {},
+        "failedTests": [],
+        "kinds": {
+          "serial-split": 2
+        }
+      }
+    },
+    {
+      "subject": "engine",
+      "id": "2.no-affinity",
+      "proof": 2,
+      "title": "with history, --no-file-affinity",
+      "status": "fail",
+      "evidence": {
+        "splitGroups": [
+          "chromium|oversized.spec.js|0:0|#0",
+          "chromium|serial-flow.spec.js|0:0|#0",
+          "firefox|oversized.spec.js|0:0|#0",
+          "firefox|serial-flow.spec.js|0:0|#0"
+        ],
+        "failedShards": [2],
+        "coverageViolations": {},
+        "failedTests": ["two uses the session from one"],
+        "kinds": {
+          "shard-failed": 1,
+          "serial-split": 4
+        }
+      }
+    },
+    {
+      "subject": "engine",
+      "id": "2.huge-penalty",
+      "proof": 2,
+      "title": "with history, --file-affinity-penalty 100000000",
+      "status": "fail",
+      "evidence": {
+        "splitGroups": [
+          "chromium|serial-flow.spec.js|0:0|#0",
+          "firefox|serial-flow.spec.js|0:0|#0"
+        ],
+        "failedShards": [2],
+        "coverageViolations": {},
+        "failedTests": ["two uses the session from one"],
+        "kinds": {
+          "shard-failed": 1,
+          "serial-split": 2
+        }
+      }
+    },
+    {
+      "subject": "integration",
+      "id": "2.grouped-cold",
+      "proof": 2,
+      "title": "serial groups as one test, no history",
+      "status": "pass",
+      "evidence": {
+        "splitGroups": [],
+        "failedShards": [],
+        "coverageViolations": {},
+        "failedTests": [],
+        "kinds": {}
+      }
+    },
+    {
+      "subject": "integration",
+      "id": "2.grouped-history-2",
+      "proof": 2,
+      "title": "serial groups as one test, history, 2 shards",
+      "status": "pass",
+      "evidence": {
+        "splitGroups": [],
+        "failedShards": [],
+        "coverageViolations": {},
+        "failedTests": [],
+        "kinds": {}
+      }
+    },
+    {
+      "subject": "integration",
+      "id": "2.grouped-history-3",
+      "proof": 2,
+      "title": "serial groups as one test, history, 3 shards",
+      "status": "pass",
+      "evidence": {
+        "splitGroups": [],
+        "failedShards": [],
+        "coverageViolations": {},
+        "failedTests": [],
+        "kinds": {}
+      }
+    },
+    {
+      "subject": "engine",
+      "id": "2.dependencies",
+      "proof": 2,
+      "title": "setup and teardown run once per shard that needs them",
+      "status": "pass",
+      "evidence": {
+        "runsChecked": 5,
+        "dependencyViolations": [],
+        "dependencyExecutions": [
+          {
+            "setup|global.setup.js|prepare the environment|#0": 2,
+            "teardown|global.teardown.js|clean up the environment|#0": 2
+          },
+          {
+            "setup|global.setup.js|prepare the environment|#0": 2,
+            "teardown|global.teardown.js|clean up the environment|#0": 2
+          },
+          {
+            "setup|global.setup.js|prepare the environment|#0": 2,
+            "teardown|global.teardown.js|clean up the environment|#0": 2
+          },
+          {
+            "setup|global.setup.js|prepare the environment|#0": 2,
+            "teardown|global.teardown.js|clean up the environment|#0": 2
+          },
+          {
+            "setup|global.setup.js|prepare the environment|#0": 2,
+            "teardown|global.teardown.js|clean up the environment|#0": 2
+          }
+        ]
+      }
+    },
+    {
+      "subject": "engine",
+      "id": "3.grep",
+      "proof": 3,
+      "title": "--grep applied to the list and to the run",
+      "status": "pass",
+      "evidence": {
+        "coverageViolations": {},
+        "kinds": {},
+        "intended": 14
+      }
+    },
+    {
+      "subject": "engine",
+      "id": "3.project",
+      "proof": 3,
+      "title": "--project=firefox applied to the list and to the run",
+      "status": "pass",
+      "evidence": {
+        "coverageViolations": {},
+        "kinds": {
+          "serial-split": 1
+        },
+        "intended": 26
+      }
+    },
+    {
+      "subject": "engine",
+      "id": "4.single-assignment",
+      "proof": 4,
+      "title": "one assign call yields the lists of all shards",
+      "status": "pass",
+      "evidence": {
+        "complete": true,
+        "assigned": 26,
+        "expected": 26,
+        "repeatedRuns": 5,
+        "distinctOutputs": 1,
+        "outputKeys": [
+          "estimatedTests",
+          "expectedDurations",
+          "isOptimal",
+          "shards",
+          "testListFiles",
+          "totalTests"
+        ],
+        "timingKeys": ["tests", "updatedAt", "version"],
+        "shardCountsWhereSlowClockChangesAssignment": [2, 3, 4, 5]
+      }
+    },
+    {
+      "subject": "engine",
+      "id": "5.truncated",
+      "proof": 5,
+      "title": "truncated, empty or missing timing file",
+      "status": "pass",
+      "evidence": {
+        "total": 26,
+        "outcomes": [
+          {
+            "file": "truncated.json",
+            "exit": 0,
+            "stderr": "",
+            "outcome": "complete assignment",
+            "silent": true,
+            "estimated": 26,
+            "isOptimal": true,
+            "expectedDurations": {
+              "1": 360000,
+              "2": 420000
+            }
+          },
+          {
+            "file": "empty.json",
+            "exit": 0,
+            "stderr": "",
+            "outcome": "complete assignment",
+            "silent": true,
+            "estimated": 26,
+            "isOptimal": true,
+            "expectedDurations": {
+              "1": 360000,
+              "2": 420000
+            }
+          },
+          {
+            "file": "absent.json",
+            "exit": 0,
+            "stderr": "",
+            "outcome": "complete assignment",
+            "silent": true,
+            "estimated": 26,
+            "isOptimal": true,
+            "expectedDurations": {
+              "1": 360000,
+              "2": 420000
+            }
+          }
+        ]
+      }
+    },
+    {
+      "subject": "engine",
+      "id": "5.version",
+      "proof": 5,
+      "title": "timing file of another schema version",
+      "status": "pass",
+      "evidence": {
+        "total": 26,
+        "outcomes": [
+          {
+            "file": "old-version.json",
+            "exit": 0,
+            "stderr": "Timing data version mismatch: expected 2, got 1. Using empty data.",
+            "outcome": "complete assignment",
+            "silent": false,
+            "estimated": 26,
+            "isOptimal": true,
+            "expectedDurations": {
+              "1": 360000,
+              "2": 420000
+            }
+          }
+        ]
+      }
+    },
+    {
+      "subject": "engine",
+      "id": "5.null-tests",
+      "proof": 5,
+      "title": "valid JSON whose tests value is null",
+      "status": "pass",
+      "evidence": {
+        "total": 26,
+        "outcomes": [
+          {
+            "file": "null-tests.json",
+            "exit": 1,
+            "stderr": "TypeError: Cannot read properties of null (reading ",
+            "outcome": "fails",
+            "silent": false,
+            "estimated": null,
+            "isOptimal": null,
+            "expectedDurations": null
+          }
+        ]
+      }
+    },
+    {
+      "subject": "engine",
+      "id": "5.string-durations",
+      "proof": 5,
+      "title": "durations stored as text",
+      "status": "pass",
+      "evidence": {
+        "total": 26,
+        "outcomes": [
+          {
+            "file": "string-durations.json",
+            "exit": 0,
+            "stderr": "",
+            "outcome": "complete assignment",
+            "silent": true,
+            "estimated": 0,
+            "isOptimal": false,
+            "expectedDurations": {
+              "1": "0abcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabc",
+              "2": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "subject": "engine",
+      "id": "5.zero-durations",
+      "proof": 5,
+      "title": "every duration zero",
+      "status": "pass",
+      "evidence": {
+        "total": 26,
+        "outcomes": [
+          {
+            "file": "zero-durations.json",
+            "exit": 0,
+            "stderr": "",
+            "outcome": "complete assignment",
+            "silent": true,
+            "estimated": 0,
+            "isOptimal": false,
+            "expectedDurations": {
+              "1": 0,
+              "2": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "subject": "engine",
+      "id": "5.stale-ids",
+      "proof": 5,
+      "title": "timing ids that match no listed test",
+      "status": "pass",
+      "evidence": {
+        "total": 26,
+        "outcomes": [
+          {
+            "file": "stale-ids.json",
+            "exit": 0,
+            "stderr": "",
+            "outcome": "complete assignment",
+            "silent": true,
+            "estimated": 26,
+            "isOptimal": true,
+            "expectedDurations": {
+              "1": 5876,
+              "2": 5876
+            }
+          }
+        ]
+      }
+    },
+    {
+      "subject": "engine",
+      "id": "x1.recompute-per-shard",
+      "proof": "x1",
+      "title": "shard 1 plans from good history, shard 2 from a damaged copy",
+      "status": "fail",
+      "evidence": {
+        "coverageViolations": {
+          "missing": 13,
+          "duplicate": 7
+        },
+        "kinds": {
+          "missing": 13,
+          "duplicate": 7,
+          "serial-split": 2
+        }
+      }
+    },
+    {
+      "subject": "engine",
+      "id": "x1.damaged-shard-artifact",
+      "proof": "x1",
+      "title": "shard 2 timing artifact damaged when history is merged",
+      "status": "fail",
+      "evidence": {
+        "exit": 0,
+        "stderr": [" \u203a   Warning: Failed to load timing artifact: damaged-shard-2.json"],
+        "testsBefore": 28,
+        "testsAfter": 28,
+        "testsUpdated": 11
+      }
+    },
+    {
+      "subject": "engine",
+      "id": "6.missing-timing-artifact",
+      "proof": 6,
+      "title": "shard 2 timing artifact missing when history is merged",
+      "status": "fail",
+      "evidence": {
+        "exit": 0,
+        "stderr": [" \u203a   Warning: Failed to load timing artifact: absent-shard-2.json"],
+        "testsBefore": 28,
+        "testsAfter": 28,
+        "testsUpdated": 11
+      }
+    },
+    {
+      "subject": "engine",
+      "id": "6.exit-codes",
+      "proof": 6,
+      "title": "the shards that exit non-zero are the shards that report a failed test",
+      "status": "pass",
+      "evidence": {
+        "failedShards": [2],
+        "shardsWithFailedTest": [2],
+        "unexpectedEngine": 2,
+        "unexpectedNative": 2,
+        "kinds": {
+          "shard-failed": 1,
+          "serial-split": 2
+        }
+      }
+    },
+    {
+      "subject": "engine",
+      "id": "6.retries",
+      "proof": 6,
+      "title": "retried tests keep their flaky outcome",
+      "status": "pass",
+      "evidence": {
+        "flakyEngine": 4,
+        "flakyNative": 4
+      }
+    },
+    {
+      "subject": "engine",
+      "id": "6.artifacts",
+      "proof": 6,
+      "title": "attachments, API request traces and blob reports are produced and merge completely",
+      "status": "pass",
+      "evidence": {
+        "traceFiles": 6,
+        "noteAttachments": 6,
+        "blobReports": 2,
+        "mergedTotal": 58,
+        "shardTotal": 58
+      }
+    },
+    {
+      "subject": "playwright",
+      "id": "6.missing-blob",
+      "proof": 6,
+      "title": "a shard blob report is missing when reports are merged",
+      "status": "fail",
+      "evidence": {
+        "exit": 0,
+        "mergedTotal": 25,
+        "completeTotal": 58
+      }
+    },
+    {
+      "subject": "engine",
+      "id": "7.cold",
+      "proof": 7,
+      "title": "no history: the full intended suite runs",
+      "status": "pass",
+      "evidence": {
+        "coverageViolations": {},
+        "testsPlanned": 52,
+        "testsEstimated": 52
+      }
+    },
+    {
+      "subject": "engine",
+      "id": "7.new-renamed",
+      "proof": 7,
+      "title": "history from before a rename and a new file of two tests",
+      "status": "pass",
+      "evidence": {
+        "coverageViolations": {},
+        "estimatedTests": [
+          "cart.spec.js::cart::adds one item",
+          "wishlist.spec.js::wishlist::adds a product",
+          "wishlist.spec.js::wishlist::shares the list"
+        ],
+        "staleEntryKeptAfterMerge": true,
+        "staleEntryPrunedWithCurrentTests": true,
+        "newEntriesAfterMerge": 3
+      }
+    },
+    {
+      "subject": "engine",
+      "id": "8.damaged-history",
+      "proof": 8,
+      "title": "the existing history file is damaged when one shard artifact is merged",
+      "status": "fail",
+      "evidence": {
+        "exit": 0,
+        "stderr": [],
+        "testsBefore": 28,
+        "testsAfter": 11
+      }
+    },
+    {
+      "subject": "engine",
+      "id": "8.failed-run",
+      "proof": 8,
+      "title": "a run where the volatile test fails at once is merged into history",
+      "status": "fail",
+      "evidence": {
+        "testId": "volatile.spec.js::volatile step",
+        "durationBeforeMs": 1050,
+        "durationAfterMs": 756
+      }
+    },
+    {
+      "subject": "engine",
+      "id": "8.cancelled-run",
+      "proof": 8,
+      "title": "a run cancelled with SIGINT 300 ms into a test is merged into history",
+      "status": "fail",
+      "evidence": {
+        "exit": 130,
+        "extractExit": 0,
+        "interrupted": [
+          {
+            "id": "volatile.spec.js::volatile step",
+            "recordedMs": 318,
+            "historyMs": 1050
+          }
+        ]
+      }
+    },
+    {
+      "subject": "engine",
+      "id": "x2.racing-publish",
+      "proof": "x2",
+      "title": "two runs merge into the same base and publish in the opposite order",
+      "status": "fail",
+      "evidence": {
+        "testsInHistory": 28,
+        "updatesLost": 28,
+        "publishedUpdatedAt": "2026-10-15T22:31:23.064Z",
+        "newerRunUpdatedAt": "2026-10-15T22:31:22.995Z",
+        "publishedIsLaterThanNewerRun": true,
+        "entryKeys": ["duration", "file", "lastRun", "runs"],
+        "topLevelKeys": ["tests", "updatedAt", "version"]
+      }
+    },
+    {
+      "subject": "engine",
+      "id": "net.guard-control",
+      "proof": "net",
+      "title": "the guard records and refuses connect, dns, fetch and http attempts",
+      "status": "pass",
+      "evidence": {
+        "exit": 0,
+        "attempts": ["connect", "dns.lookup", "fetch", "connect"]
+      }
+    },
+    {
+      "subject": "engine",
+      "id": "net.plan-timing",
+      "proof": "net",
+      "title": "assign, extract-timing and merge-timing under the guard",
+      "status": "pass",
+      "evidence": {
+        "steps": ["assign cold", "assign history", "extract-timing", "merge-timing"],
+        "exits": [0, 0, 0, 0],
+        "attempts": 0,
+        "spawns": 0
+      }
+    },
+    {
+      "subject": "engine",
+      "id": "net.os-block",
+      "proof": "net",
+      "title": "assign, extract-timing and merge-timing under an OS-level network block",
+      "status": "pass",
+      "evidence": {
+        "method": "sandbox-exec",
+        "controlBlockedCode": "EPERM",
+        "steps": ["assign cold", "assign history", "extract-timing", "merge-timing"],
+        "exits": [0, 0, 0, 0],
+        "sameAssignmentAsOpen": true
+      }
+    }
+  ],
+  "proofs": [
+    {
+      "number": 1,
+      "title": "Every selected leaf runs in exactly one shard",
+      "status": "fail"
+    },
+    {
+      "number": 2,
+      "title": "Serial groups and setup or teardown dependencies keep their behavior",
+      "status": "fail"
+    },
+    {
+      "number": 3,
+      "title": "Filters and project selection mean the same as before",
+      "status": "pass"
+    },
+    {
+      "number": 4,
+      "title": "Every shard uses one assignment",
+      "status": "pass"
+    },
+    {
+      "number": 5,
+      "title": "Corrupt or mismatched input cannot split shards",
+      "status": "pass"
+    },
+    {
+      "number": 6,
+      "title": "Exit codes, retries, traces and reports stay valid",
+      "status": "fail"
+    },
+    {
+      "number": 7,
+      "title": "A run with no history is complete, new tests are kept",
+      "status": "pass"
+    },
+    {
+      "number": 8,
+      "title": "Failed or cancelled runs and a damaged history file never replace good history",
+      "status": "fail"
+    }
+  ],
+  "extras": [
+    {
+      "id": "x1",
+      "title": "One shard with a damaged timing file",
+      "status": "fail"
+    },
+    {
+      "id": "x2",
+      "title": "Two runs racing to publish history",
+      "status": "fail"
+    }
+  ],
+  "balance": [
+    {
+      "shards": 2,
+      "native": {
+        "durationsMs": [13843, 13859],
+        "leaves": [26, 26],
+        "slowestMs": 13859,
+        "imbalance": 0.0005775756263085698,
+        "violations": {}
+      },
+      "engine": {
+        "durationsMs": [14472, 13464],
+        "leaves": [18, 34],
+        "slowestMs": 14472,
+        "imbalance": 0.03608247422680412,
+        "violations": {
+          "serial-split": 2
+        },
+        "slowestVsNative": 0.04423118551122015
+      },
+      "grouped": {
+        "durationsMs": [14188, 13959],
+        "leaves": [25, 27],
+        "slowestMs": 14188,
+        "imbalance": 0.008135858173162326,
+        "violations": {},
+        "slowestVsNative": 0.023739086514178512
+      }
+    },
+    {
+      "shards": 3,
+      "native": {
+        "durationsMs": [12249, 3779, 12323],
+        "leaves": [18, 17, 17],
+        "slowestMs": 12323,
+        "imbalance": 0.3039751684243941,
+        "violations": {}
+      },
+      "engine": {
+        "durationsMs": [9459, 9895, 9639],
+        "leaves": [19, 12, 21],
+        "slowestMs": 9895,
+        "imbalance": 0.02386783016590205,
+        "violations": {
+          "serial-split": 2
+        },
+        "slowestVsNative": -0.1970299440071411
+      },
+      "grouped": {
+        "durationsMs": [9732, 9720, 9034],
+        "leaves": [5, 5, 42],
+        "slowestMs": 9732,
+        "imbalance": 0.024924524327739877,
+        "violations": {},
+        "slowestVsNative": -0.21025724255457276
+      }
+    }
+  ],
+  "footprint": {
+    "install": {
+      "packages": 59,
+      "nodeModulesBytes": 9787094,
+      "enginePackageBytes": 161525
+    },
+    "runtimeMs": {
+      "version": 69,
+      "assignCold": 569,
+      "assignHistory": 182,
+      "extractTiming": 72,
+      "mergeTiming": 67
+    },
+    "artifactBytes": {
+      "assignmentJson": 2562,
+      "testListPerShard": [590, 283, 334],
+      "timingArtifact": 1583,
+      "mergedHistory": 5039,
+      "playwrightJsonReport": 50738
+    }
+  },
+  "durationMs": 487111
+}

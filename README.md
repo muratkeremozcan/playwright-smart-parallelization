@@ -148,6 +148,26 @@ and a project that depends on it. A suite that skips tests by design fails the `
 the harness has no allowance for a leaf that is meant to skip. Other engines plug in as
 `{ args, env }` shards through `harness/partitions.js`.
 
+## Engine qualification
+
+`qualification/nsxbet` installs the latest published `@nsxbet/playwright-orchestrator` in its own
+directory with a committed lockfile and drives it through the harness. It runs the eight
+compatibility proofs plus a damaged timing file and two runs racing to publish history, checks that
+the plan and timing steps make no outbound connection, and measures balance and footprint against
+native sharding. [`docs/qualification/nsxbet.md`](docs/qualification/nsxbet.md) holds the verdict,
+the resolved versions and the evidence for every row.
+
+```sh
+npm run qualify:install
+npm run qualify:nsxbet
+npm run qualify:nsxbet:test
+```
+
+`qualify:nsxbet` writes `qualification/nsxbet/evidence.json` (`--out FILE` picks another path).
+`qualify:nsxbet:test` asserts every result; with `PSP_NSX_EVIDENCE=FILE` it reads an earlier
+evidence file instead of collecting again. The `Qualification` workflow runs both on pull requests
+that touch `qualification/`, `harness/` or the fixture.
+
 ## License
 
 [MIT](LICENSE)

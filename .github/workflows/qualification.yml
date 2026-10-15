@@ -1,0 +1,60 @@
+# Qualifies the NSXBet Playwright orchestrator against the consumer fixture. The job collects the
+# evidence once, uploads it, and then asserts every result with `node --test`. It runs on demand
+# and on pull requests that touch the qualification code, the harness or the fixture.
+name: Qualification
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'qualification/**'
+      - 'harness/**'
+      - 'fixtures/consumer/**'
+      - '.github/workflows/qualification.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qualification-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  nsxbet:
+    name: NSXBet playwright-orchestrator
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            fixtures/consumer/package-lock.json
+            qualification/nsxbet/package-lock.json
+
+      - name: Install
+        run: |
+          npm ci
+          npm run qualify:install
+
+      - name: Collect evidence
+        run: npm run qualify:nsxbet -- --out "$RUNNER_TEMP/evidence.json" --require-os-block
+
+      - name: Assert the results
+        env:
+          PSP_NSX_EVIDENCE: ${{ runner.temp }}/evidence.json
+        run: npm run qualify:nsxbet:test
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: nsxbet-evidence
+          path: ${{ runner.temp }}/evidence.json
+          if-no-files-found: ignore
