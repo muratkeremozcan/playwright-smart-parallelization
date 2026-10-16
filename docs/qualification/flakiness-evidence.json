@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-16T06:52:21.117Z",
+  "generatedAt": "2026-10-16T07:07:52.951Z",
   "group": "all",
   "versions": {
     "engine": "@flakiness/playwright@2.0.2",
@@ -21,11 +21,11 @@
           "shards": 2,
           "hinted": 54,
           "tests": 54,
-          "loads": "1=12.6s, 2=12.6s",
+          "loads": "1=12.7s, 2=12.6s",
           "balancePercent": 100,
           "runningShard": {
             "current": 1,
-            "work": "12.6s of work"
+            "work": "12.7s of work"
           }
         }
       }
@@ -65,7 +65,7 @@
           "shards": 3,
           "hinted": 54,
           "tests": 54,
-          "loads": "1=9.1s, 2=9.1s, 3=7.1s",
+          "loads": "1=9.1s, 2=9.1s, 3=7.2s",
           "balancePercent": 93,
           "runningShard": {
             "current": 1,
@@ -197,11 +197,11 @@
           "shards": 2,
           "hinted": 52,
           "tests": 58,
-          "loads": "1=15.4s, 2=15.4s",
+          "loads": "1=15.5s, 2=15.4s",
           "balancePercent": 100,
           "runningShard": {
             "current": 1,
-            "work": "15.4s of work"
+            "work": "15.5s of work"
           }
         },
         "testsWithoutHint": 6,
@@ -642,8 +642,8 @@
       "status": "fail",
       "evidence": {
         "coverageViolations": {
-          "missing": 11,
-          "duplicate": 9
+          "missing": 4,
+          "duplicate": 5
         },
         "exits": [0, 0],
         "planLinesDiffer": true
@@ -703,7 +703,7 @@
       "evidence": {
         "buildExit": 0,
         "testsWithCompleteInput": 28,
-        "testsWithOneReport": 25,
+        "testsWithOneReport": 26,
         "unreadableInputExit": 1,
         "unreadableInputMessage": "cannot read report \"absent-shard-2.json\": ENOENT: no such file or directory, open 'absent-shard-2.json'"
       }
@@ -752,8 +752,8 @@
         "testsExecuted": 58,
         "attachmentReferences": 16,
         "attachmentReferencesByName": {
-          "error-context": 10,
-          "note": 6
+          "note": 6,
+          "error-context": 10
         },
         "attachmentsStored": 16
       }
@@ -798,12 +798,12 @@
       "evidence": {
         "testId": "volatile.spec.js › volatile step",
         "pricesBeforeMs": {
-          "chromium": 1023,
-          "firefox": 1031
+          "chromium": 1022,
+          "firefox": 1033
         },
         "pricesAfterMs": {
-          "chromium": 1023,
-          "firefox": 1031
+          "chromium": 1022,
+          "firefox": 1033
         }
       }
     },
@@ -816,12 +816,12 @@
       "evidence": {
         "testId": "volatile.spec.js › volatile step",
         "pricesBeforeMs": {
-          "chromium": 1023,
-          "firefox": 1031
+          "chromium": 1022,
+          "firefox": 1033
         },
         "pricesAfterMs": {
-          "chromium": 9080,
-          "firefox": 9092
+          "chromium": 9083,
+          "firefox": 9086
         }
       }
     },
@@ -834,14 +834,15 @@
       "evidence": {
         "exit": 130,
         "reportWritten": true,
-        "cancelledAttemptMs": 317,
+        "interruptedAttempts": 1,
+        "cancelledAttemptMs": 321,
         "pricesBeforeMs": {
-          "chromium": 1023,
-          "firefox": 1031
+          "chromium": 1022,
+          "firefox": 1033
         },
         "pricesAfterMs": {
-          "chromium": 1023,
-          "firefox": 1031
+          "chromium": 1022,
+          "firefox": 1033
         }
       }
     },
@@ -852,14 +853,14 @@
       "title": "a test that now takes 100 ms instead of a second is merged into history",
       "status": "fail",
       "evidence": {
-        "newRunMs": 125,
+        "newRunMs": 123,
         "pricesBeforeMs": {
-          "chromium": 1023,
-          "firefox": 1031
+          "chromium": 1022,
+          "firefox": 1033
         },
         "pricesAfterMs": {
-          "chromium": 1023,
-          "firefox": 1031
+          "chromium": 1022,
+          "firefox": 1033
         }
       }
     },
@@ -888,11 +889,11 @@
       "title": "history rebuilt from the reports of a window of recent passing runs",
       "status": "pass",
       "evidence": {
-        "durationBeforeMs": 1031,
-        "durationInFasterWindowMs": 125,
-        "durationWithFailedRunInWindowMs": 9092,
-        "durationWithFailedRunLeftOutMs": 1031,
-        "durationWithSlowPassingRunInWindowMs": 1031
+        "durationBeforeMs": 1033,
+        "durationInFasterWindowMs": 123,
+        "durationWithFailedRunInWindowMs": 9086,
+        "durationWithFailedRunLeftOutMs": 1033,
+        "durationWithSlowPassingRunInWindowMs": 1033
       }
     },
     {
@@ -1142,38 +1143,38 @@
       "runs": 5,
       "workers": 4,
       "plain": {
-        "wallMs": 11968,
-        "wallMinMs": 11932,
-        "wallMaxMs": 12027,
-        "afterTestsMs": 6,
-        "mainRssKb": 171216,
-        "workerRssKb": 180064
+        "wallMs": 11954,
+        "wallMinMs": 11944,
+        "wallMaxMs": 12001,
+        "afterTestsMs": 28,
+        "mainRssKb": 171600,
+        "workerRssKb": 179184
       },
       "reporter": {
-        "wallMs": 12113,
-        "wallMinMs": 12081,
-        "wallMaxMs": 12128,
-        "afterTestsMs": 54,
-        "mainRssKb": 175376,
-        "workerRssKb": 179456
+        "wallMs": 12101,
+        "wallMinMs": 12052,
+        "wallMaxMs": 12118,
+        "afterTestsMs": 75,
+        "mainRssKb": 177392,
+        "workerRssKb": 179904
       }
     },
     "timingsCommand": {
       "runtimeMs": {
         "help": 34,
-        "buildOne": 36,
-        "buildMerge": 36
+        "buildOne": 38,
+        "buildMerge": 37
       },
       "peakRssKb": {
-        "bareNode": 38544,
-        "help": 56800,
-        "buildOne": 57248,
-        "buildMerge": 57440
+        "bareNode": 38560,
+        "help": 56768,
+        "buildOne": 57296,
+        "buildMerge": 57360
       }
     },
     "artifactBytes": {
-      "flakinessReport": 38282,
-      "flakinessFolder": 40185,
+      "flakinessReport": 38248,
+      "flakinessFolder": 40151,
       "playwrightJsonReport": 91518,
       "timingsFile": 7451
     },
@@ -1191,11 +1192,11 @@
   },
   "durationMs": 233352,
   "legsMs": {
-    "coverage": 204043,
+    "coverage": 203908,
     "serial": 208285,
     "balance": 233352,
-    "assignment": 162148,
-    "history": 159867,
-    "privacy": 222454
+    "assignment": 171216,
+    "history": 160288,
+    "privacy": 222521
   }
 }

@@ -116,7 +116,7 @@ function newTests(ctx) {
       shard: `${index}/2`,
       env: {
         PSP_FLK_TIMINGS: `${ctx.dir('cold')}/absent.json`,
-        FLAKINESS_OUTPUT_DIR: ctx.dir('cold'),
+        FLAKINESS_OUTPUT_DIR: ctx.reportDir('cold-missing'),
       },
     })
   );
@@ -143,7 +143,7 @@ function newTests(ctx) {
     cwd,
     config: renamed.config,
     shard: '1/2',
-    env: { PSP_FLK_TIMINGS: merged.file, FLAKINESS_OUTPUT_DIR: dir },
+    env: { PSP_FLK_TIMINGS: merged.file, FLAKINESS_OUTPUT_DIR: ctx.reportDir('renamed-after') },
   });
   const planAfter = parsePlan(after.output);
   if (!planAfter) throw new Error('the rebuilt history printed no balancing plan');

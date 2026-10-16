@@ -30,9 +30,26 @@ function readLines(file) {
     .map((line) => JSON.parse(line));
 }
 
-/** The moment the last test of a run ended, from the statistics of its JSON report. */
-function lastTestEnd(stats) {
-  return Date.parse(stats.startTime) + stats.duration;
+/**
+ * The moment the last test result of a run ended, from its Playwright JSON report: the latest
+ * start plus duration of any result. The run's own duration also covers global teardown, which
+ * is not report generation.
+ */
+function lastTestEnd(report) {
+  let latest = 0;
+  const visit = (suite) => {
+    for (const spec of suite.specs || []) {
+      for (const test of spec.tests) {
+        for (const result of test.results) {
+          latest = Math.max(latest, Date.parse(result.startTime) + result.duration);
+        }
+      }
+    }
+    (suite.suites || []).forEach(visit);
+  };
+  report.suites.forEach(visit);
+  if (latest === 0) throw new Error('the report holds no test result');
+  return latest;
 }
 
 /**
@@ -83,7 +100,7 @@ function playwrightRun(ctx, { label, plain }) {
   if (main.length !== 1) throw new Error(`${label}: ${main.length} Playwright processes`);
   return {
     wallMs,
-    afterLastTestMs: exitedAt - lastTestEnd(readJson(jsonReport).stats),
+    afterLastTestMs: exitedAt - lastTestEnd(readJson(jsonReport)),
     mainRssKb: main[0].maxRssKb,
     workerRssKb: Math.max(...workers.map((entry) => entry.maxRssKb)),
     workers: workers.length,
@@ -205,4 +222,4 @@ function footprint(ctx) {
   };
 }
 
-module.exports = { footprint };
+module.exports = { footprint, lastTestEnd };

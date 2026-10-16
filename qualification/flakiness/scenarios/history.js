@@ -17,6 +17,7 @@ const {
   buildHistory,
   flakinessReports,
   priceOf,
+  projectPrices,
   scaleDurations,
   syntheticReport,
   testDurations,
@@ -198,6 +199,8 @@ function failedRuns(ctx) {
 function singleRun(ctx, { name, env }) {
   const cwd = greenProject(ctx);
   const dir = ctx.dir(name);
+  const reportDir = ctx.reportDir(name);
+  const json = path.join(dir, 'playwright.json');
   const result = spawnSync(
     process.execPath,
     [
@@ -212,10 +215,32 @@ function singleRun(ctx, { name, env }) {
     {
       cwd,
       encoding: 'utf8',
-      env: { ...process.env, FLAKINESS_OUTPUT_DIR: dir, ...env },
+      env: {
+        ...process.env,
+        FLAKINESS_OUTPUT_DIR: reportDir,
+        PSP_FLK_EXTRA: 'json',
+        PLAYWRIGHT_JSON_OUTPUT_FILE: json,
+        ...env,
+      },
     }
   );
-  return { exit: result.status, report: path.join(dir, 'report.json'), dir };
+  return { exit: result.status, report: path.join(reportDir, 'report.json'), json, dir };
+}
+
+/** How many attempts of the volatile test ended interrupted, from a Playwright JSON report. */
+function interruptedAttempts(file) {
+  let count = 0;
+  const visit = (suite) => {
+    for (const spec of suite.specs || []) {
+      if (spec.title !== 'volatile step') continue;
+      for (const test of spec.tests) {
+        count += test.results.filter((result) => result.status === 'interrupted').length;
+      }
+    }
+    (suite.suites || []).forEach(visit);
+  };
+  JSON.parse(fs.readFileSync(file, 'utf8')).suites.forEach(visit);
+  return count;
 }
 
 /** A run cancelled with SIGINT while the volatile test executes. */
@@ -235,6 +260,7 @@ function cancelledRun(ctx) {
     };
   }
   const cancelled = volatileMs(run.report);
+  const interrupted = interruptedAttempts(run.json);
   const merged = buildHistory({ dir: run.dir, reports: [run.report], existing: history });
   const before = volatilePrices(history);
   const after = volatilePrices(merged.file);
@@ -245,12 +271,16 @@ function cancelledRun(ctx) {
     // A run that was not interrupted (exit 130 is SIGINT) or that reached the full duration of the
     // test says nothing about a cancelled run.
     status:
-      run.exit === SIGINT_EXIT && cancelled < CANCEL_AFTER_MS * 3 && noneLowered(before, after)
+      run.exit === SIGINT_EXIT &&
+      interrupted > 0 &&
+      cancelled < CANCEL_AFTER_MS * 3 &&
+      noneLowered(before, after)
         ? 'pass'
         : 'fail',
     evidence: {
       exit: run.exit,
       reportWritten: true,
+      interruptedAttempts: interrupted,
       cancelledAttemptMs: cancelled,
       pricesBeforeMs: before,
       pricesAfterMs: after,
@@ -368,6 +398,17 @@ function windowRebuild(ctx) {
   };
 }
 
+/**
+ * The tests whose price in some project is higher in the history that merged every run than in the
+ * history that was published: the updates the published file lost. Both arguments are maps from
+ * a test to `{ project: ms }`.
+ */
+function lostUpdates(expected, published) {
+  return [...expected].filter(([test, prices]) =>
+    Object.entries(prices).some(([project, price]) => price > (published.get(test)?.[project] ?? 0))
+  );
+}
+
 /** Two runs merge into the same base history, then publish in the opposite order. */
 function racingPublish(ctx) {
   const { dir, base, reports } = reportAndHistory(ctx, 'race');
@@ -383,9 +424,8 @@ function racingPublish(ctx) {
     existing: afterNewer.file,
     reports,
   });
-  const expected = testDurations(sequential.file);
-  const published = testDurations(afterOlder.file);
-  const lost = [...expected].filter(([key, duration]) => duration > (published.get(key) ?? 0));
+  const published = projectPrices(afterOlder.file, PROJECTS);
+  const lost = lostUpdates(projectPrices(sequential.file, PROJECTS), published);
   const file = JSON.parse(fs.readFileSync(afterOlder.file, 'utf8'));
   return {
     id: 'x2.racing-publish',
@@ -408,6 +448,7 @@ module.exports = {
   failedRuns,
   equalDurations,
   fasterTest,
+  lostUpdates,
   racingPublish,
   shardReports,
   windowRebuild,

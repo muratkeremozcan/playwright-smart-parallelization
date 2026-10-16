@@ -40,7 +40,7 @@ function listAll(ctx, { timings, shards, env = {}, args = [], cwd = ctx.cwd }) {
       cwd,
       config: ctx.config(cwd),
       shard: `${position + 1}/${shards}`,
-      env: { PSP_FLK_TIMINGS: file, FLAKINESS_OUTPUT_DIR: ctx.dir('listing'), ...env },
+      env: { PSP_FLK_TIMINGS: file, FLAKINESS_OUTPUT_DIR: ctx.reportDir('listing'), ...env },
       args,
     });
   });

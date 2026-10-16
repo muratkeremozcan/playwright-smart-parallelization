@@ -229,6 +229,27 @@ describe('buildHistory', () => {
   });
 });
 
+describe('projectPrices', () => {
+  test('prices each test in each project, a project without an entry at the longest', () => {
+    const input = write(
+      tempDir(),
+      'in.json',
+      report([
+        ['chromium', 'a.spec.js', 'one', [300]],
+        ['firefox', 'a.spec.js', 'one', [100]],
+        ['chromium', 'b.spec.js', 'two', [40]],
+      ])
+    );
+    assert.deepStrictEqual(
+      [...drive.projectPrices(input, ['chromium', 'firefox'])],
+      [
+        ['a.spec.js › one', { chromium: 300, firefox: 100 }],
+        ['b.spec.js › two', { chromium: 40, firefox: 40 }],
+      ]
+    );
+  });
+});
+
 describe('priceOf', () => {
   const one = 'a.spec.js › one';
 

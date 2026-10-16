@@ -326,6 +326,7 @@ describe('proof 8: history', () => {
     const cancelled = row('8.cancelled-run');
     assert.strictEqual(cancelled.reportWritten, true);
     assert.strictEqual(cancelled.exit, 130);
+    assert.ok(cancelled.interruptedAttempts > 0);
     assert.ok(cancelled.cancelledAttemptMs < 900);
     for (const project of ['chromium', 'firefox']) {
       assert.ok(cancelled.pricesAfterMs[project] >= cancelled.pricesBeforeMs[project] * 0.9);

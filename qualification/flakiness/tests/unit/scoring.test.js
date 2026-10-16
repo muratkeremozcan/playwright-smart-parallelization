@@ -8,6 +8,7 @@ const assert = require('node:assert');
 const { coverageRow, dependencyRow } = require('../../../lib/scoring');
 const { classifyListing } = require('../../scenarios/assignment');
 const { PROBES, judge, program, spawnsOf, unexpectedPrograms } = require('../../scenarios/network');
+const { lostUpdates } = require('../../scenarios/history');
 const { outcomesRow, serialRow, shardMix } = require('../../scenarios/serial');
 
 const run = (kinds = {}, groups = []) => ({
@@ -132,6 +133,41 @@ describe('outcomesRow', () => {
   test('fails when a serial leaf did not run', () => {
     const missing = make(listing, [shard([{ key: 'a', outcome: 'flaky', attempts: 2 }])]);
     assert.strictEqual(outcomesRow(native, missing).status, 'fail');
+  });
+});
+
+describe('lostUpdates', () => {
+  const prices = (entries) => new Map(Object.entries(entries));
+
+  test('is empty when the published history holds every price of the merged one', () => {
+    const merged = prices({ a: { chromium: 300, firefox: 150 } });
+    assert.deepStrictEqual(lostUpdates(merged, merged), []);
+  });
+
+  test('names a test whose price is lower in the published history', () => {
+    const merged = prices({ a: { chromium: 300, firefox: 150 }, b: { chromium: 5, firefox: 5 } });
+    const published = prices({
+      a: { chromium: 100, firefox: 150 },
+      b: { chromium: 5, firefox: 5 },
+    });
+    assert.deepStrictEqual(
+      lostUpdates(merged, published).map(([test]) => test),
+      ['a']
+    );
+  });
+
+  test('sees a loss in one project that the other project hides', () => {
+    const merged = prices({ a: { chromium: 300, firefox: 150 } });
+    const published = prices({ a: { chromium: 300, firefox: 100 } });
+    assert.deepStrictEqual(
+      lostUpdates(merged, published).map(([test]) => test),
+      ['a']
+    );
+  });
+
+  test('names a test the published history does not have', () => {
+    const merged = prices({ a: { chromium: 1, firefox: 1 } });
+    assert.strictEqual(lostUpdates(merged, prices({})).length, 1);
   });
 });
 

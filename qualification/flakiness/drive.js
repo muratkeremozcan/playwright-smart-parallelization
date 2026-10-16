@@ -204,13 +204,31 @@ function syntheticReport(tests) {
  * is undefined when the file has no such test.
  */
 function priceOf(file, project, test) {
-  const perProject = new Map();
+  const price = projectPrices(file, [project]).get(test);
+  return price ? price[project] : undefined;
+}
+
+/**
+ * The price of every test of a file in each of `projects`, as `priceOf` defines it: a map from
+ * `file › titles › test` to `{ project: ms }`.
+ */
+function projectPrices(file, projects) {
+  const perTest = new Map();
   for (const [key, duration] of testDurations(file, { byEnvironment: true })) {
     const [environment, ...rest] = key.split(' › ');
-    if (rest.join(' › ') === test) perProject.set(environment, duration);
+    const test = rest.join(' › ');
+    if (!perTest.has(test)) perTest.set(test, new Map());
+    perTest.get(test).set(environment, duration);
   }
-  if (perProject.size === 0) return undefined;
-  return perProject.get(project) ?? Math.max(...perProject.values());
+  const prices = new Map();
+  for (const [test, perProject] of perTest) {
+    const longest = Math.max(...perProject.values());
+    prices.set(
+      test,
+      Object.fromEntries(projects.map((project) => [project, perProject.get(project) ?? longest]))
+    );
+  }
+  return prices;
 }
 
 /**
@@ -236,6 +254,7 @@ module.exports = {
   partitionOf,
   mapDurations,
   priceOf,
+  projectPrices,
   roundDurations,
   scaleDurations,
   shardEnv,

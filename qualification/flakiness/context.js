@@ -58,6 +58,14 @@ function createContext({ log = () => {}, source = FIXTURE } = {}) {
       return memo.get(key);
     },
 
+    /**
+     * A scratch directory for the report of one named run. The reporter empties its report
+     * folder, so a folder that holds an input of any check must never be one.
+     */
+    reportDir(name) {
+      return ctx.dir(`report-${name}`);
+    },
+
     /** A fresh scratch directory for one named step. */
     dir(name) {
       const dir = path.join(root, name);
