@@ -352,6 +352,14 @@ describe('finish', () => {
     assert.ok(trusted(push('refs/heads/feature'), 'true'));
     assert.ok(trusted(pr('o/r'), 'true'));
     assert.strictEqual(trusted(push('refs/heads/main'), 'false'), false);
+    const schedule = {
+      GITHUB_REPOSITORY: 'o/r',
+      GITHUB_EVENT_NAME: 'schedule',
+      GITHUB_REF: 'refs/heads/main',
+      GITHUB_EVENT_PATH: event({ schedule: '0 0 * * *' }),
+    };
+    assert.ok(trusted(schedule, 'auto'));
+    assert.strictEqual(trusted(schedule, 'false'), false);
     for (const mode of ['auto', 'true']) {
       assert.strictEqual(trusted(pr('fork/r'), mode), false);
       assert.strictEqual(trusted(pr(null), mode), false);
