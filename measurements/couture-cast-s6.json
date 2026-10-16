@@ -26,7 +26,7 @@
       "suite": "Story 5.4 palette advisor, seeded active subscriber (serial write journey)"
     }
   ],
-  "base": "BASE_SHA_TO_FILL",
+  "base": "d2eccc7cd7f2d12bbf73831a25a6877fd7f9bdea",
   "minimumCommit": "0889051908c6078fff3f61321732418f2c29e973",
   "resolvedPackages": [
     "@playwright/test",
