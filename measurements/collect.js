@@ -7,6 +7,11 @@
  *
  *   node measurements/collect.js --config measurements/couture-cast.json --label baseline-a \
  *     --pair 1 --run 123456789 --out docs/measurements/raw
+ *
+ * A config whose label is an object describes an arm (schema 2). The record then also carries the
+ * arm, the label it is paired against (`--comparison`), proof that the run's commit descends from
+ * the base and from the minimum commit, the versions its lockfile resolves, and the plan lines a
+ * balancing engine printed in each shard job.
  */
 
 const fs = require('node:fs');
@@ -16,6 +21,20 @@ const { execFileSync } = require('node:child_process');
 const { reduceBlob } = require('./blob');
 
 const SCHEMA = 1;
+const ARM_SCHEMA = 2;
+const SHA = /^[0-9a-f]{40}$/;
+/** Lines a balancing engine prints into the shard log; only these leave the log. */
+const ENGINE_LINE = /\[flakiness\.io\]/;
+const MAX_ENGINE_LINES = 40;
+/** Lines the cache actions print about a restore; a miss on one side of a pair skews the pair. */
+const CACHE_LINE =
+  /Cache restored from key:|Cache not found for input keys:|Cache hit occurred on the primary key/;
+const MAX_CACHE_LINES = 20;
+/**
+ * The oldest couture-cast commit a measured run may use. Workflows before it serialized the CI
+ * environment into public artifacts, so the rule lives in code and a config cannot loosen it.
+ */
+const MINIMUM_COMMIT = '0889051908c6078fff3f61321732418f2c29e973';
 const PAGE_SIZE = 100;
 const MAX_BUFFER = 256 * 1024 * 1024;
 
@@ -26,6 +45,13 @@ function ghApi(endpoint) {
 
 function ghDownload(endpoint) {
   return execFileSync('gh', ['api', endpoint], { maxBuffer: MAX_BUFFER });
+}
+
+/** A repository file as its raw bytes; the contents API caps the JSON form at one megabyte. */
+function ghRaw(endpoint) {
+  return execFileSync('gh', ['api', '-H', 'Accept: application/vnd.github.raw', endpoint], {
+    maxBuffer: MAX_BUFFER,
+  }).toString('utf8');
 }
 
 /** Reads `report.jsonl` out of a blob artifact: a zip that holds one report zip per shard. */
@@ -99,13 +125,31 @@ function parseRunnerLog(text) {
   };
 }
 
+/** The plan lines of a balancing engine, without timestamps; null when the engine printed none. */
+function engineLines(text) {
+  const lines = text
+    .split('\n')
+    .filter((line) => ENGINE_LINE.test(line))
+    .map((line) => line.replace(/^\S+Z /, '').trim());
+  return lines.length === 0 ? null : lines.slice(0, MAX_ENGINE_LINES);
+}
+
+/** What the cache actions said in a job log, without timestamps; null when they said nothing. */
+function cacheLines(text) {
+  const lines = text
+    .split('\n')
+    .filter((line) => CACHE_LINE.test(line))
+    .map((line) => line.replace(/^\S+Z /, '').trim());
+  return lines.length === 0 ? null : lines.slice(0, MAX_CACHE_LINES);
+}
+
 /** The first `Error` line of a job log, without its timestamp: what a failed job says first. */
 function failureNote(text) {
   const match = /^\S+Z (.*\bError\b.*)$/m.exec(text);
   return match ? match[1].trim().slice(0, 200) : null;
 }
 
-function reduceJob(job, log, note = null) {
+function reduceJob(job, log, note = null, engine = null, cache = null) {
   return {
     id: job.id,
     name: job.name,
@@ -118,6 +162,8 @@ function reduceJob(job, log, note = null) {
     runnerGroup: job.runner_group_name,
     runner: log,
     failureNote: note,
+    engineLines: engine,
+    cacheLines: cache,
     steps: (job.steps || []).map((step) => ({
       number: step.number,
       name: step.name,
@@ -129,7 +175,17 @@ function reduceJob(job, log, note = null) {
   };
 }
 
-function collectRun({ api, download, readReport, config, label, pair, runId }) {
+function collectRun({
+  api,
+  download,
+  raw,
+  readReport,
+  config,
+  label,
+  pair,
+  runId,
+  comparison = null,
+}) {
   const repo = `${config.repo.owner}/${config.repo.name}`;
   const base = `repos/${repo}/actions`;
   const run = api(`${base}/runs/${runId}`);
@@ -141,6 +197,11 @@ function collectRun({ api, download, readReport, config, label, pair, runId }) {
   const artifacts = paginate(api, `${base}/runs/${runId}/artifacts`, 'artifacts');
   const shardJob = new RegExp(config.shardJobPattern);
   const blobName = new RegExp(config.blobArtifactPattern);
+  const arm = typeof config.labels[label] === 'object' ? config.labels[label] : null;
+  if (config.labels[label] === undefined) throw new Error(`label ${label} is not in the config`);
+  if (arm && run.head_branch !== arm.branch) {
+    throw new Error(`run ${runId} ran on ${run.head_branch}, the arm ${label} is ${arm.branch}`);
+  }
 
   const reduced = jobs.map((job) => {
     const ran =
@@ -156,7 +217,9 @@ function collectRun({ api, download, readReport, config, label, pair, runId }) {
     return reduceJob(
       job,
       parseRunnerLog(text),
-      job.conclusion === 'success' ? null : failureNote(text)
+      job.conclusion === 'success' ? null : failureNote(text),
+      shardJob.test(job.name) ? engineLines(text) : null,
+      shardJob.test(job.name) ? cacheLines(text) : null
     );
   });
 
@@ -182,11 +245,11 @@ function collectRun({ api, download, readReport, config, label, pair, runId }) {
     throw new Error(`run ${runId} has no job named like ${config.shardJobPattern}`);
   shards.sort((a, b) => a.index - b.index);
 
-  return {
-    schema: SCHEMA,
+  const record = {
+    schema: arm ? ARM_SCHEMA : SCHEMA,
     label,
     pair,
-    labelNote: config.labels[label],
+    labelNote: arm ? arm.note : config.labels[label],
     repo: config.repo,
     workflow: config.workflow,
     testStep: config.testStep,
@@ -209,6 +272,61 @@ function collectRun({ api, download, readReport, config, label, pair, runId }) {
     jobs: reduced,
     shards,
   };
+  if (!arm) return record;
+  return {
+    ...record,
+    comparison,
+    arm: {
+      branch: arm.branch,
+      shards: arm.shards,
+      workers: arm.workers,
+      engine: arm.engine,
+      phase: arm.phase,
+      command: arm.command,
+      stressOf: arm.stressOf || null,
+    },
+    base: lineage(api, repo, config, run.head_sha),
+    resolved: resolvedVersions(raw, repo, run.head_sha, config.resolvedPackages || []),
+  };
+}
+
+/**
+ * Where the run's commit stands against the base every arm branches from and against the minimum
+ * commit no measured run may predate: the GitHub compare API, never a local checkout.
+ */
+function lineage(api, repo, config, sha) {
+  for (const key of ['base', 'minimumCommit']) {
+    if (!SHA.test(config[key] || '')) throw new Error(`config.${key} must be a full commit sha`);
+  }
+  if (config.minimumCommit !== MINIMUM_COMMIT) {
+    throw new Error(`config.minimumCommit must be ${MINIMUM_COMMIT}`);
+  }
+  const compare = (from) => api(`repos/${repo}/compare/${from}...${sha}`);
+  const descends = (body) => ['ahead', 'identical'].includes(body.status) && body.behind_by === 0;
+  const fromBase = compare(config.base);
+  const fromMinimum = compare(config.minimumCommit);
+  if (!descends(fromBase)) throw new Error(`commit ${sha} does not descend from the base`);
+  if (!descends(fromMinimum)) {
+    throw new Error(`commit ${sha} predates the minimum commit ${config.minimumCommit}`);
+  }
+  return {
+    sha: config.base,
+    aheadBy: fromBase.ahead_by,
+    minimum: config.minimumCommit,
+    fromMinimum: true,
+  };
+}
+
+/** The version the lockfile at `sha` resolves for each named package; null when it has none. */
+function resolvedVersions(raw, repo, sha, names) {
+  if (names.length === 0) return {};
+  const lock = JSON.parse(raw(`repos/${repo}/contents/package-lock.json?ref=${sha}`));
+  return Object.fromEntries(
+    names.map((name) => {
+      const entry = lock.packages && lock.packages[`node_modules/${name}`];
+      return [name, entry ? entry.version : null];
+    })
+  );
 }
 
 function parseArgs(argv) {
@@ -222,6 +340,9 @@ function parseArgs(argv) {
     if (!args[required]) throw new Error(`--${required} is required`);
   }
   if (!/^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(args.label)) throw new Error(`bad label ${args.label}`);
+  if (args.comparison !== undefined && !/^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(args.comparison)) {
+    throw new Error(`bad comparison ${args.comparison}`);
+  }
   for (const numeric of ['pair', 'run']) {
     if (!/^[1-9]\d*$/.test(args[numeric])) throw new Error(`--${numeric} must be a number`);
   }
@@ -234,11 +355,13 @@ function main(argv) {
   const record = collectRun({
     api: ghApi,
     download: ghDownload,
+    raw: ghRaw,
     readReport: readReportText,
     config,
     label: args.label,
     pair: Number(args.pair),
     runId: args.run,
+    comparison: args.comparison || null,
   });
   fs.mkdirSync(args.out, { recursive: true });
   const file = path.join(args.out, `${args.label}-${record.run.id}.json`);
@@ -249,11 +372,19 @@ function main(argv) {
 if (require.main === module) main(process.argv.slice(2));
 
 module.exports = {
+  MINIMUM_COMMIT,
+  cacheLines,
   collectRun,
+  engineLines,
   failureNote,
+  ghApi,
+  ghDownload,
+  ghRaw,
+  lineage,
   paginate,
   parseArgs,
   parseRunnerLog,
   readReportText,
   reduceJob,
+  resolvedVersions,
 };

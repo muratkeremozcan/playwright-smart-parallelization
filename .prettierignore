@@ -6,3 +6,4 @@ _bmad-output
 .agents
 docs/measurements/raw
 docs/measurements/baseline.md
+docs/measurements/candidates.md

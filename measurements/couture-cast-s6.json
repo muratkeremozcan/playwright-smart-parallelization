@@ -1,0 +1,141 @@
+{
+  "repo": {
+    "owner": "muratkeremozcan",
+    "name": "couture-cast"
+  },
+  "workflow": ".github/workflows/pr-pw-e2e-local.yml",
+  "shardJobPattern": "^pw-e2e \\((\\d+), (\\d+)\\)$",
+  "blobArtifactPattern": "^blob-report-(\\d+)$",
+  "testStep": "Run Playwright local suite",
+  "facts": {
+    "fullyParallel": true,
+    "source": "playwright/config/base.config.ts and .github/workflows/pr-pw-e2e-local.yml",
+    "concurrency": "one group per workflow and branch, cancel-in-progress"
+  },
+  "serialSuites": [
+    {
+      "file": "planner.spec.ts",
+      "suite": "Story 5.5 premium 7-day planner, seeded active subscriber (serial journey)"
+    },
+    {
+      "file": "premium-theme-switcher.spec.ts",
+      "suite": "Story 5.3 premium theme switcher, seeded active subscriber (serial write journey)"
+    },
+    {
+      "file": "palette-advisor.spec.ts",
+      "suite": "Story 5.4 palette advisor, seeded active subscriber (serial write journey)"
+    }
+  ],
+  "base": "BASE_SHA_TO_FILL",
+  "minimumCommit": "0889051908c6078fff3f61321732418f2c29e973",
+  "resolvedPackages": [
+    "@playwright/test",
+    "@flakiness/playwright",
+    "@seontechnologies/playwright-utils",
+    "supabase"
+  ],
+  "control": "control",
+  "pairs": 5,
+  "labels": {
+    "control": {
+      "note": "the base as is: native --shard, 2 shards, 1 worker",
+      "branch": "psp/s6-control",
+      "shards": 2,
+      "workers": 1,
+      "engine": "native",
+      "phase": "measured",
+      "command": "npm run test:pw-local -- --shard=N/2 --reporter=blob"
+    },
+    "shards-3": {
+      "note": "native --shard, 3 shards, 1 worker",
+      "branch": "psp/s6-shards-3",
+      "shards": 3,
+      "workers": 1,
+      "engine": "native",
+      "phase": "measured",
+      "command": "npm run test:pw-local -- --shard=N/3 --reporter=blob"
+    },
+    "shards-4": {
+      "note": "native --shard, 4 shards, 1 worker",
+      "branch": "psp/s6-shards-4",
+      "shards": 4,
+      "workers": 1,
+      "engine": "native",
+      "phase": "measured",
+      "command": "npm run test:pw-local -- --shard=N/4 --reporter=blob"
+    },
+    "workers-2": {
+      "note": "native --shard, 2 shards, 2 workers per shard",
+      "branch": "psp/s6-workers-2",
+      "shards": 2,
+      "workers": 2,
+      "engine": "native",
+      "phase": "measured",
+      "command": "npm run test:pw-local -- --shard=N/2 --reporter=blob"
+    },
+    "flakiness": {
+      "note": "Flakiness reporter balancing 2 shards, 1 worker, timings from the warm-up runs",
+      "branch": "psp/s6-flakiness",
+      "shards": 2,
+      "workers": 1,
+      "engine": "flakiness",
+      "phase": "measured",
+      "command": "npm run test:pw-local -- --shard=N/2"
+    },
+    "control-warmup": {
+      "note": "the control branch, filling its caches before the pairs",
+      "branch": "psp/s6-control",
+      "shards": 2,
+      "workers": 1,
+      "engine": "native",
+      "phase": "warm-up",
+      "command": "npm run test:pw-local -- --shard=N/2 --reporter=blob"
+    },
+    "shards-3-warmup": {
+      "note": "the shards-3 branch, filling its caches before the pairs",
+      "branch": "psp/s6-shards-3",
+      "shards": 3,
+      "workers": 1,
+      "engine": "native",
+      "phase": "warm-up",
+      "command": "npm run test:pw-local -- --shard=N/3 --reporter=blob"
+    },
+    "shards-4-warmup": {
+      "note": "the shards-4 branch, filling its caches before the pairs",
+      "branch": "psp/s6-shards-4",
+      "shards": 4,
+      "workers": 1,
+      "engine": "native",
+      "phase": "warm-up",
+      "command": "npm run test:pw-local -- --shard=N/4 --reporter=blob"
+    },
+    "workers-2-warmup": {
+      "note": "the workers-2 branch, filling its caches before the pairs",
+      "branch": "psp/s6-workers-2",
+      "shards": 2,
+      "workers": 2,
+      "engine": "native",
+      "phase": "warm-up",
+      "command": "npm run test:pw-local -- --shard=N/2 --reporter=blob"
+    },
+    "flakiness-warmup": {
+      "note": "Flakiness reporter, 2 shards, 1 worker, filling its timings",
+      "branch": "psp/s6-flakiness",
+      "shards": 2,
+      "workers": 1,
+      "engine": "flakiness",
+      "phase": "warm-up",
+      "command": "npm run test:pw-local -- --shard=N/2"
+    },
+    "workers-2-stress": {
+      "note": "2 shards, 2 workers per shard, every test three times: the tolerance phase of workers-2",
+      "branch": "psp/s6-workers-2-stress",
+      "shards": 2,
+      "workers": 2,
+      "engine": "native",
+      "phase": "tolerance",
+      "command": "npm run test:pw-local -- --shard=N/2 --reporter=blob --repeat-each=3",
+      "stressOf": "workers-2"
+    }
+  }
+}

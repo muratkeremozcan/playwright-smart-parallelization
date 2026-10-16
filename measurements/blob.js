@@ -27,6 +27,8 @@ function collectTests(entries, titlePath, project, out) {
         titlePath,
         title: entry.title,
         retries: entry.retries,
+        // a copy made by --repeat-each is its own atomic unit; absent in reports before S6
+        ...(entry.repeatEachIndex ? { repeatEachIndex: entry.repeatEachIndex } : {}),
         attempts: [],
       });
     } else {

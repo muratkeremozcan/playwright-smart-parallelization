@@ -209,4 +209,51 @@ function standard(overrides = {}) {
   });
 }
 
-module.exports = { SERIAL, makeRecord, makeTest, standard };
+/**
+ * The schema 2 form of a record: the arm it ran, the label it is paired for, its lineage and the
+ * versions its lockfile resolves. `workers` sets the workers of every blob as well as of the arm.
+ */
+function armRecord(
+  record,
+  {
+    phase = 'measured',
+    comparison = null,
+    workers = 1,
+    engine = 'native',
+    engineLines = null,
+    stressOf = null,
+    cacheLines = null,
+  } = {}
+) {
+  return {
+    ...record,
+    schema: 2,
+    comparison: phase === 'measured' ? comparison || record.label : null,
+    arm: {
+      branch: record.run.branch,
+      shards: record.shards.length,
+      workers,
+      engine,
+      phase,
+      command: 'npx playwright test',
+      stressOf,
+    },
+    base: {
+      sha: 'b'.repeat(40),
+      aheadBy: 1,
+      minimum: '0889051908c6078fff3f61321732418f2c29e973',
+      fromMinimum: true,
+    },
+    resolved: { '@playwright/test': '1.0.0' },
+    jobs: record.jobs.map((job) =>
+      /^pw-e2e /.test(job.name)
+        ? { ...job, engineLines, cacheLines }
+        : { ...job, engineLines: null, cacheLines: null }
+    ),
+    shards: record.shards.map((shard) =>
+      shard.blob ? { ...shard, blob: { ...shard.blob, workers } } : shard
+    ),
+  };
+}
+
+module.exports = { SERIAL, armRecord, makeRecord, makeTest, standard };

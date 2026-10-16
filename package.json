@@ -31,7 +31,9 @@
     "research:install": "npm ci --prefix fixtures/consumer && npm ci --prefix qualification/flakiness --ignore-scripts && npm ci --prefix research/shard-balancer --ignore-scripts",
     "research:shard-balancer": "node research/shard-balancer/run.js",
     "research:shard-balancer:test": "node --test --test-concurrency=1 research/shard-balancer/tests/*.test.js",
-    "research:shard-balancer:report": "node research/shard-balancer/report.js --write"
+    "research:shard-balancer:report": "node research/shard-balancer/report.js --write",
+    "measurements:dispatch": "node measurements/dispatch.js --config measurements/couture-cast-s6.json --out docs/measurements/raw/candidates",
+    "measurements:candidates": "node measurements/candidates.js --raw docs/measurements/raw/candidates --baseline docs/measurements/raw --evidence docs/research/shard-balancer-evidence.json --out docs/measurements/candidates.md"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

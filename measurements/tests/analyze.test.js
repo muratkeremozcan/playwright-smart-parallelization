@@ -12,7 +12,7 @@ const {
   unitKey,
   validateRecord,
 } = require('../analyze');
-const { SERIAL, makeRecord, makeTest, standard } = require('./support');
+const { SERIAL, armRecord, makeRecord, makeTest, standard } = require('./support');
 
 const lean = { queue: 1000, setup: 1000, prepare: 0, server: 0, after: 0 };
 const clone = (record) => JSON.parse(JSON.stringify(record));
@@ -318,7 +318,7 @@ test('validateRecord refuses a record it cannot trust', () => {
     mutate(record);
     assert.throws(() => validateRecord(record), pattern);
   };
-  bad((r) => (r.schema = 2), /schema/);
+  bad((r) => (r.schema = 3), /schema/);
   bad((r) => (r.run.attempt = 2), /only first attempts/);
   bad((r) => (r.run.status = 'in_progress'), /not completed/);
   bad((r) => (r.shards = []), /missing/);
@@ -471,4 +471,101 @@ test('a test that never ran does not count as a negative retry', () => {
   const run = analyzeRun(record);
   assert.equal(run.retries, 0);
   assert.equal(run.failed, 1);
+});
+
+test('with two workers a shard has two slots: load, bound and decomposition divide by the workers', () => {
+  const run = analyzeRun(armRecord(standard(), { workers: 2 }));
+  assert.equal(run.workers, 2);
+  assert.equal(run.balance.share, 10000);
+  assert.equal(run.balance.lowerBound, 20000);
+  assert.equal(run.balance.packed, 20000);
+  assert.equal(run.balance.slowestBusy, 10000);
+  assert.equal(run.balance.bounds[3], 20000);
+  assert.equal(run.criticalShard, 2);
+  assert.equal(run.decomposition.assignmentGap, -10000);
+  assert.equal(run.decomposition.inTestOverhead, 10000);
+  const d = run.decomposition;
+  assert.equal(
+    d.queue + d.fixed + d.share + d.atomicExcess + d.assignmentGap + d.inTestOverhead,
+    run.completion
+  );
+});
+
+test('an arm record with one worker analyzes exactly like its schema 1 form', () => {
+  const plain = analyzeRun(standard());
+  const arm = analyzeRun(armRecord(standard()));
+  assert.deepEqual(arm.balance, plain.balance);
+  assert.deepEqual(arm.decomposition, plain.decomposition);
+});
+
+test('validateRecord refuses an arm record whose arm is not what ran or that lacks its lineage', () => {
+  const bad = (mutate, pattern) => {
+    const record = clone(armRecord(standard()));
+    mutate(record);
+    assert.throws(() => validateRecord(record), pattern);
+  };
+  bad((r) => delete r.arm, /no arm/);
+  bad((r) => (r.arm.workers = 0), /no arm/);
+  bad((r) => (r.arm.phase = 'other'), /no arm phase/);
+  bad((r) => (r.arm.shards = 3), /2 shard jobs ran, the arm declares 3/);
+  bad((r) => (r.base.sha = 'short'), /no base commit/);
+  bad((r) => (r.base.fromMinimum = false), /does not descend from the minimum commit/);
+  bad((r) => (r.arm.workers = 2), /runs 1 workers, the arm declares 2/);
+});
+
+test('analyzeRun names the tests that failed and went flaky', () => {
+  const record = makeRecord({
+    shards: [
+      {
+        ...lean,
+        tests: [
+          makeTest('ok', [1000]),
+          makeTest('flaky', [1000, 1000], { titlePath: ['flaky.spec.ts', 'Group'] }),
+        ],
+      },
+      { ...lean, tests: [makeTest('bad', [1000, 1000, 1000], { status: 'failed' })] },
+    ],
+  });
+  const run = analyzeRun(record);
+  assert.deepEqual(run.flakyTests, ['chromium › flaky.spec.ts › Group › flaky']);
+  assert.deepEqual(run.failedTests, ['chromium › bad.spec.ts › Suite › bad']);
+});
+
+test('with two workers the packing and the bounds use shards times workers slots', () => {
+  const ten = (id) => makeTest(id, [10000]);
+  const record = makeRecord({
+    shards: [
+      { ...lean, tests: [ten('a'), ten('b')] },
+      { ...lean, tests: [ten('c'), ten('d')] },
+    ],
+  });
+  const run = analyzeRun(armRecord(record, { workers: 2 }));
+  // four 10 s units into four slots, and into six for three shards
+  assert.equal(run.balance.packed, 10000);
+  assert.equal(run.balance.lowerBound, 10000);
+  assert.equal(run.balance.bounds[3], 10000);
+  assert.equal(run.balance.bounds[2], 10000);
+  const one = analyzeRun(armRecord(record));
+  assert.equal(one.balance.packed, 20000);
+  assert.ok(Math.abs(one.balance.bounds[3] - 40000 / 3) < 1e-9);
+});
+
+test('copies made by --repeat-each are separate atomic units of a serial suite', () => {
+  const serial = (id, repeat) => ({
+    ...makeTest(id, [1000], { file: SERIAL.file, titlePath: [SERIAL.file, SERIAL.suite] }),
+    ...(repeat ? { id: `${id}-r${repeat}`, repeatEachIndex: repeat } : {}),
+  });
+  const record = makeRecord({
+    serialSuites: [SERIAL],
+    shards: [
+      { ...lean, tests: [serial('s1', 0)] },
+      { ...lean, tests: [serial('s1', 1)] },
+    ],
+  });
+  const run = analyzeRun(record);
+  assert.equal(run.balance.units, 2);
+  assert.deepEqual(run.listedTests, [
+    'chromium › serial.spec.ts › Serial journey › s1',
+    'chromium › serial.spec.ts › Serial journey › s1 (repeat 1)',
+  ]);
 });

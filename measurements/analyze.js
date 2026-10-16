@@ -7,6 +7,9 @@
 
 const { median, rangesOverlap, summarize } = require('./stats');
 
+/** The oldest couture-cast commit a measured run may use; see collect.js. */
+const MINIMUM_COMMIT = '0889051908c6078fff3f61321732418f2c29e973';
+
 /** Shard counts the lower bound is reported for. */
 const BOUND_SHARDS = [2, 3, 4, 6, 8];
 
@@ -16,10 +19,20 @@ const ms = (iso) => {
   return value;
 };
 
+/** Workers per shard: one for a schema 1 record, the arm's count for a later one. */
+const workersOf = (record) => (record.arm ? record.arm.workers : 1);
+
 /** Throws when a record is not one this analysis can trust; a bad record never reaches a median. */
 function validateRecord(record) {
   const where = `run ${record.run && record.run.id}`;
-  if (record.schema !== 1) throw new Error(`${where}: unknown schema ${record.schema}`);
+  if (record.collectError !== undefined) {
+    validateStub(record, where);
+    return;
+  }
+  if (record.schema !== 1 && record.schema !== 2) {
+    throw new Error(`${where}: unknown schema ${record.schema}`);
+  }
+  if (record.schema === 2) validateArm(record, where);
   if (record.run.status !== 'completed') throw new Error(`${where}: run is not completed`);
   if (record.run.attempt !== 1) {
     throw new Error(`${where}: attempt ${record.run.attempt}, only first attempts are measured`);
@@ -45,9 +58,9 @@ function validateRecord(record) {
     if (!shard.blob) continue;
     if (!shard.blob.shard)
       throw new Error(`${where}: the blob of shard ${shard.index} has no shard`);
-    if (shard.blob.workers !== 1) {
+    if (shard.blob.workers !== workersOf(record)) {
       throw new Error(
-        `${where}: shard ${shard.index} runs ${shard.blob.workers} workers, the analysis assumes one`
+        `${where}: shard ${shard.index} runs ${shard.blob.workers} workers, the arm declares ${workersOf(record)}`
       );
     }
     if (shard.blob.shard.current !== shard.index || shard.blob.shard.total !== shard.total) {
@@ -62,12 +75,55 @@ function validateRecord(record) {
   }
 }
 
+/**
+ * A run the dispatcher could not turn into a full record keeps its identity and the reason, so it
+ * is counted and shown; it never carries timings.
+ */
+function validateStub(record, where) {
+  if (record.schema !== 2 || typeof record.collectError !== 'string' || !record.collectError) {
+    throw new Error(`${where}: a stub record needs schema 2 and a reason`);
+  }
+  if (!record.arm || !record.run || !record.run.id || !record.run.createdAt) {
+    throw new Error(`${where}: a stub record needs its arm and run`);
+  }
+  if (!Number.isInteger(record.pair) || record.pair < 1)
+    throw new Error(`${where}: no pair number`);
+}
+
+/** A schema 2 record names its arm, and the arm must be the shape that actually ran. */
+function validateArm(record, where) {
+  const arm = record.arm;
+  if (!arm || !Number.isInteger(arm.shards) || !Number.isInteger(arm.workers) || arm.workers < 1) {
+    throw new Error(`${where}: no arm with a shard and worker count`);
+  }
+  if (!['measured', 'warm-up', 'tolerance'].includes(arm.phase)) {
+    throw new Error(`${where}: no arm phase`);
+  }
+  if (record.shards.length !== arm.shards) {
+    throw new Error(
+      `${where}: ${record.shards.length} shard jobs ran, the arm declares ${arm.shards}`
+    );
+  }
+  if (!record.base || !/^[0-9a-f]{40}$/.test(record.base.sha)) {
+    throw new Error(`${where}: no base commit`);
+  }
+  if (record.base.minimum !== MINIMUM_COMMIT || !record.base.fromMinimum) {
+    throw new Error(`${where}: commit ${record.run.sha} does not descend from the minimum commit`);
+  }
+}
+
 const durationOf = (job) => ms(job.completedAt) - ms(job.startedAt);
 const queueOf = (job) => {
   const queue = ms(job.startedAt) - ms(job.createdAt);
   if (queue < 0) throw new Error(`job ${job.name} started before it was created`);
   return queue;
 };
+
+/** A name for a test that is the same in every run: project, file and titles. */
+function testName(test) {
+  const name = [test.project, test.file, ...test.titlePath.slice(1), test.title].join(' › ');
+  return test.repeatEachIndex ? `${name} (repeat ${test.repeatEachIndex})` : name;
+}
 
 /** The outcome of one test from its attempts: passed, flaky, failed or skipped. */
 function outcomeOf(test) {
@@ -85,7 +141,8 @@ function outcomeOf(test) {
 function unitKey(test, record) {
   for (const serial of record.serialSuites) {
     if (test.file === serial.file && test.titlePath.includes(serial.suite)) {
-      return `${test.project}::${serial.file}::${serial.suite}`;
+      const copy = test.repeatEachIndex ? `::${test.repeatEachIndex}` : '';
+      return `${test.project}::${serial.file}::${serial.suite}${copy}`;
     }
   }
   return record.facts.fullyParallel ? test.id : `${test.project}::${test.file}`;
@@ -107,7 +164,7 @@ function unitsOf(record) {
   }
   for (const serial of record.serialSuites) {
     const matched = [...units.keys()].some((key) =>
-      key.endsWith(`::${serial.file}::${serial.suite}`)
+      key.includes(`::${serial.file}::${serial.suite}`)
     );
     if (!matched) {
       throw new Error(`run ${record.run.id}: serial suite "${serial.suite}" matches no test`);
@@ -125,24 +182,31 @@ function packLongestFirst(weights, bins) {
   return Math.max(...loads);
 }
 
-/** Balance of the tests across shards, and the bound no assignment of the same units can beat. */
+/**
+ * Balance of the tests across shards, and the bound no assignment of the same units can beat. With
+ * W workers a shard has W slots, so the load of a shard is its time in tests over W, and the bound
+ * packs the units into shards times W slots.
+ */
 function balanceOf(record, shardFigures) {
   const units = unitsOf(record);
   const weights = [...units.values()];
-  const bins = record.shards.length;
+  const workers = workersOf(record);
+  const slots = record.shards.length * workers;
   const total = weights.reduce((sum, w) => sum + w, 0);
-  const share = total / bins;
+  const share = total / slots;
   const largest = Math.max(...weights);
-  const busy = shardFigures.map((shard) => shard.busy);
+  const load = shardFigures.map((shard) => shard.busy / workers);
   return {
     total,
     share,
     largestUnit: largest,
     lowerBound: Math.max(share, largest),
-    packed: packLongestFirst(weights, bins),
-    bounds: Object.fromEntries(BOUND_SHARDS.map((n) => [n, Math.max(total / n, largest)])),
-    slowestBusy: Math.max(...busy),
-    busiestShare: Math.max(...busy) / share,
+    packed: packLongestFirst(weights, slots),
+    bounds: Object.fromEntries(
+      BOUND_SHARDS.map((n) => [n, Math.max(total / (n * workers), largest)])
+    ),
+    slowestBusy: Math.max(...load),
+    busiestShare: Math.max(...load) / share,
     units: weights.length,
   };
 }
@@ -150,6 +214,9 @@ function balanceOf(record, shardFigures) {
 function shardFigures(record, shard, job) {
   const stepName = record.testStep;
   const testStep = job.steps.find((step) => step.name === stepName);
+  // a test step that started belongs to the shape under test, whatever stopped it
+  const reached = Boolean(testStep && testStep.startedAt && testStep.conclusion !== 'skipped');
+  const cause = reached ? 'in-tests' : 'before-tests';
   if (!testStep || !['success', 'failure'].includes(testStep.conclusion)) {
     const stopped = job.steps.find(
       (step) => step.conclusion && !['success', 'skipped'].includes(step.conclusion)
@@ -157,17 +224,19 @@ function shardFigures(record, shard, job) {
     const where = stopped
       ? `stopped at "${stopped.name}" (${stopped.conclusion})${job.failureNote ? `: ${job.failureNote}` : ''}`
       : `never reached "${stepName}"`;
-    return { missing: `shard ${shard.index} ${where}` };
+    return { missing: `shard ${shard.index} ${where}`, cause };
   }
-  if (!shard.blob) return { missing: `shard ${shard.index}: ${shard.blobMissing}` };
+  if (!shard.blob) return { missing: `shard ${shard.index}: ${shard.blobMissing}`, cause };
   const attempts = shard.blob.tests.flatMap((test) => test.attempts);
-  if (attempts.length === 0) return { missing: `shard ${shard.index} ran no test` };
+  if (attempts.length === 0) return { missing: `shard ${shard.index} ran no test`, cause };
   const first = Math.min(...attempts.map((a) => a.startTime));
   const last = Math.max(...attempts.map((a) => a.startTime + a.duration));
   const stepMs = ms(testStep.completedAt) - ms(testStep.startedAt);
   const runMs = shard.blob.run.duration;
   const outcomes = shard.blob.tests.map(outcomeOf);
   const count = (kind) => outcomes.filter((o) => o === kind).length;
+  const titled = (kind) =>
+    shard.blob.tests.filter((_, i) => outcomes[i] === kind).map((test) => testName(test));
   return {
     index: shard.index,
     jobMs: durationOf(job),
@@ -175,6 +244,7 @@ function shardFigures(record, shard, job) {
     setupMs: ms(testStep.startedAt) - ms(job.startedAt),
     testStepMs: stepMs,
     prepareMs: stepMs - runMs,
+    runMs,
     serverMs: runMs - (last - first),
     spanMs: last - first,
     busy: attempts.reduce((sum, a) => sum + a.duration, 0),
@@ -186,13 +256,34 @@ function shardFigures(record, shard, job) {
     flaky: count('flaky'),
     failed: count('failed'),
     skipped: count('skipped'),
+    failedTests: titled('failed'),
+    flakyTests: titled('flaky'),
+    listedTests: shard.blob.tests.map((test) => testName(test)),
     completedAt: ms(job.completedAt),
   };
 }
 
-/** Figures of one run. `excluded` names why the run has no timings; it is still counted. */
+/**
+ * Figures of one run. `excluded` names why the run has no timings; it is still counted. `cause`
+ * says whether it stopped before the tests (`before-tests`), in them (`in-tests`), or could not be
+ * collected (`collect`).
+ */
 function analyzeRun(record) {
   validateRecord(record);
+  if (record.collectError !== undefined) {
+    return {
+      label: record.label,
+      id: record.run.id,
+      pair: record.pair,
+      url: record.run.url,
+      sha: record.run.sha,
+      branch: record.run.branch,
+      conclusion: record.run.conclusion,
+      createdAt: ms(record.run.createdAt),
+      excluded: `not collected: ${record.collectError}`,
+      cause: 'collect',
+    };
+  }
   const executed = record.jobs.filter(
     (job) => job.conclusion !== 'skipped' && job.startedAt && job.completedAt
   );
@@ -210,7 +301,7 @@ function analyzeRun(record) {
   const shards = [];
   for (const shard of record.shards) {
     const figures = shardFigures(record, shard, jobOf(shard));
-    if (figures.missing) return { ...base, excluded: figures.missing };
+    if (figures.missing) return { ...base, excluded: figures.missing, cause: figures.cause };
     shards.push(figures);
   }
   const shardJobIds = new Set(record.shards.map((shard) => shard.jobId));
@@ -230,7 +321,7 @@ function analyzeRun(record) {
   const balance = balanceOf(record, shards);
   const execution = completion - queueCritical;
   const fixed = execution - critical.spanMs;
-  const inTestOverhead = critical.spanMs - critical.busy;
+  const inTestOverhead = critical.spanMs - critical.busy / workersOf(record);
   const stepTimes = new Map();
   for (const job of executed) {
     for (const step of job.steps) {
@@ -259,7 +350,7 @@ function analyzeRun(record) {
       fixed,
       share: balance.share,
       atomicExcess: balance.lowerBound - balance.share,
-      assignmentGap: critical.busy - balance.lowerBound,
+      assignmentGap: critical.busy / workersOf(record) - balance.lowerBound,
       inTestOverhead,
     },
     stepTimes: Object.fromEntries(stepTimes),
@@ -268,6 +359,11 @@ function analyzeRun(record) {
     retries: shards.reduce((sum, s) => sum + s.retries, 0),
     flaky: shards.reduce((sum, s) => sum + s.flaky, 0),
     failed: shards.reduce((sum, s) => sum + s.failed, 0),
+    failedTests: shards.flatMap((s) => s.failedTests).sort(),
+    flakyTests: shards.flatMap((s) => s.flakyTests).sort(),
+    listedTests: shards.flatMap((s) => s.listedTests).sort(),
+    skipped: shards.reduce((sum, s) => sum + s.skipped, 0),
+    workers: workersOf(record),
   };
 }
 
@@ -362,6 +458,7 @@ module.exports = {
   dominantDelay,
   outcomeOf,
   packLongestFirst,
+  testName,
   unitKey,
   validateRecord,
 };
