@@ -1,0 +1,1508 @@
+{
+  "generatedAt": "2026-10-16T10:58:23.304Z",
+  "group": "all",
+  "versions": {
+    "package": "playwright-shard-balancer@0.1.2",
+    "commit": "4c8f847c94324064e06e30815c1cb1a9369c63f8",
+    "playwright": "1.64.1",
+    "flakiness": "@flakiness/playwright@2.0.2",
+    "node": "v22.20.0",
+    "platform": "darwin-arm64"
+  },
+  "rows": [
+    {
+      "id": "a.failopen-native",
+      "group": "assignment",
+      "claim": "With no timings file, every shard keeps the split Playwright makes without the reporter.",
+      "status": "pass",
+      "facts": {
+        "harnessOk": true,
+        "violations": {},
+        "exitCodes": [0, 0, 0],
+        "sameAsNative": true,
+        "strategies": ["builtin", "builtin", "builtin"],
+        "reasonsNameMissingFile": true,
+        "logLine": "shard 1/3: no timings file at <tmp>/config-1/shard-timings.json; using Playwright's built-in sharding"
+      },
+      "finding": "Three shards with the reporter and no timings file ran the same leaves per shard as the same shards without the reporter (same split: true). Every record says `builtin` and names the missing file, and each shard logs it."
+    },
+    {
+      "id": "a.balanced-2",
+      "group": "assignment",
+      "claim": "Two shards planned from the native records run every leaf once, and `check` passes.",
+      "status": "pass",
+      "facts": {
+        "harnessOk": true,
+        "violations": {},
+        "exitCodes": [0, 0],
+        "checkExit": 0,
+        "strategies": ["balanced", "balanced"],
+        "known": 52,
+        "listed": 52,
+        "shardMs": [14071, 14135],
+        "slowestMs": 14135,
+        "nativeShardMs": [13916, 13893],
+        "nativeSlowestMs": 13916,
+        "imbalance": 0.002,
+        "nativeImbalance": 0.001,
+        "slowestVsNative": 0.016
+      },
+      "finding": "One worker per shard, 52 of 52 tests known. Shards took 14071 / 14135 ms against 13916 / 13893 ms native, slowest 14135 ms against 13916 ms; harness violations none, `check` exit 0."
+    },
+    {
+      "id": "a.balanced-3",
+      "group": "assignment",
+      "claim": "Three shards planned from the native records run every leaf once, `check` passes, and the slowest shard is faster than under native sharding.",
+      "status": "pass",
+      "facts": {
+        "harnessOk": true,
+        "violations": {},
+        "exitCodes": [0, 0, 0],
+        "checkExit": 0,
+        "strategies": ["balanced", "balanced", "balanced"],
+        "known": 52,
+        "listed": 52,
+        "shardMs": [9720, 9708, 9216],
+        "slowestMs": 9720,
+        "nativeShardMs": [12356, 3875, 12456],
+        "nativeSlowestMs": 12456,
+        "imbalance": 0.018,
+        "nativeImbalance": 0.303,
+        "slowestVsNative": -0.22
+      },
+      "finding": "One worker per shard, 52 of 52 tests known. Shards took 9720 / 9708 / 9216 ms against 12356 / 3875 / 12456 ms native, slowest 9720 ms against 12456 ms; harness violations none, `check` exit 0."
+    },
+    {
+      "id": "a.repeat-each",
+      "group": "assignment",
+      "claim": "Under `--repeat-each 2` every copy runs once and `check` counts each copy apart.",
+      "status": "pass",
+      "facts": {
+        "harnessOk": true,
+        "violations": {},
+        "exitCodes": [0, 0, 0],
+        "checkExit": 0,
+        "checkedTests": 104
+      },
+      "finding": "Three shards, `--repeat-each 2`: harness violations none; `check` counted 104 distinct tests and exited 0, because a repeat carries its own suffix in the record."
+    },
+    {
+      "id": "a.fully-parallel",
+      "group": "assignment",
+      "claim": "Under `fullyParallel` the plan splits by test, keeps every serial group whole and runs every leaf once.",
+      "status": "pass",
+      "facts": {
+        "harnessOk": true,
+        "violations": {},
+        "exitCodes": [0, 0, 0],
+        "checkExit": 0,
+        "granularity": ["auto", "auto", "auto"],
+        "slowestMs": 9740,
+        "nativeSlowestMs": 12421
+      },
+      "finding": "`fullyParallel`, three shards, one worker: harness violations none, records say granularity `auto`, slowest shard 9740 ms against 12421 ms native."
+    },
+    {
+      "id": "a.granularity-file",
+      "group": "assignment",
+      "claim": "With `granularity: file` every spec file stays on one shard, also under `fullyParallel`, using no internal field.",
+      "status": "pass",
+      "facts": {
+        "harnessOk": true,
+        "violations": {},
+        "exitCodes": [0, 0, 0],
+        "splitFiles": 0,
+        "granularity": ["file", "file", "file"],
+        "slowestMs": 9732
+      },
+      "finding": "`fullyParallel` with `granularity: file`, three shards: 0 files split across shards, harness violations none, slowest shard 9732 ms."
+    },
+    {
+      "id": "a.renamed",
+      "group": "assignment",
+      "claim": "A renamed test and a new file run, and the plan counts them as unknown.",
+      "status": "pass",
+      "facts": {
+        "harnessOk": true,
+        "violations": {},
+        "exitCodes": [0, 0],
+        "checkExit": 0,
+        "known": 50,
+        "listed": 56,
+        "unknown": 6
+      },
+      "finding": "One test renamed and a new file of two tests, in both browser projects: every leaf ran once, and the plan line says 50/56 tests known, so 6 are priced by estimate."
+    },
+    {
+      "id": "a.log-line",
+      "group": "assignment",
+      "claim": "Each balanced shard logs one line with its files, tests, estimate, the range of all shards, the timings sha and the plan sha.",
+      "status": "pass",
+      "facts": {
+        "linesPerShard": [1, 1, 1],
+        "samePlanSha": true,
+        "sameTimingsSha": true,
+        "planSha": "628fd58db1c4",
+        "timingsSha": "78f3fdd24313",
+        "example": "shard 1/3: 1 files, 5 tests, ~9.1s (all shards 7.4s-9.1s, largest group 9.0s), timings 78f3fdd24313, 52/52 tests known, 1 worker(s), plan 628fd58db1c4"
+      },
+      "finding": "Every shard printed 1 line, all with timings `78f3fdd24313` and plan `628fd58db1c4`, for example: `shard 1/3: 1 files, 5 tests, ~9.1s (all shards 7.4s-9.1s, largest group 9.0s), timings 78f3fdd24313, 52/52 tests known, 1 worker(s), plan 628fd58db1c4`."
+    },
+    {
+      "id": "p.copies-same-plan",
+      "group": "plan agreement",
+      "claim": "Shards that read byte-identical copies of the timings file compute the same plan.",
+      "status": "pass",
+      "facts": {
+        "harnessOk": true,
+        "violations": {},
+        "exitCodes": [0, 0, 0],
+        "identicalBytes": true,
+        "planShas": ["628fd58db1c4", "628fd58db1c4", "628fd58db1c4"],
+        "referencePlanSha": "628fd58db1c4"
+      },
+      "finding": "Three shards, each reading its own copy of the same bytes, logged plan `628fd58db1c4`, the plan of the run that shared one file; harness violations none."
+    },
+    {
+      "id": "p.workers-independent",
+      "group": "plan agreement",
+      "claim": "The plan does not depend on Playwright's `--workers`: the reporter packs for its own `workers` option.",
+      "status": "pass",
+      "facts": {
+        "planShasWorkers1": ["628fd58db1c4", "628fd58db1c4", "628fd58db1c4"],
+        "planShasWorkers4": ["628fd58db1c4", "628fd58db1c4", "628fd58db1c4"]
+      },
+      "finding": "`--list` of the three shards with `--workers=1` and with `--workers=4` logged plan `628fd58db1c4`."
+    },
+    {
+      "id": "p.slow-clock",
+      "group": "plan agreement",
+      "claim": "The search stops at a node count, so a slow machine computes the same plan as a fast one.",
+      "status": "pass",
+      "facts": {
+        "planShas": ["628fd58db1c4", "628fd58db1c4", "628fd58db1c4"],
+        "slowClockPlanShas": ["628fd58db1c4", "628fd58db1c4", "628fd58db1c4"]
+      },
+      "finding": "With a clock that runs one second ahead on every read, the three shards logged plan `628fd58db1c4`, against `628fd58db1c4` without it."
+    },
+    {
+      "id": "s.failopen-damaged",
+      "group": "input safety",
+      "claim": "With strict off, a shard that cannot read its timings never splits the suite differently from the other shards.",
+      "status": "fail",
+      "facts": {
+        "harnessOk": false,
+        "violations": {
+          "duplicate": 17,
+          "missing": 5,
+          "serial-split": 2
+        },
+        "exitCodes": [0, 0, 0],
+        "strategies": ["balanced", "builtin", "balanced"],
+        "reason": "cannot read timings",
+        "checkExit": 1,
+        "checkNamesMixed": true
+      },
+      "finding": "Shard 2 read a truncated copy and fell back to the built-in split while shards 1 and 3 balanced (balanced, builtin, balanced). Every shard exited 0 and the harness found duplicate 17, missing 5, serial-split 2. `check` exits 1 and names the mixed split, after the tests ran."
+    },
+    {
+      "id": "s.strict-damaged",
+      "group": "input safety",
+      "claim": "With strict on, a shard that cannot read its timings fails before any test runs.",
+      "status": "pass",
+      "facts": {
+        "harnessOk": false,
+        "violations": {
+          "shard-failed": 1,
+          "missing": 5
+        },
+        "exitCodes": [0, 1, 0],
+        "damagedShardRanNothing": true,
+        "otherShardsExit": [0, 0],
+        "duplicates": 0,
+        "message": "playwright-shard-balancer: shard 2/3: cannot read timings: timings.json is not valid JSON: Unterminated string in JSON at position 3343 (line 165 column 7); strict mode stops the run rather than split it differently from other shards"
+      },
+      "finding": "Strict on, shard 2 reads a truncated copy: it exits 1 before any test, with an error that names the file and says strict mode stopped the run. Shards 1 and 3 exit 0 and 0, and no test runs twice. The run is red."
+    },
+    {
+      "id": "s.strict-empty",
+      "group": "input safety",
+      "claim": "With strict on, an empty or absent timings file fails every shard before any test, so a first run must keep strict off.",
+      "status": "pass",
+      "facts": {
+        "emptyExitCodes": [1, 1],
+        "absentExitCodes": [1, 1],
+        "ranNothing": true,
+        "emptyMessage": "playwright-shard-balancer: shard 1/2: timings file timings.json has no entries; strict mode stops the run rather than split it differently from other shards"
+      },
+      "finding": "Strict on with an empty timings file every shard exits 1 / 1, and with no file 1 / 1, before any test, each with an error that says the file has no entries or is missing. The restore action turns strict on only when the pinned file has entries for this reason."
+    },
+    {
+      "id": "s.mismatched",
+      "group": "input safety",
+      "claim": "`check` fails a run whose shards planned from different timings, naming the timings and the plan.",
+      "status": "pass",
+      "facts": {
+        "harnessOk": false,
+        "violations": {
+          "duplicate": 18,
+          "serial-split": 2
+        },
+        "exitCodes": [0, 0, 0],
+        "checkExit": 1,
+        "namesTimings": true,
+        "namesPlan": true
+      },
+      "finding": "Shard 2 read a valid file in which the cart tests take twenty times as long. The shards exited 0 / 0 / 0 and the harness found duplicate 18, serial-split 2; `check` exits 1 and names different timings (true) and different plans (true)."
+    },
+    {
+      "id": "s.reporter-dropped",
+      "group": "input safety",
+      "claim": "`check` fails a run in which one shard ran without the reporter.",
+      "status": "pass",
+      "facts": {
+        "harnessOk": false,
+        "violations": {
+          "duplicate": 17,
+          "missing": 5,
+          "serial-split": 2
+        },
+        "exitCodes": [0, 0, 0],
+        "recordsWritten": [true, false, true],
+        "checkExit": 1,
+        "namesMissing": true
+      },
+      "finding": "`--reporter=list` on shard 2 replaced the config's reporters, so that shard split natively and wrote no record. The shards exited 0 / 0 / 0 with duplicate 17, missing 5, serial-split 2; `check` exits 1 with `missing records for shard 2`."
+    },
+    {
+      "id": "s.reporter-dropped-all",
+      "group": "input safety",
+      "claim": "When every shard runs without the reporter, the step after the shards cannot pass.",
+      "status": "pass",
+      "facts": {
+        "harnessOk": true,
+        "violations": {},
+        "exitCodes": [0, 0],
+        "recordsWritten": [false, false],
+        "checkExit": 2,
+        "finishExit": 1
+      },
+      "finding": "`--reporter=list` on both shards gave a native run with none and no record. `check` with no record exits 2, and the finish action's own guard, which fails on an empty records folder, exits 1."
+    },
+    {
+      "id": "c.missing-record",
+      "group": "check",
+      "claim": "`check` fails when the record of a shard is missing.",
+      "status": "pass",
+      "facts": {
+        "checkExit": 1,
+        "problems": [
+          "missing records for shard 2",
+          "the shards ran 26 distinct tests, but each saw 52 before the split; pass --list to name the missing ones"
+        ]
+      },
+      "finding": "The record of shard 1 alone: exit 1, `missing records for shard 2`."
+    },
+    {
+      "id": "c.duplicate-record",
+      "group": "check",
+      "claim": "`check` fails when a shard has two records, and counts the tests that ran twice.",
+      "status": "pass",
+      "facts": {
+        "checkExit": 1,
+        "namesRepeat": true,
+        "duplicates": 26
+      },
+      "finding": "Shard 1's record given twice: exit 1, `more than one record for shard 1`, 26 tests counted twice."
+    },
+    {
+      "id": "c.not-run",
+      "group": "check",
+      "claim": "`check` fails a run stopped by `--max-failures` and counts the tests that did not run.",
+      "status": "pass",
+      "facts": {
+        "exitCodes": [1, 1],
+        "recordsWritten": [true, true],
+        "checkExit": 1,
+        "notRun": 46
+      },
+      "finding": "A test that fails first and `--max-failures=1`: the shards exited 1 / 1 and both wrote a record; `check` exits 1 with 46 tests that did not run."
+    },
+    {
+      "id": "c.corpus-mismatch",
+      "group": "check",
+      "claim": "`check` fails a run whose shards saw different test sets before the split.",
+      "status": "pass",
+      "facts": {
+        "harnessOk": false,
+        "violations": {
+          "missing": 26,
+          "duplicate": 3
+        },
+        "exitCodes": [0, 0],
+        "checkExit": 1,
+        "namesCorpus": true,
+        "corpora": [52, 6]
+      },
+      "finding": "`--grep=cart` on shard 2 only: the records hold corpora of 52 and 6 tests, the harness found missing 26, duplicate 3, and `check` exits 1 naming the different test sets."
+    },
+    {
+      "id": "c.summary",
+      "group": "check",
+      "claim": "`check --summary` writes a table of predicted against measured time for every shard.",
+      "status": "pass",
+      "facts": {
+        "checkExit": 0,
+        "heading": "### Shard balance: ok",
+        "header": "| Shard | Tests | Predicted | Test time | Whole run | Status |",
+        "shardRows": 3
+      },
+      "finding": "Three shards: the summary starts `### Shard balance: ok` and has 3 shard rows under `| Shard | Tests | Predicted | Test time | Whole run | Status |`."
+    },
+    {
+      "id": "h.failed-slow",
+      "group": "history",
+      "claim": "A failed run adds no sample, however long the failure took.",
+      "status": "pass",
+      "facts": {
+        "exitCode": 1,
+        "failedMs": 9081,
+        "outcome": "unexpected",
+        "updateExit": 0,
+        "before": {
+          "chromium": [1025],
+          "firefox": [1033]
+        },
+        "after": {
+          "chromium": [1025],
+          "firefox": [1033]
+        }
+      },
+      "finding": "The volatile test failed after 3000 ms on each of its attempts (9081 ms in chromium, outcome `unexpected`). After `update` its samples are 1025 ms in chromium and 1033 ms in firefox, as before."
+    },
+    {
+      "id": "h.cancelled",
+      "group": "history",
+      "claim": "A cancelled run adds no sample for the interrupted test.",
+      "status": "pass",
+      "facts": {
+        "exitCode": 130,
+        "recordWritten": true,
+        "status": "interrupted",
+        "ran": false,
+        "before": {
+          "chromium": [1025],
+          "firefox": [1033]
+        },
+        "after": {
+          "chromium": [1025],
+          "firefox": [1033]
+        }
+      },
+      "finding": "SIGINT 300 ms into the test: exit 130, the record says `interrupted` and marks the test as not run, and `update` leaves its samples at 1025 ms in chromium."
+    },
+    {
+      "id": "h.faster-test",
+      "group": "history",
+      "claim": "The price of a test that got faster follows it within a few runs.",
+      "status": "pass",
+      "facts": {
+        "pricesMs": [1025, 575, 124, 124],
+        "samples": [1025, 124, 124, 123]
+      },
+      "finding": "The volatile test went from about one second to 100 ms. Its chromium price after each of 3 faster runs: 1025 then 575 then 124 then 124 ms (samples 1025, 124, 124, 123). The median of the last five drops once the fast samples are the majority."
+    },
+    {
+      "id": "h.damaged-history",
+      "group": "history",
+      "claim": "`update` with a damaged history file or a damaged input exits non-zero and leaves the history as it was.",
+      "status": "pass",
+      "facts": {
+        "truncatedExit": 1,
+        "truncatedUnchanged": true,
+        "badInputExit": 1,
+        "badInputUnchanged": true,
+        "stringSamplesExit": 1,
+        "stringSamplesUnchanged": true,
+        "stringSamplesMessage": "timings.json has an invalid entry for \"[chromium] › account.spec.js › account › loads the page\""
+      },
+      "finding": "A truncated history exits 1, a truncated record exits 1, and samples stored as text exit 1 (`timings.json has an invalid entry for \"[chromium] › account.spec.js › account › loads the page\"`); each history file keeps its bytes."
+    },
+    {
+      "id": "h.duplicate-input",
+      "group": "history",
+      "claim": "`update` skips an input it already merged, by the sha of its bytes.",
+      "status": "pass",
+      "facts": {
+        "firstSkipped": 0,
+        "secondSkipped": 1,
+        "secondSamples": 0,
+        "unchanged": true,
+        "warning": "already merged, skipped"
+      },
+      "finding": "The same record merged twice: the second `update` skipped 1 input with `already merged, skipped`, added 0 samples and left the file byte for byte as it was."
+    },
+    {
+      "id": "h.filtered-run",
+      "group": "history",
+      "claim": "`update` from a filtered run keeps the entries of the tests the run left out.",
+      "status": "pass",
+      "facts": {
+        "updateExit": 0,
+        "entriesBefore": 54,
+        "entriesAfter": 54,
+        "sampledByRun": 8,
+        "otherEntriesKept": true,
+        "cartSamples": 2
+      },
+      "finding": "After a `--grep=cart` run the history has 54 entries, as before (54). The 8 entries the run sampled gained a sample (a cart test now has 2) and every other entry kept its bytes."
+    },
+    {
+      "id": "h.expiry",
+      "group": "history",
+      "claim": "An entry no update has seen for more than 30 days is dropped, so a test filtered out for a month loses its history.",
+      "status": "pass",
+      "facts": {
+        "entriesBefore": 54,
+        "after30Days": 54,
+        "after31Days": 8,
+        "sampledByRun": 8
+      },
+      "finding": "A `--grep=cart` update 30 days after the history was written keeps 54 of 54 entries; 31 days after, 8 are left, the tests that run sampled."
+    },
+    {
+      "id": "h.setup-once",
+      "group": "history",
+      "claim": "A setup test every shard ran gives one sample per update.",
+      "status": "pass",
+      "facts": {
+        "shardsWithSetup": 2,
+        "samples": 1
+      },
+      "finding": "Both shards of the native run ran the setup project (2 records), and the history built from them holds 1 sample for it."
+    },
+    {
+      "id": "h.missing-shard-update",
+      "group": "history",
+      "claim": "`update` refuses the records of fewer shards than ran.",
+      "status": "fail",
+      "facts": {
+        "updateExit": 0,
+        "inputs": 1,
+        "shards": 2,
+        "samples": 28,
+        "warnings": 0
+      },
+      "finding": "The record of one of 2 shards: `update` exits 0, merges 28 samples and prints 0 warnings. The finish action runs `update` before `check` and saves when `update` succeeds."
+    },
+    {
+      "id": "h.deterministic-bytes",
+      "group": "history",
+      "claim": "The same inputs in the same order give the same bytes and sha with sorted keys; another order changes only the order of the `applied` list.",
+      "status": "pass",
+      "facts": {
+        "shas": ["4aefed9479a1", "4aefed9479a1", "1db06d364b30"],
+        "sameOrderSameBytes": true,
+        "otherOrderSameBytes": false,
+        "otherOrderSameEntries": true,
+        "keysSorted": true
+      },
+      "finding": "Two copies updated with the shard records in one order give `4aefed9479a1` and `4aefed9479a1`; the opposite order gives `1db06d364b30`, with the same entries (true) and the input shas listed in the other order. A writer that sorts its inputs gets the same bytes every time."
+    },
+    {
+      "id": "h.racing-publish",
+      "group": "history",
+      "claim": "Two runs racing to publish never lose the updates of either.",
+      "status": "fail",
+      "facts": {
+        "restoredKey": "pwsb-timings-101-1",
+        "lostEntries": 8,
+        "newerRunApplied": false
+      },
+      "finding": "Runs 101 and 102 both restored the same history and the older run saved last. The next run restores `pwsb-timings-101-1`, the most recently created entry: against merging both runs in sequence it lacks a sample in 8 entries, and its `applied` list does not hold the newer run's records (false)."
+    },
+    {
+      "id": "h.remerge-union",
+      "group": "history",
+      "claim": "One writer that merges every run into the newest history keeps the updates of both runs, and a replayed run changes nothing.",
+      "status": "pass",
+      "facts": {
+        "exits": [0, 0, 0],
+        "replaySkipped": 2,
+        "unchanged": true,
+        "cartSamples": 3
+      },
+      "finding": "The writer merged the newer run and then the older one into one history: a cart test holds 3 samples, one from the baseline and one from each run. Replaying the older run skipped 2 inputs and kept the bytes."
+    },
+    {
+      "id": "e.hierarchy",
+      "group": "estimates",
+      "claim": "A new test is priced at the median of its describe, else its file, else its project, else the whole suite, and a test skipped before it runs costs nothing.",
+      "status": "pass",
+      "facts": {
+        "cases": [
+          {
+            "name": "known test",
+            "level": "known",
+            "packageMs": 155,
+            "oursMs": 155
+          },
+          {
+            "name": "new test in a known describe",
+            "level": "describe",
+            "packageMs": 115,
+            "oursMs": 115
+          },
+          {
+            "name": "new test outside the describes of a known file",
+            "level": "file",
+            "packageMs": 115,
+            "oursMs": 115
+          },
+          {
+            "name": "new file in a known project",
+            "level": "project",
+            "packageMs": 195,
+            "oursMs": 195
+          },
+          {
+            "name": "new project",
+            "level": "suite",
+            "packageMs": 184,
+            "oursMs": 184
+          }
+        ],
+        "levels": ["known", "describe", "file", "project", "suite"],
+        "agree": true,
+        "staticSkipMs": 0
+      },
+      "finding": "The package's estimator, run on the fixture history, gives 155 ms (known), 115 ms (describe), 115 ms (file), 195 ms (project), 184 ms (suite); our own medians give the same (true). A static skip costs 0 ms."
+    },
+    {
+      "id": "w.plan-workers",
+      "group": "workers",
+      "claim": "A plan packed for the workers a shard runs predicts its time better than a plan packed for one worker.",
+      "status": "pass",
+      "facts": {
+        "harnessOk": [true, true],
+        "predictedMs": [
+          [9125, 9117, 7365],
+          [9125, 9117, 3852]
+        ],
+        "testsMs": [
+          [9525, 9522, 5048],
+          [9507, 9530, 5035]
+        ],
+        "errorPlanWorkers1": 0.181,
+        "errorPlanWorkers2": 0.106
+      },
+      "finding": "Three shards under `--workers=2`: the plan for one worker predicted 9125 / 9117 / 7365 ms and missed the measured 9525 / 9522 / 5048 ms by 18.1% on average; the plan for two workers predicted 9125 / 9117 / 3852 ms against 9507 / 9530 / 5035 ms, off by 10.6%."
+    },
+    {
+      "id": "sim.predicted-vs-actual",
+      "group": "simulate",
+      "claim": "`simulate` predicts the slowest shard of the fixture within 20%, with the built-in split and balanced.",
+      "status": "pass",
+      "facts": {
+        "rows": [
+          {
+            "shards": 2,
+            "simulatedBuiltinMs": 12756,
+            "measuredBuiltinMs": 13746,
+            "simulatedBalancedMs": 12752,
+            "measuredBalancedMs": 13935,
+            "builtinError": 0.072,
+            "balancedError": 0.085
+          },
+          {
+            "shards": 3,
+            "simulatedBuiltinMs": 11455,
+            "measuredBuiltinMs": 12245,
+            "simulatedBalancedMs": 9125,
+            "measuredBalancedMs": 9531,
+            "builtinError": 0.065,
+            "balancedError": 0.043
+          }
+        ],
+        "tolerance": 0.2
+      },
+      "finding": "2 shards: built-in 12756 ms simulated against 13746 ms measured, balanced 12752 ms against 13935 ms. 3 shards: built-in 11455 ms simulated against 12245 ms measured, balanced 9125 ms against 9531 ms."
+    },
+    {
+      "id": "sim.overhead",
+      "group": "simulate",
+      "claim": "`--overhead` adds a fixed cost per shard: once to the elapsed time and once per shard to the machine time, leaving the plan alone.",
+      "status": "pass",
+      "facts": {
+        "elapsedMs": 9125,
+        "elapsedWithOverheadMs": 99125,
+        "machineMs": 25607,
+        "machineWithOverheadMs": 295607,
+        "balancedMs": 9125
+      },
+      "finding": "Three shards with `--overhead 90s`: elapsed 9125 ms becomes 99125 ms and machine time 25607 ms becomes 295607 ms; the balanced slowest shard stays 9125 ms."
+    },
+    {
+      "id": "sim.couture-cast",
+      "group": "simulate",
+      "claim": "`simulate` over a list and timings built from the S5 runs models couture-cast's measured two-shard split within 20%.",
+      "status": "pass",
+      "facts": {
+        "runs": 5,
+        "tests": 160,
+        "unknownTests": 0,
+        "granularity": "test",
+        "overheadMs": {
+          "median": 367540.5,
+          "min": 353144,
+          "max": 464298
+        },
+        "overheadInput": "368s",
+        "measuredSlowestMs": 77448,
+        "measuredBoundMs": 54609,
+        "builtinError": 0.011,
+        "tolerance": 0.2,
+        "byTest": [
+          {
+            "shards": 2,
+            "builtinMs": 76620,
+            "balancedMs": 53553,
+            "lowerBoundMs": 53553,
+            "elapsedMs": 421553,
+            "machineMs": 843106
+          },
+          {
+            "shards": 3,
+            "builtinMs": 54687,
+            "balancedMs": 35702,
+            "lowerBoundMs": 35702,
+            "elapsedMs": 403702,
+            "machineMs": 1211106
+          },
+          {
+            "shards": 4,
+            "builtinMs": 42489,
+            "balancedMs": 26777,
+            "lowerBoundMs": 26777,
+            "elapsedMs": 394777,
+            "machineMs": 1579106
+          },
+          {
+            "shards": 5,
+            "builtinMs": 38499,
+            "balancedMs": 21422,
+            "lowerBoundMs": 21422,
+            "elapsedMs": 389422,
+            "machineMs": 1947106
+          },
+          {
+            "shards": 6,
+            "builtinMs": 35535,
+            "balancedMs": 17851,
+            "lowerBoundMs": 17851,
+            "elapsedMs": 385851,
+            "machineMs": 2315106
+          },
+          {
+            "shards": 7,
+            "builtinMs": 33432,
+            "balancedMs": 15301,
+            "lowerBoundMs": 15301,
+            "elapsedMs": 383301,
+            "machineMs": 2683106
+          },
+          {
+            "shards": 8,
+            "builtinMs": 31333,
+            "balancedMs": 13389,
+            "lowerBoundMs": 13389,
+            "elapsedMs": 381389,
+            "machineMs": 3051106
+          }
+        ],
+        "byFile": [
+          {
+            "shards": 2,
+            "builtinMs": 76620,
+            "balancedMs": 53553,
+            "lowerBoundMs": 53553,
+            "elapsedMs": 421553,
+            "machineMs": 843106
+          },
+          {
+            "shards": 3,
+            "builtinMs": 54687,
+            "balancedMs": 35702,
+            "lowerBoundMs": 35702,
+            "elapsedMs": 403702,
+            "machineMs": 1211106
+          },
+          {
+            "shards": 4,
+            "builtinMs": 42489,
+            "balancedMs": 26777,
+            "lowerBoundMs": 26777,
+            "elapsedMs": 394777,
+            "machineMs": 1579106
+          },
+          {
+            "shards": 5,
+            "builtinMs": 38499,
+            "balancedMs": 21426,
+            "lowerBoundMs": 21422,
+            "elapsedMs": 389426,
+            "machineMs": 1947106
+          },
+          {
+            "shards": 6,
+            "builtinMs": 35535,
+            "balancedMs": 20622,
+            "lowerBoundMs": 20622,
+            "elapsedMs": 388622,
+            "machineMs": 2315106
+          },
+          {
+            "shards": 7,
+            "builtinMs": 33432,
+            "balancedMs": 20622,
+            "lowerBoundMs": 20622,
+            "elapsedMs": 388622,
+            "machineMs": 2683106
+          },
+          {
+            "shards": 8,
+            "builtinMs": 31333,
+            "balancedMs": 20622,
+            "lowerBoundMs": 20622,
+            "elapsedMs": 388622,
+            "machineMs": 3051106
+          }
+        ]
+      },
+      "finding": "From 5 runs of `baseline-b` (160 tests): the built-in split of two shards simulates at 76620 ms against a measured median slowest shard of 77448 ms in tests, and balancing at 53553 ms against the S5 bound of 54609 ms. The per-shard overhead outside the Playwright run is 368 s median (353 to 464 s)."
+    },
+    {
+      "id": "i.serial-public",
+      "group": "internals",
+      "claim": "Playwright marks every test inside a serial describe with a public `serial` annotation that carries the location of the describe.",
+      "status": "pass",
+      "facts": {
+        "annotatedTests": 18,
+        "harnessSerialLeaves": 18,
+        "sameTests": true,
+        "withLocation": true
+      },
+      "finding": "18 tests carry the annotation, the same tests the harness counts as serial (18), each with the location of its describe."
+    },
+    {
+      "id": "i.mode-hidden",
+      "group": "internals",
+      "claim": "`describe.configure({ mode })` leaves no trace in the public reporter API; only the internal `_parallelMode` differs.",
+      "status": "pass",
+      "facts": {
+        "tests": 8,
+        "samePublicView": true,
+        "fileModeWith": "parallel",
+        "fileModeWithout": "none"
+      },
+      "finding": "The 8 checkout tests with and without `mode: 'parallel'` have the same public view (true); the file suite's `_parallelMode` is `parallel` against `none`."
+    },
+    {
+      "id": "i.lock-hidden",
+      "group": "internals",
+      "claim": "A test lock leaves no trace in the public reporter API; only the internal `_locks` differs.",
+      "status": "pass",
+      "facts": {
+        "tests": 14,
+        "samePublicView": true,
+        "lockedTests": 4,
+        "unlockedTests": 0
+      },
+      "finding": "The 14 tests with and without `{ lock: 'database' }` have the same public view (true); `_locks` is set on 4 tests in one and 0 in the other."
+    },
+    {
+      "id": "i.lock-native-split",
+      "group": "internals",
+      "claim": "Playwright's own sharding puts tests that share a lock on different shards, so a lock holds only inside one shard.",
+      "status": "pass",
+      "facts": {
+        "harnessOk": true,
+        "violations": {},
+        "exitCodes": [0, 0],
+        "shardsWithLock": [1, 2]
+      },
+      "finding": "Two native shards of a suite whose four tests across two files and two projects share one lock: the lock tests ran on shards 1 and 2."
+    },
+    {
+      "id": "i.psb-locks",
+      "group": "internals",
+      "claim": "The reporter keeps every test that shares a lock on one shard.",
+      "status": "pass",
+      "facts": {
+        "harnessOk": true,
+        "violations": {},
+        "exitCodes": [0, 0],
+        "strategies": ["balanced", "balanced"],
+        "shardsWithLock": [1],
+        "notes": ["3 group(s) joined to others that share a lock"]
+      },
+      "finding": "Balanced over two shards, the lock tests ran on shard 1 only, and the plan line says `3 group(s) joined to others that share a lock`."
+    },
+    {
+      "id": "i.psb-no-locks",
+      "group": "internals",
+      "claim": "Without `_locks` the reporter still balances, says that lock groups may split, and lets them split.",
+      "status": "pass",
+      "facts": {
+        "harnessOk": true,
+        "violations": {},
+        "exitCodes": [0, 0],
+        "replacements": 1,
+        "strategies": ["balanced", "balanced"],
+        "shardsWithLock": [1, 2],
+        "notes": [
+          "lock information not found so tests that share a lock may run on different shards"
+        ]
+      },
+      "finding": "A copy whose read of `_locks` names a missing property: the shards exit 0 / 0, balance, and the lock tests ran on shards 1 and 2. The plan line says `lock information not found so tests that share a lock may run on different shards`; harness violations none."
+    },
+    {
+      "id": "i.psb-no-parallel-mode",
+      "group": "internals",
+      "claim": "Without `_parallelMode` the reporter keeps whole files, still balances, runs every leaf once and says so in its log line.",
+      "status": "pass",
+      "facts": {
+        "default": {
+          "harnessOk": true,
+          "violations": {},
+          "exitCodes": [0, 0, 0],
+          "replacements": 4,
+          "serialSplit": 0,
+          "balances": true,
+          "sameSplitAsUnmodified": true,
+          "splitFiles": 0,
+          "unmodifiedSplitFiles": 0,
+          "logLines": [
+            "Playwright internals not found so files are kept whole",
+            "Playwright internals not found so files are kept whole",
+            "Playwright internals not found so files are kept whole"
+          ],
+          "strategies": ["balanced", "balanced", "balanced"],
+          "granularity": ["file", "file", "file"]
+        },
+        "fullyParallel": {
+          "harnessOk": true,
+          "violations": {},
+          "exitCodes": [0, 0, 0],
+          "replacements": 4,
+          "serialSplit": 0,
+          "balances": true,
+          "sameSplitAsUnmodified": true,
+          "splitFiles": 0,
+          "unmodifiedSplitFiles": 0,
+          "logLines": [
+            "Playwright internals not found so files are kept whole",
+            "Playwright internals not found so files are kept whole",
+            "Playwright internals not found so files are kept whole"
+          ],
+          "strategies": ["balanced", "balanced", "balanced"],
+          "granularity": ["file", "file", "file"]
+        }
+      },
+      "finding": "A copy whose 4 reads of `_parallelMode` name a missing property. Default config: exit 0 / 0 / 0, balanced (true), 0 files split, violations none. `fullyParallel`: exit 0 / 0 / 0, balanced (true), 0 files split, violations none. Every shard logs `Playwright internals not found so files are kept whole`."
+    },
+    {
+      "id": "i.flakiness-internal",
+      "group": "internals",
+      "claim": "`@flakiness/playwright` groups tests by reading the internal `_parallelMode` of each parent suite.",
+      "status": "pass",
+      "facts": {
+        "package": "@flakiness/playwright@2.0.2",
+        "file": "lib/playwright-test.js",
+        "function": "computeTestGroupSuite",
+        "functionLine": 18140,
+        "line": 18147,
+        "quote": "const parallelMode = suite._parallelMode;",
+        "reads": 1,
+        "locksRead": false
+      },
+      "finding": "`@flakiness/playwright@2.0.2` reads it once, in `computeTestGroupSuite` at `lib/playwright-test.js:18147`: `const parallelMode = suite._parallelMode;`. It reads no `_locks` (true)."
+    },
+    {
+      "id": "i.flakiness-no-parallel-mode",
+      "group": "internals",
+      "claim": "Without `_parallelMode` the Flakiness reporter keeps whole files, still balances and runs every leaf once.",
+      "status": "pass",
+      "facts": {
+        "default": {
+          "harnessOk": true,
+          "violations": {},
+          "exitCodes": [0, 0, 0],
+          "replacements": 1,
+          "serialSplit": 0,
+          "balances": true,
+          "sameSplitAsUnmodified": true,
+          "splitFiles": 0,
+          "unmodifiedSplitFiles": 0,
+          "logLines": [
+            "[flakiness.io] balancing 3 shards | [flakiness.io] duration hints: 54/54 tests (100%) | [flakiness.io] Running shard 1/3: 9.1s of work",
+            "[flakiness.io] balancing 3 shards | [flakiness.io] duration hints: 54/54 tests (100%) | [flakiness.io] Running shard 2/3: 9.1s of work",
+            "[flakiness.io] balancing 3 shards | [flakiness.io] duration hints: 54/54 tests (100%) | [flakiness.io] Running shard 3/3: 7.2s of work"
+          ],
+          "warns": false
+        },
+        "fullyParallel": {
+          "harnessOk": true,
+          "violations": {},
+          "exitCodes": [0, 0, 0],
+          "replacements": 1,
+          "serialSplit": 0,
+          "balances": true,
+          "sameSplitAsUnmodified": true,
+          "splitFiles": 0,
+          "unmodifiedSplitFiles": 0,
+          "logLines": [
+            "[flakiness.io] balancing 3 shards | [flakiness.io] duration hints: 54/54 tests (100%) | [flakiness.io] Running shard 1/3: 9.1s of work",
+            "[flakiness.io] balancing 3 shards | [flakiness.io] duration hints: 54/54 tests (100%) | [flakiness.io] Running shard 2/3: 9.1s of work",
+            "[flakiness.io] balancing 3 shards | [flakiness.io] duration hints: 54/54 tests (100%) | [flakiness.io] Running shard 3/3: 7.1s of work"
+          ],
+          "warns": false
+        }
+      },
+      "finding": "A copy of `@flakiness/playwright` whose 1 read of `_parallelMode` names a missing property. Default config: exit 0 / 0 / 0, balanced (true), 0 files split, violations none. `fullyParallel`: exit 0 / 0 / 0, balanced (true), 0 files split where the unmodified reporter split 0, violations none. It prints no warning about the missing field (true)."
+    },
+    {
+      "id": "n.no-network",
+      "group": "network",
+      "claim": "The reporter, `update`, `check` and `simulate` make no network connection and start no program of their own.",
+      "status": "pass",
+      "facts": {
+        "controlAttempts": 1,
+        "harnessOk": true,
+        "strategies": ["balanced", "balanced"],
+        "cliExits": [0, 0, 0],
+        "attempts": 0,
+        "spawned": {
+          "workerProcessEntry.js": 20
+        },
+        "programs": []
+      },
+      "finding": "A balanced two-shard run and the three commands under the guard: 0 connection attempts and no program started besides Node and Playwright's workers (0 others). The control `fetch` was recorded 1 time."
+    }
+  ],
+  "citations": [
+    {
+      "source": "upstream",
+      "file": "src/reporter.ts",
+      "lines": "206-211",
+      "quote": "this.record.plan_sha = plan.sha;",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "src/run.ts",
+      "lines": "106-109",
+      "quote": "for (const field of ['timings_sha', 'plan_sha'] as const) {",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "actions/restore/action.yml",
+      "lines": "19-31",
+      "quote": "key: ${{ inputs.prefix }}-pin-${{ github.run_id }}",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "src/run.ts",
+      "lines": "88-98",
+      "quote": "missing records for shard ${missingShards.join",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "actions/finish/action.yml",
+      "lines": "37-39",
+      "quote": "echo \"::error::no run records in $RECORDS_DIR\"; exit 1; fi",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "actions/finish/action.yml",
+      "lines": "29-40",
+      "quote": "$pwsb update --timings \"$TIMINGS\" \"${records[@]}\" > /dev/null",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "actions/finish/action.yml",
+      "lines": "54-59",
+      "quote": "# Saved even when check fails: the durations are still good samples.",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "src/timings.ts",
+      "lines": "42-47",
+      "quote": "// A missing file is empty timings; anything else unreadable throws.",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "src/reporter.ts",
+      "lines": "195-197",
+      "quote": "if (readError) return fallback(`cannot read timings: ${readError}`);",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "actions/restore/action.yml",
+      "lines": "63-75",
+      "quote": "echo \"PLAYWRIGHT_SHARD_BALANCER_STRICT=1\" >> \"$GITHUB_ENV\"",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "src/timings.ts",
+      "lines": "5-8",
+      "quote": "export const MAX_SAMPLES = 5;",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "src/timings.ts",
+      "lines": "71-87",
+      "quote": "entry.samples = entry.samples.slice(-MAX_SAMPLES);",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "src/run.ts",
+      "lines": "46-59",
+      "quote": ".filter((t) => t.ran && !t.static_skip && (t.outcome === 'expected' || t.outcome === 'flaky'))",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "actions/finish/action.yml",
+      "lines": "22-28",
+      "quote": "# The newest timings, not this run's pin: another run may have saved since.",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "src/commands.ts",
+      "lines": "61-73",
+      "quote": "if (applied.has(digest)) {",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "src/report.ts",
+      "lines": "33-37",
+      "quote": "return [`[${project}]`, file, ...titles].join(' › ');",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "src/reporter.ts",
+      "lines": "98-100",
+      "quote": "repeatSuffix(test.repeatEachIndex)",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "src/reporter.ts",
+      "lines": "203-204",
+      "quote": "testRun.skipSharding();",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "src/reporter.ts",
+      "lines": "43-59",
+      "quote": "if (parent._parallelMode === 'serial' || parent._parallelMode === 'default') sequential = parent;",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "src/reporter.ts",
+      "lines": "82-84",
+      "quote": "typeof (f as InternalSuite)._parallelMode === 'string'",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "playwright",
+      "file": "playwright/lib/common/index.js",
+      "lines": "2051-2052",
+      "quote": "test.annotations.unshift({ type: \"serial\", location: parentSuite.location });",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "src/reporter.ts",
+      "lines": "263",
+      "quote": "ran: test.results.length > 0 && test.results.every((r) => r.status !== 'interrupted'),",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "src/timings.ts",
+      "lines": "18-40",
+      "quote": "entry.samples.every((s) => Number.isInteger(s) && s >= 0)",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "src/timings.ts",
+      "lines": "60-67",
+      "quote": "renameSync(tmp, path);",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "src/reporter.ts",
+      "lines": "171-176",
+      "quote": "const strict = this.options.strict || process.env[STRICT_ENV] === '1';",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "src/run.ts",
+      "lines": "100-105",
+      "quote": "shards split the suite differently",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "src/reporter.ts",
+      "lines": "11-25",
+      "quote": "export type ShardBalancerOptions = {",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "actions/restore/action.yml",
+      "lines": "7-9",
+      "quote": "Cache key prefix. Use one per suite when a repo shards more than one.",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "actions/restore/action.yml",
+      "lines": "40-62",
+      "quote": "# Only the first shard's save succeeds; every shard then reads the pin back, so all use one copy.",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "src/reporter.ts",
+      "lines": "268-272",
+      "quote": "const out = resolve(base, this.options.record.replaceAll('{shard}', shard));",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "examples/github-actions.yml",
+      "lines": "28-34",
+      "quote": "overwrite: true",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "src/run.ts",
+      "lines": "80-154",
+      "quote": "// Proves a sharded run ran every test exactly once: all shards present, all on the same plan,",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "src/commands.ts",
+      "lines": "265-279",
+      "quote": "'| Shard | Tests | Predicted | Test time | Whole run | Status |',",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "actions/restore/action.yml",
+      "lines": "32-39",
+      "quote": "# No timings yet, or a fork: write an empty file.",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "examples/github-actions.yml",
+      "lines": "14-17",
+      "quote": "shard: [1, 2, 3, 4]",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "src/run.ts",
+      "lines": "19-40",
+      "quote": "export type RunRecord = {",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "src/reporter.ts",
+      "lines": "188",
+      "quote": "this.record.corpus = { tests: corpus.keys.length, sha: corpusSha(corpus.keys) };",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "src/timings.ts",
+      "lines": "10-11",
+      "quote": "export type Timings = { version: 1; tests: Record<string, TimingEntry>; applied?: string[] };",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "src/timings.ts",
+      "lines": "71-87",
+      "quote": "if (daysBetween(entry.seen, today) <= PRUNE_AFTER_DAYS)",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "src/timings.ts",
+      "lines": "89-93",
+      "quote": "export function median(values: number[]): number {",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "src/reporter.ts",
+      "lines": "19-21",
+      "quote": "A fixed number, not config.workers",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "src/reporter.ts",
+      "lines": "214-222",
+      "quote": "tests known, ${workers} worker(s), plan ${plan.sha}",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "actions/restore/action.yml",
+      "lines": "53-56",
+      "quote": "run: sleep 20",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "src/estimate.ts",
+      "lines": "19-61",
+      "quote": "// A known test costs the median of its samples. An unknown test costs the median of the known",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "src/run.ts",
+      "lines": "110-111",
+      "quote": "shards saw different test sets before the split",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "src/run.ts",
+      "lines": "130-131",
+      "quote": "stopped at max failures, or a setup project failed",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "src/commands.ts",
+      "lines": "167-202",
+      "quote": "elapsed_ms: p.makespan_ms + overhead,",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "src/reporter.ts",
+      "lines": "199-200",
+      "quote": "const workers = this.options.workers ?? 1;",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "src/partition.ts",
+      "lines": "30-43",
+      "quote": "// Wall time of one shard: its items go to the first free worker, in load order.",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "src/reporter.ts",
+      "lines": "105-107",
+      "quote": "const testLocks = (test as InternalTest)._locks;",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "src/atoms.ts",
+      "lines": "51-85",
+      "quote": "// Tests that share a Playwright lock must not run at the same time. Shards run at the same time,",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "src/reporter.ts",
+      "lines": "90-95",
+      "quote": "setup.set(project, cost);",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "src/plan.ts",
+      "lines": "37-53",
+      "quote": "// A shard's setup time: each phase's projects packed onto the workers, longest first, and the",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "src/commands.ts",
+      "lines": "99-100",
+      "quote": "// One update is one run: a setup test recorded by every shard gives one sample",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "src/partition.ts",
+      "lines": "21-23",
+      "quote": "A node count, not a clock, keeps it deterministic.",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "src/plan.ts",
+      "lines": "171-173",
+      "quote": "// Last, so it wins only when strictly faster: no plan is predicted to be slower than Playwright's own.",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "src/timings.ts",
+      "lines": "53-58",
+      "quote": "for (const key of Object.keys(timings.tests).sort()) tests[key] = timings.tests[key];",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "src/reporter.ts",
+      "lines": "276-285",
+      "quote": "if (tests.every((t) => !keep.has(t))) testRun.exclude(fileSuite);",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "actions/restore/action.yml",
+      "lines": "17-20",
+      "quote": "# A pull request from a fork gets a read-only cache, so it cannot pin.",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "src/reporter.ts",
+      "lines": "30-31",
+      "quote": "type InternalSuite = Suite & { _parallelMode?: ParallelMode };",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "src/reporter.ts",
+      "lines": "32",
+      "quote": "type InternalTest = TestCase & { _locks?: string[] };",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "src/reporter.ts",
+      "lines": "121",
+      "quote": "locksKnown: locksKnown || !atLeast(config.version, 1, 63),",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "playwright",
+      "file": "playwright/lib/runner/index.js",
+      "lines": "2462-2463",
+      "quote": "function filterForShard(shard, weights, testGroups) {",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "flakiness",
+      "file": "lib/playwright-test.js",
+      "lines": "18140-18147",
+      "quote": "const parallelMode = suite._parallelMode;",
+      "ok": true,
+      "reason": null
+    }
+  ],
+  "durationMs": 895204
+}

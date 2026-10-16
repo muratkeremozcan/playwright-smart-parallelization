@@ -1,0 +1,161 @@
+'use strict';
+
+/**
+ * The results the research is expected to reproduce. `EXPECTED_ROWS` gives the status of every
+ * row: `pass` when the observed behavior matches the claim of the row, `fail` when it does not (a
+ * reproduced gap of the package). `EXPECTED_FACTS` gives facts of a row that do not depend on
+ * timing, keyed by a dotted path into the facts. `tests/rows.test.js` compares fresh evidence with
+ * both, and `tests/unit/docs.test.js` compares the committed evidence with the statuses.
+ */
+
+const EXPECTED_ROWS = {
+  'a.failopen-native': 'pass',
+  'a.balanced-2': 'pass',
+  'a.balanced-3': 'pass',
+  'a.repeat-each': 'pass',
+  'a.fully-parallel': 'pass',
+  'a.granularity-file': 'pass',
+  'a.renamed': 'pass',
+  'a.log-line': 'pass',
+  'p.copies-same-plan': 'pass',
+  'p.workers-independent': 'pass',
+  'p.slow-clock': 'pass',
+  's.failopen-damaged': 'fail',
+  's.strict-damaged': 'pass',
+  's.strict-empty': 'pass',
+  's.mismatched': 'pass',
+  's.reporter-dropped': 'pass',
+  's.reporter-dropped-all': 'pass',
+  'c.missing-record': 'pass',
+  'c.duplicate-record': 'pass',
+  'c.not-run': 'pass',
+  'c.corpus-mismatch': 'pass',
+  'c.summary': 'pass',
+  'h.failed-slow': 'pass',
+  'h.cancelled': 'pass',
+  'h.faster-test': 'pass',
+  'h.damaged-history': 'pass',
+  'h.duplicate-input': 'pass',
+  'h.filtered-run': 'pass',
+  'h.expiry': 'pass',
+  'h.setup-once': 'pass',
+  'h.missing-shard-update': 'fail',
+  'h.deterministic-bytes': 'pass',
+  'h.racing-publish': 'fail',
+  'h.remerge-union': 'pass',
+  'e.hierarchy': 'pass',
+  'w.plan-workers': 'pass',
+  'sim.predicted-vs-actual': 'pass',
+  'sim.overhead': 'pass',
+  'sim.couture-cast': 'pass',
+  'i.serial-public': 'pass',
+  'i.mode-hidden': 'pass',
+  'i.lock-hidden': 'pass',
+  'i.lock-native-split': 'pass',
+  'i.psb-locks': 'pass',
+  'i.psb-no-locks': 'pass',
+  'i.psb-no-parallel-mode': 'pass',
+  'i.flakiness-internal': 'pass',
+  'i.flakiness-no-parallel-mode': 'pass',
+  'n.no-network': 'pass',
+};
+
+const BUILTIN = ['builtin', 'builtin', 'builtin'];
+
+const EXPECTED_FACTS = {
+  'a.failopen-native': {
+    harnessOk: true,
+    sameAsNative: true,
+    strategies: BUILTIN,
+    reasonsNameMissingFile: true,
+  },
+  'a.balanced-2': { harnessOk: true, checkExit: 0, known: 52, listed: 52 },
+  'a.balanced-3': { harnessOk: true, checkExit: 0, known: 52, listed: 52 },
+  'a.repeat-each': { harnessOk: true, checkExit: 0, checkedTests: 104 },
+  'a.fully-parallel': { harnessOk: true, checkExit: 0, granularity: ['auto', 'auto', 'auto'] },
+  'a.granularity-file': { harnessOk: true, splitFiles: 0, granularity: ['file', 'file', 'file'] },
+  'a.renamed': { harnessOk: true, checkExit: 0, known: 50, listed: 56, unknown: 6 },
+  'a.log-line': { linesPerShard: [1, 1, 1], samePlanSha: true, sameTimingsSha: true },
+  'p.copies-same-plan': { harnessOk: true, identicalBytes: true },
+  's.failopen-damaged': {
+    exitCodes: [0, 0, 0],
+    strategies: ['balanced', 'builtin', 'balanced'],
+    reason: 'cannot read timings',
+    checkExit: 1,
+    checkNamesMixed: true,
+  },
+  's.strict-damaged': { exitCodes: [0, 1, 0], damagedShardRanNothing: true, duplicates: 0 },
+  's.strict-empty': { emptyExitCodes: [1, 1], absentExitCodes: [1, 1], ranNothing: true },
+  's.mismatched': { checkExit: 1, namesTimings: true, namesPlan: true },
+  's.reporter-dropped': { recordsWritten: [true, false, true], checkExit: 1, namesMissing: true },
+  's.reporter-dropped-all': {
+    harnessOk: true,
+    recordsWritten: [false, false],
+    checkExit: 2,
+    finishExit: 1,
+  },
+  'c.missing-record': { checkExit: 1 },
+  'c.duplicate-record': { checkExit: 1, namesRepeat: true, duplicates: 26 },
+  'c.not-run': { checkExit: 1, recordsWritten: [true, true] },
+  'c.corpus-mismatch': { checkExit: 1, namesCorpus: true, corpora: [52, 6] },
+  'c.summary': { checkExit: 0, shardRows: 3, heading: '### Shard balance: ok' },
+  'h.failed-slow': { exitCode: 1, outcome: 'unexpected', updateExit: 0 },
+  'h.cancelled': { exitCode: 130, recordWritten: true, status: 'interrupted', ran: false },
+  'h.damaged-history': {
+    truncatedExit: 1,
+    truncatedUnchanged: true,
+    badInputExit: 1,
+    badInputUnchanged: true,
+    stringSamplesExit: 1,
+    stringSamplesUnchanged: true,
+  },
+  'h.duplicate-input': { secondSkipped: 1, secondSamples: 0, unchanged: true },
+  'h.filtered-run': { updateExit: 0, entriesBefore: 54, entriesAfter: 54, otherEntriesKept: true },
+  'h.expiry': { entriesBefore: 54, after30Days: 54, after31Days: 8, sampledByRun: 8 },
+  'h.setup-once': { shardsWithSetup: 2, samples: 1 },
+  'h.missing-shard-update': { updateExit: 0, inputs: 1, shards: 2, warnings: 0 },
+  'h.deterministic-bytes': {
+    sameOrderSameBytes: true,
+    otherOrderSameBytes: false,
+    otherOrderSameEntries: true,
+    keysSorted: true,
+  },
+  'h.racing-publish': { restoredKey: 'pwsb-timings-101-1', newerRunApplied: false },
+  'h.remerge-union': { exits: [0, 0, 0], replaySkipped: 2, unchanged: true, cartSamples: 3 },
+  'e.hierarchy': {
+    agree: true,
+    levels: ['known', 'describe', 'file', 'project', 'suite'],
+    staticSkipMs: 0,
+  },
+  'w.plan-workers': { harnessOk: [true, true] },
+  'sim.couture-cast': { runs: 5, tests: 160, unknownTests: 0, granularity: 'test' },
+  'i.serial-public': { annotatedTests: 18, harnessSerialLeaves: 18, sameTests: true },
+  'i.mode-hidden': { samePublicView: true, fileModeWith: 'parallel', fileModeWithout: 'none' },
+  'i.lock-hidden': { samePublicView: true, lockedTests: 4, unlockedTests: 0 },
+  'i.lock-native-split': { harnessOk: true, shardsWithLock: [1, 2] },
+  'i.psb-locks': { harnessOk: true, 'shardsWithLock.length': 1 },
+  'i.psb-no-locks': { replacements: 1, 'shardsWithLock.length': 2 },
+  'i.psb-no-parallel-mode': {
+    'default.replacements': 4,
+    'default.harnessOk': true,
+    'default.granularity': ['file', 'file', 'file'],
+    'fullyParallel.harnessOk': true,
+    'fullyParallel.granularity': ['file', 'file', 'file'],
+  },
+  'i.flakiness-internal': { function: 'computeTestGroupSuite', reads: 1, locksRead: false },
+  'i.flakiness-no-parallel-mode': {
+    'default.replacements': 1,
+    'default.harnessOk': true,
+    'fullyParallel.harnessOk': true,
+  },
+  'n.no-network': { attempts: 0, programs: [] },
+};
+
+/** The value at a dotted path of an object. */
+function factAt(facts, dotted) {
+  return dotted
+    .split('.')
+    .reduce((value, key) => (value === undefined || value === null ? value : value[key]), facts);
+}
+
+module.exports = { EXPECTED_FACTS, EXPECTED_ROWS, factAt };

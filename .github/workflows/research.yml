@@ -1,0 +1,67 @@
+# Collects the evidence of the playwright-shard-balancer harvest on a fresh install and asserts
+# every row and every citation with `node --test`. The collector runs the published package against
+# the consumer fixture through the S2 harness and fetches the cited upstream files at the commit the
+# installed version was published from. It runs on demand and on pull requests that touch the
+# research code, the harness, the fixture or the code it reuses. The unit tests in `test.yml` read
+# only the committed evidence and install nothing from here.
+name: Research
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'research/shard-balancer/**'
+      - 'harness/**'
+      - 'fixtures/consumer/**'
+      - 'qualification/lib/**'
+      - 'qualification/flakiness/**'
+      - 'measurements/**'
+      - '.github/workflows/research.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: research-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  shard-balancer:
+    name: shard-balancer harvest
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            fixtures/consumer/package-lock.json
+            qualification/flakiness/package-lock.json
+            research/shard-balancer/package-lock.json
+
+      - name: Install
+        run: |
+          npm ci
+          npm run research:install
+
+      - name: Collect evidence
+        run: npm run research:shard-balancer -- --out "$RUNNER_TEMP/evidence.json"
+
+      - name: Assert the rows and citations
+        env:
+          PSP_PSB_EVIDENCE: ${{ runner.temp }}/evidence.json
+        run: npm run research:shard-balancer:test
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: shard-balancer-evidence
+          path: ${{ runner.temp }}/evidence.json
+          if-no-files-found: ignore
