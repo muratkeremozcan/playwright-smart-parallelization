@@ -31,6 +31,7 @@ const { footprint } = require('./scenarios/footprint');
 const {
   cancelledRun,
   damagedInputs,
+  equalDurations,
   failedRuns,
   fasterTest,
   racingPublish,
@@ -65,6 +66,7 @@ const GROUPS = {
     ...failedRuns(ctx),
     cancelledRun(ctx),
     fasterTest(ctx),
+    equalDurations(ctx),
     windowRebuild(ctx),
     racingPublish(ctx),
   ],

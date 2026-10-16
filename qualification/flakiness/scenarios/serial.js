@@ -71,12 +71,17 @@ function outcomesRow(native, balanced) {
   const keys = Object.keys(expected);
   const retried = keys.filter((key) => Number(expected[key].split('/')[1]) > 1);
   const same = keys.length > 0 && JSON.stringify(actual) === JSON.stringify(expected);
+  const violations = [native, balanced].map((run) => coverageKinds(run.summary.kinds));
   return {
     id: '2.serial-outcomes',
     proof: 2,
     title: 'serial groups end with the outcome and attempts they have under native sharding',
-    status: same && retried.length > 0 ? 'pass' : 'fail',
+    status:
+      same && retried.length > 0 && violations.every((found) => Object.keys(found).length === 0)
+        ? 'pass'
+        : 'fail',
     evidence: {
+      coverageViolations: { native: violations[0], balanced: violations[1] },
       leaves: keys.length,
       leavesWithRetries: retried.length,
       sameOutcomesAsNative: same,

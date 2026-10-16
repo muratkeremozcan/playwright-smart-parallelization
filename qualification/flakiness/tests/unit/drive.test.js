@@ -17,31 +17,7 @@ after(() => {
   for (const dir of dirs) fs.rmSync(dir, { recursive: true, force: true });
 });
 
-/** A Flakiness report with one test per entry of `tests`: `[environment, file, title, [ms...]]`. */
-function report(tests) {
-  const environments = [...new Set(tests.map(([environment]) => environment))];
-  const files = [...new Set(tests.map(([, file]) => file))];
-  return {
-    category: 'playwright',
-    commitId: 'a'.repeat(40),
-    duration: 0,
-    startTimestamp: 0,
-    environments: environments.map((name) => ({ name })),
-    suites: files.map((file) => ({
-      title: file,
-      type: 'file',
-      tests: tests
-        .filter(([, candidate]) => candidate === file)
-        .map(([environment, , title, attempts]) => ({
-          title,
-          attempts: attempts.map((duration) => ({
-            environmentIdx: environments.indexOf(environment),
-            duration,
-          })),
-        })),
-    })),
-  };
-}
+const report = drive.syntheticReport;
 
 function write(dir, name, content) {
   const file = path.join(dir, name);
@@ -191,6 +167,17 @@ describe('durations', () => {
     assert.strictEqual(drive.testDurations(file).get('a.spec.js › one'), 120);
   });
 
+  test('mapDurations reaches the tests of nested suites', () => {
+    const dir = tempDir();
+    const nested = report(tests);
+    nested.suites = [{ title: 'outer', type: 'suite', suites: nested.suites }];
+    const file = write(dir, 'nested.json', nested);
+    const out = drive.mapDurations(file, () => 0, path.join(dir, 'zero.json'));
+    const durations = drive.testDurations(out, { byEnvironment: true });
+    assert.strictEqual(durations.size, 3);
+    assert.ok([...durations.values()].every((duration) => duration === 0));
+  });
+
   test('mapDurations passes every attempt through the function', () => {
     const dir = tempDir();
     const file = write(dir, 'r.json', report(tests));
@@ -238,6 +225,51 @@ describe('buildHistory', () => {
     assert.throws(
       () => drive.buildHistory({ dir: tempDir(), reports: [path.join(tempDir(), 'absent.json')] }),
       /build failed: cannot read report/
+    );
+  });
+});
+
+describe('priceOf', () => {
+  const one = 'a.spec.js › one';
+
+  test('a project without an entry of its own is priced at the longest project', () => {
+    const dir = tempDir();
+    const input = write(dir, 'in.json', report([['chromium', 'a.spec.js', 'one', [300]]]));
+    assert.strictEqual(drive.priceOf(input, 'chromium', one), 300);
+    assert.strictEqual(drive.priceOf(input, 'firefox', one), 300);
+  });
+
+  test('is undefined for a test the file does not have', () => {
+    const input = write(tempDir(), 'in.json', report([['chromium', 'a.spec.js', 'one', [1]]]));
+    assert.strictEqual(drive.priceOf(input, 'chromium', 'a.spec.js › two'), undefined);
+  });
+
+  // A property of the installed package: `build` stores one attempt for a test whose projects took
+  // equally long, and a shorter run merged into that file then lowers the project the stored
+  // attempt did not name. A release that changes this fails here, and the history rows change.
+  test('a shorter run lowers one project of a test that was stored once for both', () => {
+    const dir = tempDir();
+    const both = (chromium, firefox) =>
+      report([
+        ['chromium', 'a.spec.js', 'one', [chromium]],
+        ['firefox', 'a.spec.js', 'one', [firefox]],
+      ]);
+    const slow = write(dir, 'slow.json', both(200, 200));
+    const quick = write(dir, 'quick.json', both(6, 6));
+    const first = drive.buildHistory({ dir, name: 'first', reports: [slow] });
+    assert.deepStrictEqual(
+      ['chromium', 'firefox'].map((project) => drive.priceOf(first.file, project, one)),
+      [200, 200]
+    );
+    const second = drive.buildHistory({
+      dir,
+      name: 'second',
+      existing: first.file,
+      reports: [quick],
+    });
+    assert.deepStrictEqual(
+      ['chromium', 'firefox'].map((project) => drive.priceOf(second.file, project, one)),
+      [200, 6]
     );
   });
 });

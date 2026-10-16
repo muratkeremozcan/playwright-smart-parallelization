@@ -12,7 +12,7 @@ const path = require('node:path');
 const { checkCoverage } = require('../../../harness/checks');
 const { copyProject } = require('../../lib/project');
 const { coverageKinds } = require('../../lib/scoring');
-const { partitionOf, mapDurations } = require('../drive');
+const { partitionOf, mapDurations, testDurations } = require('../drive');
 const { listShard, parsePlan, scrub } = require('../playwright');
 
 const SLOW_CLOCK = path.resolve(__dirname, '..', '..', 'lib', 'slow-clock.js');
@@ -178,6 +178,15 @@ function appliedByReporter(ctx) {
   };
 }
 
+/** A copy of a timings file in which every duration is zero, checked before it is used. */
+function zeroed(good, output) {
+  mapDurations(good, () => 0, output);
+  for (const [test, duration] of testDurations(output)) {
+    if (duration !== 0) throw new Error(`${test} still takes ${duration} ms in the zeroed file`);
+  }
+  return output;
+}
+
 /** Timings files derived from a good one, one set per kind of damage. */
 function timingVariants(ctx) {
   const dir = ctx.dir('damaged');
@@ -207,7 +216,7 @@ function timingVariants(ctx) {
       write('string-suites.json', { ...parsed, suites: 'none' }),
     ],
     stringDurations: [mapDurations(good, () => 'abc', path.join(dir, 'string-durations.json'))],
-    zeroDurations: [mapDurations(good, () => 0, path.join(dir, 'zero-durations.json'))],
+    zeroDurations: [zeroed(good, path.join(dir, 'zero-durations.json'))],
     staleIds: [write('stale-ids.json', stale)],
   };
 }
@@ -244,6 +253,7 @@ function damagedRow(ctx, id, title, files) {
       silent: outcome === 'complete plan',
       hinted: plan ? plan.hinted : null,
       tests: plan ? plan.tests : null,
+      loads: plan ? plan.loads : null,
       coverageViolations: kinds,
     };
   });

@@ -32,7 +32,7 @@ The engines run different batteries. The table counts the engine rows of each pr
 | P5    | 6 (0)                | 10 (2)                  |
 | P6    | 4 (1)                | 4 (1)                   |
 | P7    | 2 (0)                | 3 (1)                   |
-| P8    | 3 (3)                | 5 (2)                   |
+| P8    | 3 (3)                | 6 (3)                   |
 | X1    | 2 (2)                | 1 (0)                   |
 | X2    | 1 (1)                | 1 (1)                   |
 
@@ -78,9 +78,9 @@ What each engine adds to a pipeline. NSXBet runs as a command before the shards 
 | Packages installed                          | 59                                                               | 1                                            |
 | `node_modules` size                         | 9.3 MiB                                                          | 1.3 MiB                                      |
 | Where it runs                               | A planning command before the shards; the shards run as they are | Inside every shard, as a Playwright reporter |
-| Time added to a shard run                   | none                                                             | 44 ms (+0.4%)                                |
+| Time added to a shard run                   | none                                                             | 145 ms (+1.2%)                               |
 | Planning step, once per run                 | 154 ms (`assign` with history)                                   | none, each shard plans for itself            |
-| Peak memory added to the Playwright process | none                                                             | 6.0 MiB                                      |
+| Peak memory added to the Playwright process | none                                                             | 4.1 MiB                                      |
 | Largest artifact per shard                  | 1.5 KiB timing artifact                                          | 39.2 KiB report folder                       |
 | Network audit                               | pass; mutation control pass                                      | pass; mutation control pass                  |
 

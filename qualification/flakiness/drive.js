@@ -168,6 +168,52 @@ function testDurations(file, { byEnvironment = false } = {}) {
 }
 
 /**
+ * A small Flakiness report with one test per entry of `tests`: `[environment, file, title,
+ * [ms...]]`, the milliseconds being the attempts of the test in that environment.
+ */
+function syntheticReport(tests) {
+  const environments = [...new Set(tests.map(([environment]) => environment))];
+  const files = [...new Set(tests.map(([, file]) => file))];
+  return {
+    category: 'playwright',
+    commitId: 'a'.repeat(40),
+    duration: 0,
+    startTimestamp: 0,
+    environments: environments.map((name) => ({ name })),
+    suites: files.map((file) => ({
+      title: file,
+      type: 'file',
+      tests: tests
+        .filter(([, candidate]) => candidate === file)
+        .map(([environment, , title, attempts]) => ({
+          title,
+          attempts: attempts.map((duration) => ({
+            environmentIdx: environments.indexOf(environment),
+            duration,
+          })),
+        })),
+    })),
+  };
+}
+
+/**
+ * What the reporter prices a test at in a project, from a report or timings file: the test's
+ * duration in that project, or its longest duration in any project when the file has none for
+ * the project. `build` stores one attempt for a test whose projects took equally long, and the
+ * price of every project then follows that attempt. `test` is `file › titles › test`; the result
+ * is undefined when the file has no such test.
+ */
+function priceOf(file, project, test) {
+  const perProject = new Map();
+  for (const [key, duration] of testDurations(file, { byEnvironment: true })) {
+    const [environment, ...rest] = key.split(' › ');
+    if (rest.join(' › ') === test) perProject.set(environment, duration);
+  }
+  if (perProject.size === 0) return undefined;
+  return perProject.get(project) ?? Math.max(...perProject.values());
+}
+
+/**
  * Builds a timings file from Flakiness reports with `build`. `existing` is an earlier timings
  * file folded in first. With `roundMs` the durations are rounded to a multiple of it, so the plan
  * does not depend on a few milliseconds of run-to-run noise. Returns `{ file, call }`.
@@ -189,9 +235,11 @@ module.exports = {
   flakinessReports,
   partitionOf,
   mapDurations,
+  priceOf,
   roundDurations,
   scaleDurations,
   shardEnv,
+  syntheticReport,
   testDurations,
   tempDir,
   violationKinds,

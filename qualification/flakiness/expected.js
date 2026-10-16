@@ -53,6 +53,7 @@ const EXPECTED_ROWS = {
   '8.failed-run-slow': 'fail',
   '8.cancelled-run': 'pass',
   '8.faster-test': 'fail',
+  '8.equal-durations': 'fail',
   '8.window-rebuild': 'pass',
   'x2.racing-publish': 'fail',
   'net.guard-control': 'pass',

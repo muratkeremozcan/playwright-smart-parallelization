@@ -30,9 +30,14 @@ function readLines(file) {
     .map((line) => JSON.parse(line));
 }
 
+/** The moment the last test of a run ended, from the statistics of its JSON report. */
+function lastTestEnd(stats) {
+  return Date.parse(stats.startTime) + stats.duration;
+}
+
 /**
  * One unsharded run of the fixture with `WORKERS` workers, plain or with the reporter. Returns the
- * wall time, the time Playwright reports for the tests, the peak memory of the Playwright process
+ * wall time, the time between the last test and the exit of the process, the peak memory of the Playwright process
  * and of its largest worker, and the folder the reporter wrote.
  */
 function playwrightRun(ctx, { label, plain }) {
@@ -48,6 +53,9 @@ function playwrightRun(ctx, { label, plain }) {
       'test',
       `--config=${ctx.config()}`,
       `--workers=${WORKERS}`,
+      // One shard of one: the reporter runs its whole balancing pass on the same tests the
+      // plain run executes.
+      '--shard=1/1',
     ],
     {
       cwd: ctx.cwd,
@@ -59,11 +67,12 @@ function playwrightRun(ctx, { label, plain }) {
         PSP_FLK_EXTRA: 'json',
         PLAYWRIGHT_JSON_OUTPUT_FILE: jsonReport,
         FLAKINESS_OUTPUT_DIR: reportDir,
-        ...(plain ? { PSP_FLK_PLAIN: '1' } : {}),
+        ...(plain ? { PSP_FLK_PLAIN: '1' } : { PSP_FLK_TIMINGS: ctx.baseline().history.file }),
       },
     }
   );
   const wallMs = Number(process.hrtime.bigint() - started) / 1e6;
+  const exitedAt = Date.now();
   if (result.status !== 0) {
     throw new Error(`footprint run ${label} failed: ${result.stderr}${result.stdout.slice(-2000)}`);
   }
@@ -74,7 +83,7 @@ function playwrightRun(ctx, { label, plain }) {
   if (main.length !== 1) throw new Error(`${label}: ${main.length} Playwright processes`);
   return {
     wallMs,
-    testMs: readJson(jsonReport).stats.duration,
+    afterLastTestMs: exitedAt - lastTestEnd(readJson(jsonReport).stats),
     mainRssKb: main[0].maxRssKb,
     workerRssKb: Math.max(...workers.map((entry) => entry.maxRssKb)),
     workers: workers.length,
@@ -96,7 +105,7 @@ function runtimeAndMemory(ctx) {
     wallMs: med(runs, (run) => run.wallMs),
     wallMinMs: Math.round(Math.min(...runs.map((run) => run.wallMs))),
     wallMaxMs: Math.round(Math.max(...runs.map((run) => run.wallMs))),
-    afterTestsMs: med(runs, (run) => run.wallMs - run.testMs),
+    afterTestsMs: med(runs, (run) => run.afterLastTestMs),
     mainRssKb: med(runs, (run) => run.mainRssKb),
     workerRssKb: med(runs, (run) => run.workerRssKb),
   });

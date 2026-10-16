@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-16T06:21:15.396Z",
+  "generatedAt": "2026-10-16T06:39:08.981Z",
   "group": "all",
   "versions": {
     "engine": "@flakiness/playwright@2.0.2",
@@ -271,6 +271,10 @@
       "title": "serial groups end with the outcome and attempts they have under native sharding",
       "status": "pass",
       "evidence": {
+        "coverageViolations": {
+          "native": {},
+          "balanced": {}
+        },
         "leaves": 18,
         "leavesWithRetries": 4,
         "sameOutcomesAsNative": true,
@@ -383,7 +387,7 @@
           "shards": 3,
           "hinted": 54,
           "tests": 54,
-          "loads": "1=9.1s, 2=9.1s, 3=7.2s",
+          "loads": "1=9.1s, 2=9.1s, 3=7.1s",
           "balancePercent": 93,
           "runningShard": {
             "current": 1,
@@ -400,7 +404,7 @@
       "title": "--list of a shard shows the tests the shard runs",
       "status": "pass",
       "evidence": {
-        "leavesPerShard": [29, 23],
+        "leavesPerShard": [27, 25],
         "sameAsRun": true
       }
     },
@@ -414,7 +418,7 @@
         "balancedDiffersFromNative": true,
         "reporterWithoutTimingsEqualsPlainNative": true,
         "nativeLeavesPerShard": [26, 26],
-        "balancedLeavesPerShard": [29, 23]
+        "balancedLeavesPerShard": [27, 25]
       }
     },
     {
@@ -433,6 +437,7 @@
             "silent": false,
             "hinted": null,
             "tests": null,
+            "loads": null,
             "coverageViolations": {
               "missing": 52
             }
@@ -445,6 +450,7 @@
             "silent": false,
             "hinted": null,
             "tests": null,
+            "loads": null,
             "coverageViolations": {
               "missing": 52
             }
@@ -457,6 +463,7 @@
             "silent": false,
             "hinted": null,
             "tests": null,
+            "loads": null,
             "coverageViolations": {
               "missing": 52
             }
@@ -480,6 +487,7 @@
             "silent": false,
             "hinted": null,
             "tests": null,
+            "loads": null,
             "coverageViolations": {
               "missing": 52
             }
@@ -492,6 +500,7 @@
             "silent": false,
             "hinted": null,
             "tests": null,
+            "loads": null,
             "coverageViolations": {
               "missing": 52
             }
@@ -504,6 +513,7 @@
             "silent": false,
             "hinted": null,
             "tests": null,
+            "loads": null,
             "coverageViolations": {
               "missing": 52
             }
@@ -527,6 +537,7 @@
             "silent": true,
             "hinted": 0,
             "tests": 54,
+            "loads": "1=28.0s, 2=28.0s",
             "coverageViolations": {}
           },
           {
@@ -537,6 +548,7 @@
             "silent": true,
             "hinted": 0,
             "tests": 54,
+            "loads": "1=28.0s, 2=28.0s",
             "coverageViolations": {}
           }
         ]
@@ -558,6 +570,7 @@
             "silent": false,
             "hinted": null,
             "tests": null,
+            "loads": null,
             "coverageViolations": {
               "missing": 52
             }
@@ -581,6 +594,7 @@
             "silent": true,
             "hinted": 54,
             "tests": 54,
+            "loads": "1=0ms, 2=0ms",
             "coverageViolations": {}
           }
         ]
@@ -602,6 +616,7 @@
             "silent": true,
             "hinted": 0,
             "tests": 54,
+            "loads": "1=28.0s, 2=28.0s",
             "coverageViolations": {}
           }
         ]
@@ -627,8 +642,8 @@
       "status": "fail",
       "evidence": {
         "coverageViolations": {
-          "missing": 10,
-          "duplicate": 13
+          "missing": 11,
+          "duplicate": 9
         },
         "exits": [0, 0],
         "planLinesDiffer": true
@@ -642,8 +657,8 @@
       "status": "fail",
       "evidence": {
         "coverageViolations": {
-          "missing": 8,
-          "duplicate": 11
+          "missing": 14,
+          "duplicate": 15
         },
         "exits": [0, 0],
         "planPrintedPerShard": [true, false]
@@ -671,10 +686,10 @@
       "status": "pass",
       "evidence": {
         "exits": [0, 1],
-        "leavesRunPerShard": [31, 0],
+        "leavesRunPerShard": [29, 0],
         "kinds": {
           "shard-failed": 1,
-          "missing": 23
+          "missing": 25
         },
         "message": "Error: [flakiness.io] failed to generate balanced shard: cannot parse shardBalancing.timingsFile \"damaged.json\" as JSON: Expected property name or '}' in JSON at position 300 (line 11 column 5)"
       }
@@ -782,8 +797,14 @@
       "status": "pass",
       "evidence": {
         "testId": "volatile.spec.js › volatile step",
-        "durationBeforeMs": 1050,
-        "durationAfterMs": 1050
+        "pricesBeforeMs": {
+          "chromium": 1050,
+          "firefox": 1050
+        },
+        "pricesAfterMs": {
+          "chromium": 1050,
+          "firefox": 1050
+        }
       }
     },
     {
@@ -794,8 +815,14 @@
       "status": "fail",
       "evidence": {
         "testId": "volatile.spec.js › volatile step",
-        "durationBeforeMs": 1050,
-        "durationAfterMs": 9105
+        "pricesBeforeMs": {
+          "chromium": 1050,
+          "firefox": 1050
+        },
+        "pricesAfterMs": {
+          "chromium": 9091,
+          "firefox": 9080
+        }
       }
     },
     {
@@ -807,9 +834,15 @@
       "evidence": {
         "exit": 130,
         "reportWritten": true,
-        "cancelledAttemptMs": 320,
-        "durationBeforeMs": 1050,
-        "durationAfterMs": 1050
+        "cancelledAttemptMs": 319,
+        "pricesBeforeMs": {
+          "chromium": 1050,
+          "firefox": 1050
+        },
+        "pricesAfterMs": {
+          "chromium": 1050,
+          "firefox": 1050
+        }
       }
     },
     {
@@ -819,9 +852,33 @@
       "title": "a test that now takes 100 ms instead of a second is merged into history",
       "status": "fail",
       "evidence": {
-        "newRunMs": 122,
-        "durationBeforeMs": 1050,
-        "durationAfterMs": 1050
+        "newRunMs": 125,
+        "pricesBeforeMs": {
+          "chromium": 1050,
+          "firefox": 1050
+        },
+        "pricesAfterMs": {
+          "chromium": 1050,
+          "firefox": 1050
+        }
+      }
+    },
+    {
+      "subject": "engine",
+      "id": "8.equal-durations",
+      "proof": 8,
+      "title": "a test that took equally long in both projects is merged with a much shorter run",
+      "status": "fail",
+      "evidence": {
+        "pricesBeforeMs": {
+          "chromium": 200,
+          "firefox": 200
+        },
+        "pricesAfterMs": {
+          "chromium": 200,
+          "firefox": 6
+        },
+        "quickRunMs": 6
       }
     },
     {
@@ -832,10 +889,10 @@
       "status": "pass",
       "evidence": {
         "durationBeforeMs": 1050,
-        "durationInFasterWindowMs": 122,
-        "durationWithFailedRunInWindowMs": 9105,
-        "durationWithFailedRunLeftOutMs": 1027,
-        "durationWithSlowPassingRunInWindowMs": 1027
+        "durationInFasterWindowMs": 123,
+        "durationWithFailedRunInWindowMs": 9091,
+        "durationWithFailedRunLeftOutMs": 1037,
+        "durationWithSlowPassingRunInWindowMs": 1037
       }
     },
     {
@@ -1085,39 +1142,39 @@
       "runs": 5,
       "workers": 4,
       "plain": {
-        "wallMs": 12001,
-        "wallMinMs": 11945,
-        "wallMaxMs": 12010,
-        "afterTestsMs": 207,
-        "mainRssKb": 171024,
-        "workerRssKb": 179360
+        "wallMs": 11968,
+        "wallMinMs": 11932,
+        "wallMaxMs": 12027,
+        "afterTestsMs": 6,
+        "mainRssKb": 171216,
+        "workerRssKb": 180064
       },
       "reporter": {
-        "wallMs": 12045,
-        "wallMinMs": 12015,
-        "wallMaxMs": 12085,
-        "afterTestsMs": 275,
-        "mainRssKb": 177152,
-        "workerRssKb": 179296
+        "wallMs": 12113,
+        "wallMinMs": 12081,
+        "wallMaxMs": 12128,
+        "afterTestsMs": 54,
+        "mainRssKb": 175376,
+        "workerRssKb": 179456
       }
     },
     "timingsCommand": {
       "runtimeMs": {
         "help": 34,
         "buildOne": 36,
-        "buildMerge": 40
+        "buildMerge": 36
       },
       "peakRssKb": {
-        "bareNode": 38560,
-        "help": 56832,
-        "buildOne": 57232,
-        "buildMerge": 57376
+        "bareNode": 38544,
+        "help": 56800,
+        "buildOne": 57248,
+        "buildMerge": 57440
       }
     },
     "artifactBytes": {
-      "flakinessReport": 38243,
-      "flakinessFolder": 40146,
-      "playwrightJsonReport": 91296,
+      "flakinessReport": 38282,
+      "flakinessFolder": 40185,
+      "playwrightJsonReport": 91518,
       "timingsFile": 7451
     },
     "reportContent": {
@@ -1135,10 +1192,10 @@
   "durationMs": 233352,
   "legsMs": {
     "coverage": 204043,
-    "serial": 208194,
+    "serial": 208285,
     "balance": 233352,
-    "assignment": 171654,
-    "history": 159885,
-    "privacy": 222697
+    "assignment": 162148,
+    "history": 160310,
+    "privacy": 222454
   }
 }

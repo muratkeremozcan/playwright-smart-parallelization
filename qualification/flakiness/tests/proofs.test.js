@@ -121,6 +121,7 @@ describe('proof 2: serial groups and dependencies', () => {
   test('serial groups retry and end exactly as under native sharding', () => {
     const outcomes = row('2.serial-outcomes');
     assert.ok(outcomes.leavesWithRetries > 0);
+    assert.deepStrictEqual(outcomes.coverageViolations, { native: {}, balanced: {} });
     assert.strictEqual(outcomes.sameOutcomesAsNative, true);
   });
 
@@ -201,6 +202,7 @@ describe('proof 5: damaged and mismatched input', () => {
     const [zero] = row('5.zero-durations').outcomes;
     assert.strictEqual(zero.outcome, 'complete plan');
     assert.strictEqual(zero.hinted, zero.tests);
+    assert.match(zero.loads, /^1=0ms, 2=0ms$/);
     assert.strictEqual(zero.silent, true);
   });
 
@@ -312,20 +314,36 @@ describe('proof 8: history', () => {
     }
   });
 
-  test('a failed run lowers nothing, a slow failure raises the entry, a cancelled run lowers nothing', () => {
+  test('a failed run lowers no project, a slow failure raises every project, a cancelled run lowers none', () => {
     const quick = row('8.failed-run');
-    assert.ok(quick.durationAfterMs >= quick.durationBeforeMs * 0.9);
+    for (const project of ['chromium', 'firefox']) {
+      assert.ok(quick.pricesAfterMs[project] >= quick.pricesBeforeMs[project] * 0.9, project);
+    }
     const slow = row('8.failed-run-slow');
-    assert.ok(slow.durationAfterMs > slow.durationBeforeMs * 5);
+    for (const project of ['chromium', 'firefox']) {
+      assert.ok(slow.pricesAfterMs[project] > slow.pricesBeforeMs[project] * 5, project);
+    }
     const cancelled = row('8.cancelled-run');
     assert.strictEqual(cancelled.reportWritten, true);
-    assert.ok(cancelled.durationAfterMs >= cancelled.durationBeforeMs * 0.9);
+    assert.strictEqual(cancelled.exit, 130);
+    assert.ok(cancelled.cancelledAttemptMs < 900);
+    for (const project of ['chromium', 'firefox']) {
+      assert.ok(cancelled.pricesAfterMs[project] >= cancelled.pricesBeforeMs[project] * 0.9);
+    }
   });
 
-  test('a test ten times faster leaves its history entry where it was', () => {
+  test('a test ten times faster leaves the price of every project where it was', () => {
     const faster = row('8.faster-test');
-    assert.ok(faster.newRunMs < faster.durationBeforeMs / 5);
-    assert.strictEqual(faster.durationAfterMs, faster.durationBeforeMs);
+    for (const project of ['chromium', 'firefox']) {
+      assert.ok(faster.newRunMs < faster.pricesBeforeMs[project] / 5, project);
+      assert.strictEqual(faster.pricesAfterMs[project], faster.pricesBeforeMs[project], project);
+    }
+  });
+
+  test('a test stored once for two equally slow projects loses the price of one to a short run', () => {
+    const equal = row('8.equal-durations');
+    assert.deepStrictEqual(equal.pricesBeforeMs, { chromium: 200, firefox: 200 });
+    assert.deepStrictEqual(equal.pricesAfterMs, { chromium: 200, firefox: equal.quickRunMs });
   });
 
   test('history rebuilt from a window of recent passing runs adapts and ignores a failed run', () => {

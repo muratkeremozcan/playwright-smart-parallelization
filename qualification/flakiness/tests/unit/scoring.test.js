@@ -66,7 +66,11 @@ describe('classifyListing', () => {
 describe('outcomesRow', () => {
   const serialLeaf = (key) => ({ key, serialGroup: `g-${key}`, dependency: false });
   const shard = (leaves) => ({ leaves });
-  const make = (leaves, shards) => ({ listing: { leaves }, raw: shards });
+  const make = (leaves, shards, kinds = {}) => ({
+    listing: { leaves },
+    raw: shards,
+    summary: { kinds },
+  });
   const listing = [serialLeaf('a'), serialLeaf('b'), { key: 'c', dependency: false }];
   const native = make(listing, [
     shard([
@@ -103,6 +107,26 @@ describe('outcomesRow', () => {
       ]),
     ]);
     assert.strictEqual(outcomesRow(quiet, quiet).status, 'fail');
+  });
+
+  test('fails when both runs skipped the same leaves', () => {
+    const skipped = (kinds) =>
+      make(
+        listing,
+        [
+          shard([
+            { key: 'a', outcome: 'flaky', attempts: 2 },
+            { key: 'b', outcome: 'expected', attempts: 1 },
+          ]),
+        ],
+        kinds
+      );
+    const row = outcomesRow(skipped({ 'not-executed': 2 }), skipped({ 'not-executed': 2 }));
+    assert.strictEqual(row.status, 'fail');
+    assert.deepStrictEqual(row.evidence.coverageViolations, {
+      native: { 'not-executed': 2 },
+      balanced: { 'not-executed': 2 },
+    });
   });
 
   test('fails when a serial leaf did not run', () => {
