@@ -124,7 +124,7 @@ jobs:
           fi
 
   seed-taken-key:
-    if: inputs.race && github.run_attempt == 1
+    if: ${{ !cancelled() && needs.prepare.result == 'success' && inputs.race && github.run_attempt == 1 }}
     needs: prepare
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -142,7 +142,7 @@ jobs:
           key: ${{ needs.prepare.outputs.prefix }}1-2
 
   seed-newest:
-    if: inputs.race && github.run_attempt == 1
+    if: ${{ !cancelled() && needs.seed-taken-key.result == 'success' && inputs.race && github.run_attempt == 1 }}
     needs: [prepare, seed-taken-key]
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -175,8 +175,14 @@ jobs:
             exit 1
           fi
 
+  # Every job below the optional seed job states its condition: a skipped seed would otherwise
+  # skip it through the implicit success() of its needs.
   test:
     needs: prepare
+    if: ${{ !cancelled() && needs.prepare.result == 'success' }}
+    # The step-level continue-on-error on the composite step below did not hold on the runner, so
+    # the leg that fails a test on purpose contains it at job level; finish asserts the outcome.
+    continue-on-error: ${{ inputs.fail-test != '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -196,9 +202,7 @@ jobs:
       - name: Install the consumer fixture
         working-directory: fixtures/consumer
         run: npm ci
-      # A shard that fails on purpose is contained here; finish asserts what it does about it.
       - uses: ./
-        continue-on-error: ${{ inputs.fail-test != '' }}
         with:
           phase: run
           plan: ${{ needs.prepare.outputs.plan }}
