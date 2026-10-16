@@ -225,14 +225,16 @@ function mutationControl(ctx) {
 }
 
 /**
- * On Linux the blocked run goes through `sudo` and writes as root, into the output directory of
- * the config as well. The files go back to the user, so later runs can write there and the
- * scratch directory can be removed.
+ * On Linux the blocked run goes through `sudo` and writes as root, into the Playwright output
+ * directory of the project (`test-results`) as well. The files go back to the user, so later
+ * runs can write there and the scratch directory can be removed.
  */
-function giveBack(dir) {
+function giveBack(...dirs) {
   if (process.platform !== 'linux') return;
   const owner = `${process.getuid()}:${process.getgid()}`;
-  spawnSync('sudo', ['-n', 'chown', '-R', owner, dir], { stdio: 'ignore' });
+  for (const dir of dirs.filter((candidate) => fs.existsSync(candidate))) {
+    spawnSync('sudo', ['-n', 'chown', '-R', owner, dir], { stdio: 'ignore' });
+  }
 }
 
 function digest(file) {
@@ -278,12 +280,13 @@ async function osBlockRow(ctx, { required }) {
       })
     );
   const blocked = shardsRun(block.wrap, 'blocked');
-  giveBack(ctx.root);
+  giveBack(ctx.root, path.join(ctx.cwd, 'test-results'));
   const open = shardsRun([], 'open');
   const reports = flakinessReports(ctx.baseline().partition);
   const build = (wrap, label) =>
     buildTimings({ inputs: reports, output: path.join(dir, `${label}.json`) }, { wrap });
   const blockedBuild = build(block.wrap, 'build-blocked');
+  giveBack(ctx.root);
   const openBuild = build([], 'build-open');
   const samePlan = placementOf(blocked) === placementOf(open);
   const sameTimings =
