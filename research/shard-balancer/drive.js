@@ -127,7 +127,7 @@ function execute({ cwd, config, partition, listing, repeatEach = 1, workers = 1,
 /** The record each shard of a partition wrote, in shard order; null for a shard that wrote none. */
 function records(partition) {
   return partition.map((shard, position) => {
-    const pattern = shard.env.PSP_PSB_RECORD;
+    const pattern = shard.env && shard.env.PSP_PSB_RECORD;
     if (!pattern) return null;
     // An unsharded run writes its record under `all`.
     const file = [String(position + 1), 'all']

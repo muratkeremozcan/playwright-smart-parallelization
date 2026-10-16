@@ -18,6 +18,7 @@ const { internalsRows } = require('./scenarios/internals');
 const { networkRows } = require('./scenarios/network');
 const { planningRows } = require('./scenarios/planning');
 const { checkRows, safetyRows } = require('./scenarios/safety');
+const { shapesRows } = require('./scenarios/shapes');
 const {
   FLAKINESS,
   ROOT,
@@ -36,6 +37,7 @@ const GROUPS = {
   planning: planningRows,
   internals: internalsRows,
   network: networkRows,
+  shapes: shapesRows,
 };
 
 const GROUP_NAMES = Object.keys(GROUPS);

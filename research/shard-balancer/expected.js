@@ -63,6 +63,19 @@ const EXPECTED_ROWS = {
   'i.flakiness-internal': 'pass',
   'i.flakiness-no-parallel-mode': 'pass',
   'n.no-network': 'pass',
+  'sa.plan-run': 'pass',
+  'sa.check-list': 'pass',
+  'sa.refusals': 'pass',
+  'sa.fallback-repeat': 'pass',
+  'sa.fallback-helper': 'pass',
+  'sa.plan-damaged': 'pass',
+  'sa.report-history': 'pass',
+  'sb.wrapper-naive': 'fail',
+  'sb.wrapper-paths': 'pass',
+  'sb.wrapper-run': 'pass',
+  'sb.cli-reporter': 'pass',
+  'sb.add-reporter': 'pass',
+  'sb.ts-config': 'pass',
 };
 
 const BUILTIN = ['builtin', 'builtin', 'builtin'];
@@ -191,6 +204,33 @@ const EXPECTED_FACTS = {
   'a.repeat-collision': { harnessOk: true, checkExit: 1, collides: true },
   'h.mixed-outcome': { checkExit: 0, updateExit: 0, volatileUnchanged: true },
   'h.zero-samples': { updateExits: [0, 0, 0], priceAfterMs: 0 },
+  'sa.plan-run': {
+    harnessOk: true,
+    files: 3,
+    hasShardArg: false,
+    recordShards: [null, null, null],
+  },
+  'sa.check-list': { withoutListExit: 1, withoutListNamesShards: true, withListExit: 0 },
+  'sa.refusals': {
+    'repeatEach.harnessSelectable': true,
+    'prefixTitles.harnessSelectable': false,
+    'helperDefined.harnessSelectable': true,
+  },
+  'sa.fallback-repeat': { harnessOk: true },
+  'sa.fallback-helper': { harnessOk: true },
+  'sa.plan-damaged': { damagedFiles: 0, absentFiles: 0 },
+  'sa.report-history': { sameKeysAndCounts: true, setupSamples: 1 },
+  'sb.wrapper-naive': { jsLoads: false, tsLoads: true },
+  'sb.wrapper-paths': {
+    'js.fullConfigDifferences': [],
+    'js.listConfigDifferences': [],
+    'ts.fullConfigDifferences': [],
+    'ts.listConfigDifferences': [],
+  },
+  'sb.wrapper-run': { harnessOk: true, timingsShaMatches: true, checkExit: 0 },
+  'sb.cli-reporter': { recordsWritten: [true, false, true], checkExit: 1, namesMissing: true },
+  'sb.add-reporter': { harnessOk: true, userAddReporterLast: false, merged: true },
+  'sb.ts-config': { harnessOk: true },
 };
 
 /** The value at a dotted path of an object. */

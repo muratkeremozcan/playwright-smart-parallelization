@@ -299,6 +299,35 @@ function renderCitations(evidence) {
   );
 }
 
+/** For every take and adapt of the mechanisms: whether it works under shape A and shape B. */
+function renderShapes(evidence) {
+  const shape = (s) => [
+    s.works ? 'yes' : 'no',
+    `\`${s.row}\` ${rowOf(evidence, s.row).status}`,
+    cell(s.s8),
+  ];
+  return table(
+    [
+      'Mechanism',
+      'Decision',
+      'Shape A',
+      'Row',
+      'Acceptance test under shape A',
+      'Shape B',
+      'Row',
+      'Acceptance test under shape B',
+    ],
+    LISTS.mechanisms
+      .filter((entry) => entry.decision !== 'reject')
+      .map((entry) => [
+        cell(entry.subject),
+        entry.decision,
+        ...shape(entry.shapes.a),
+        ...shape(entry.shapes.b),
+      ])
+  );
+}
+
 /** The sentence before the table of internal runs, with the shard counts of those runs. */
 function renderInternalRunsIntro(evidence) {
   const mode = rowOf(evidence, 'i.psb-no-parallel-mode').facts.default.exitCodes.length;
@@ -339,6 +368,7 @@ const BLOCKS = {
   'couture-intro': renderCoutureIntro,
   'couture-cast': renderCoutureCast,
   inputs: renderInputs,
+  shapes: renderShapes,
   citations: renderCitations,
   copyright: renderCopyright,
 };
@@ -397,6 +427,7 @@ module.exports = {
   blocksOf,
   normalizeTable,
   renderCopyright,
+  renderShapes,
   renderCoutureIntro,
   renderDocument,
   renderInternalRunsIntro,

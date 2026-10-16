@@ -5,7 +5,14 @@
 
 const { test, describe } = require('node:test');
 const assert = require('node:assert');
-const { checkCitations, citationsOf, parseLines, upstreamUrl, verify } = require('../../citations');
+const {
+  checkCitations,
+  citationsOf,
+  fetchUpstream,
+  parseLines,
+  upstreamUrl,
+  verify,
+} = require('../../citations');
 const { ALL } = require('../../decisions');
 
 const TEXT = ['one', 'two  words', 'three', 'four', 'five'].join('\n');
@@ -69,6 +76,39 @@ describe('checkCitations', () => {
       }
     );
     assert.deepStrictEqual([result.ok, result.reason], [false, 'offline']);
+  });
+});
+
+describe('fetchUpstream', () => {
+  test('retries a dropped request and returns the text', async () => {
+    let calls = 0;
+    const get = async () => {
+      calls += 1;
+      if (calls < 3) throw new Error('fetch failed');
+      return { ok: true, status: 200, text: async () => 'body' };
+    };
+    assert.strictEqual(await fetchUpstream('u', { get, pauseMs: 0 }), 'body');
+    assert.strictEqual(calls, 3);
+  });
+
+  test('fails at once on a 404 and after the last attempt otherwise', async () => {
+    let calls = 0;
+    const missing = async () => {
+      calls += 1;
+      return { ok: false, status: 404 };
+    };
+    await assert.rejects(fetchUpstream('u', { get: missing, pauseMs: 0 }), /404/);
+    assert.strictEqual(calls, 1);
+    await assert.rejects(
+      fetchUpstream('u', {
+        attempts: 2,
+        pauseMs: 0,
+        get: async () => {
+          throw new Error('down');
+        },
+      }),
+      /down/
+    );
   });
 });
 

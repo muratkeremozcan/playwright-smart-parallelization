@@ -304,6 +304,44 @@ const TEST_ID = src(
   'const testId = (t: { key: string; repeat: number }) => t.key + repeatSuffix(t.repeat);'
 );
 const ZERO_OK = src('src/timings.ts', '35', 'Number.isInteger(s) && s >= 0');
+const PLAN_FN = src(
+  'src/commands.ts',
+  '206-207',
+  '// For Playwright < 1.62, or CI that prefers one planning job: one --test-list file per shard.'
+);
+const PLAN_REFUSALS = src(
+  'src/commands.ts',
+  '210-228',
+  'is listed twice (--repeat-each?); a --test-list cannot split repeats, use the reporter'
+);
+const PLAN_RANGE = src(
+  'README.md',
+  '14',
+  '`plan` writes `--test-list` files for Playwright 1.56 to 1.61, or for CI that prefers one planning job.'
+);
+const HOOK_RANGE = src(
+  'README.md',
+  '7',
+  "through Playwright's `preprocess` reporter hook (Playwright 1.62+)"
+);
+const UNSHARDED = src(
+  'src/run.ts',
+  '85-87',
+  '// Runs of `plan` test lists have no --shard, so only a list can show that none is missing.'
+);
+const TIMINGS_PATH = src('src/reporter.ts', '178', "this.options.timings ?? 'shard-timings.json'");
+const PW_ADD_REPORTER = src(
+  'playwright/lib/common/index.js',
+  '523',
+  '...configCLIOverrides.additionalReporters ?? []',
+  'playwright'
+);
+const PW_CONFIG_DIR = src(
+  'playwright/lib/common/index.js',
+  '580',
+  'pathResolve(configDir, projectConfig.testDir)',
+  'playwright'
+);
 const KEEP_LATEST = 'The aggregate job keeps only the latest attempt of each shard';
 
 /** Gaps the Flakiness and NSXBet qualifications named. */
@@ -873,6 +911,41 @@ const MECHANISMS = [
     s8: 'A balanced fixture run excludes through the public preprocess API only.',
   },
   {
+    subject: 'Per-shard `--test-list` files from one planning job',
+    mechanism:
+      '`plan` writes one `--test-list` file per shard from the JSON list and the timings, for Playwright before the preprocess hook or for CI that prefers one planning job; it refuses suites a list line cannot express, and the records of such runs have no shard number.',
+    sources: [PLAN_FN, PLAN_REFUSALS, UNSHARDED, PLAN_RANGE],
+    decision: 'adapt',
+    reason:
+      'The files run every leaf once with serial groups whole and setup once (`sa.plan-run`) and `check` proves them with the list (`sa.check-list`). `plan` also refuses repeats and helper-defined tests the harness selection contract accepts (`sa.refusals`), where list files written by the harness from the same assignment run correctly (`sa.fallback-repeat`, `sa.fallback-helper`), so shape A takes the assignment of `plan` and writes the files with our selection contract.',
+    evidence: {
+      'sa.plan-run': 'pass',
+      'sa.check-list': 'pass',
+      'sa.refusals': 'pass',
+      'sa.fallback-repeat': 'pass',
+      'sa.fallback-helper': 'pass',
+    },
+    s8: 'The planning step writes one list per shard for the fixture, with and without `--repeat-each 2` and with a helper-defined test, and every leaf runs once with no `--shard`.',
+  },
+  {
+    subject: "A reporter the Action injects without a change to the user's config",
+    mechanism:
+      "The reporter reads its timings relative to the config file and its options from the config; Playwright resolves every relative path of a config against the config file's folder and appends `--add-reporter` reporters to the configured or replaced ones.",
+    sources: [TIMINGS_PATH, OPTIONS, PW_CONFIG_DIR, PW_ADD_REPORTER, HOOK_RANGE],
+    decision: 'adapt',
+    reason:
+      "A wrapper that only appends the reporter breaks the user's paths (`sb.wrapper-naive`); a wrapper that resolves them first keeps the resolved config, for a JS and a TS config (`sb.wrapper-paths`, `sb.ts-config`), and balances from the Action's timings (`sb.wrapper-run`). A `--reporter` flag drops a wrapper's reporter and the check turns that red (`sb.cli-reporter`); `--add-reporter` survives it as one merged value, with no options (`sb.add-reporter`), so our bundled reporter reads its options from the environment.",
+    evidence: {
+      'sb.wrapper-naive': 'fail',
+      'sb.wrapper-paths': 'pass',
+      'sb.wrapper-run': 'pass',
+      'sb.cli-reporter': 'pass',
+      'sb.add-reporter': 'pass',
+      'sb.ts-config': 'pass',
+    },
+    s8: "The Action balances the fixture through its own command line with the user's config untouched, a JS and a TS config, and a user `--reporter` or `--add-reporter` neither drops the reporter nor passes silently.",
+  },
+  {
     subject: 'Fork pull requests use the built-in split',
     mechanism:
       'The restore action treats the cache of a fork pull request as read-only (its comment, since upstream commit `8ed9ea3`), skips the pin and writes empty timings, so every shard of a fork run uses the built-in split.',
@@ -940,9 +1013,196 @@ const INTERNALS = [
   },
 ];
 
+/**
+ * Where each take and adapt of the mechanisms works inside the Action: shape A plans in a planning
+ * step and hands each shard a `--test-list` file, shape B injects a preprocess reporter into the
+ * user's run. `works` is whether the mechanism applies as harvested under that shape, `row` the
+ * evidence row that shows it, `s8` the acceptance test under that shape.
+ */
+const SHAPES = {
+  'Fail-open, with strict mode once timings exist': {
+    a: {
+      works: true,
+      row: 'sa.plan-damaged',
+      s8: 'With damaged or absent timings the planning step writes no list and every shard runs `--shard=i/n`.',
+    },
+    b: {
+      works: true,
+      row: 's.strict-damaged',
+      s8: 'With history present, a shard whose injected reporter cannot read the snapshot fails before any test.',
+    },
+  },
+  'One timings copy pinned per workflow run': {
+    a: {
+      works: true,
+      row: 'sa.plan-run',
+      s8: 'One planning job writes every list from one snapshot, and each shard reads its list from one artifact.',
+    },
+    b: {
+      works: true,
+      row: 'p.copies-same-plan',
+      s8: 'Every shard reads the snapshot artifact and logs one plan sha.',
+    },
+  },
+  'Median of the last 5 passing samples': {
+    a: {
+      works: true,
+      row: 'sa.report-history',
+      s8: "History built from the shards' JSON reports passes the faster-test, slow-failure and slow-retry cases.",
+    },
+    b: {
+      works: true,
+      row: 'h.faster-test',
+      s8: 'History built from the run records passes the same cases.',
+    },
+  },
+  'New-test estimate from describe, then file, then project, then suite': {
+    a: {
+      works: true,
+      row: 'e.hierarchy',
+      s8: 'The planning step prices a new test in a known describe at the median of that describe.',
+    },
+    b: {
+      works: true,
+      row: 'a.renamed',
+      s8: 'A renamed and a new test run once and the plan line counts them unknown.',
+    },
+  },
+  'The `check` exactly-once proof': {
+    a: {
+      works: false,
+      row: 'sa.check-list',
+      s8: "Shape A writes no run record, so the aggregate job proves exactly-once coverage from the shards' JSON reports against the JSON list.",
+    },
+    b: {
+      works: true,
+      row: 'sb.cli-reporter',
+      s8: 'A shard whose command line drops the injected reporter fails the aggregate check.',
+    },
+  },
+  '`simulate` for shard-count advice': {
+    a: {
+      works: true,
+      row: 'sim.couture-cast',
+      s8: 'The summary prints the simulated elapsed and machine time from the JSON list and the history.',
+    },
+    b: { works: true, row: 'sim.couture-cast', s8: 'The same summary from the same inputs.' },
+  },
+  'Workers-per-shard planning': {
+    a: {
+      works: true,
+      row: 'sa.plan-run',
+      s8: '`plan --workers` takes the workers input of the Action.',
+    },
+    b: {
+      works: true,
+      row: 'p.workers-independent',
+      s8: 'The injected reporter takes the workers input, and the plan sha is the same under any `--workers`.',
+    },
+  },
+  'Setup projects priced on every shard that needs them, one sample per update': {
+    a: {
+      works: true,
+      row: 'sa.plan-run',
+      s8: 'Every list run runs setup once in each shard that needs it, and the history holds one setup sample per run.',
+    },
+    b: {
+      works: true,
+      row: 'a.setup-aware',
+      s8: 'Only the shards that host a test needing setup run it, and their predicted time includes it.',
+    },
+  },
+  'A deterministic search with a node budget, never predicted slower than the built-in split': {
+    a: {
+      works: true,
+      row: 'sim.predicted-vs-actual',
+      s8: 'The planning step never predicts the balanced lists above the built-in split.',
+    },
+    b: {
+      works: true,
+      row: 'p.slow-clock',
+      s8: 'Every shard computes one plan sha on a slow and a fast runner.',
+    },
+  },
+  'Input dedupe by sha': {
+    a: {
+      works: true,
+      row: 'h.duplicate-input',
+      s8: 'A replayed JSON report changes no byte of the history.',
+    },
+    b: {
+      works: true,
+      row: 'h.duplicate-input',
+      s8: 'A replayed run record changes no byte of the history.',
+    },
+  },
+  'Validation and atomic save of the history': {
+    a: {
+      works: true,
+      row: 'h.damaged-history',
+      s8: 'A truncated history fails the publish job and is not saved.',
+    },
+    b: {
+      works: true,
+      row: 'h.damaged-history',
+      s8: 'A truncated history restored from the cache fails the publish job and is not saved.',
+    },
+  },
+  'Deterministic bytes with sorted keys': {
+    a: {
+      works: true,
+      row: 'h.deterministic-bytes',
+      s8: 'Publishing the same reports in any order gives one sha.',
+    },
+    b: {
+      works: true,
+      row: 'h.deterministic-bytes',
+      s8: 'Publishing the same records in any order gives one sha.',
+    },
+  },
+  'Exclusion through `testRun.exclude` and `testRun.skipSharding`': {
+    a: {
+      works: false,
+      row: 'sa.plan-run',
+      s8: 'Shape A selects through `--test-list` files and uses no preprocess hook.',
+    },
+    b: {
+      works: true,
+      row: 'sb.wrapper-run',
+      s8: 'The injected reporter excludes the tests of other shards through the public preprocess API.',
+    },
+  },
+  'Per-shard `--test-list` files from one planning job': {
+    a: {
+      works: true,
+      row: 'sa.plan-run',
+      s8: 'The list run of the fixture covers every leaf once with no `--shard`.',
+    },
+    b: {
+      works: false,
+      row: 'sb.wrapper-run',
+      s8: 'Shape B plans in every shard and writes no list.',
+    },
+  },
+  "A reporter the Action injects without a change to the user's config": {
+    a: {
+      works: false,
+      row: 'sa.plan-run',
+      s8: "Shape A runs the user's reporters and no injected one.",
+    },
+    b: {
+      works: true,
+      row: 'sb.wrapper-run',
+      s8: "The injected reporter balances the fixture with the user's config untouched.",
+    },
+  },
+};
+
+for (const entry of MECHANISMS) if (SHAPES[entry.subject]) entry.shapes = SHAPES[entry.subject];
+
 const LISTS = { gaps: GAPS, workflow: WORKFLOW, mechanisms: MECHANISMS, internals: INTERNALS };
 
 /** Every entry of every list. */
 const ALL = [...GAPS, ...WORKFLOW, ...MECHANISMS, ...INTERNALS];
 
-module.exports = { ALL, GAPS, INTERNALS, KEEP_LATEST, LISTS, MECHANISMS, WORKFLOW };
+module.exports = { ALL, GAPS, INTERNALS, KEEP_LATEST, LISTS, MECHANISMS, SHAPES, WORKFLOW };

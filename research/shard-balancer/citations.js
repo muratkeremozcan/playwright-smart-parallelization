@@ -51,6 +51,26 @@ function upstreamUrl(commit, file) {
   return `https://raw.githubusercontent.com/${REPOSITORY}/${commit}/${file}`;
 }
 
+/**
+ * GETs an upstream file, retrying a failed request three times with a growing pause, so one
+ * dropped connection does not fail every citation of a file. A 404 fails at once.
+ */
+async function fetchUpstream(url, { attempts = 4, pauseMs = 2000, get = fetch } = {}) {
+  let last;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const response = await get(url);
+      if (response.ok) return response.text();
+      last = new Error(`GET ${url}: ${response.status}`);
+      if (response.status === 404) break;
+    } catch (error) {
+      last = error;
+    }
+    if (attempt < attempts) await new Promise((resolve) => setTimeout(resolve, pauseMs * attempt));
+  }
+  throw last;
+}
+
 /** Every distinct citation of a list of decisions, in order of first use. */
 function citationsOf(entries) {
   const seen = new Map();
@@ -79,13 +99,7 @@ function citationsOf(entries) {
  * test passes a local reader). Returns the citations with `ok` and `reason` added.
  */
 async function checkCitations(citations, { commit, fetchText } = {}) {
-  const read =
-    fetchText ||
-    (async (url) => {
-      const response = await fetch(url);
-      if (!response.ok) throw new Error(`GET ${url}: ${response.status}`);
-      return response.text();
-    });
+  const read = fetchText || fetchUpstream;
   const texts = new Map();
   const textOf = async (citation) => {
     const key = `${citation.source}:${citation.file}`;
@@ -112,4 +126,4 @@ async function checkCitations(citations, { commit, fetchText } = {}) {
   return results;
 }
 
-module.exports = { checkCitations, citationsOf, parseLines, upstreamUrl, verify };
+module.exports = { checkCitations, citationsOf, fetchUpstream, parseLines, upstreamUrl, verify };

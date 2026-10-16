@@ -11,7 +11,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { listIntended } = require('../../harness');
 const { copyProject, tempDir } = require('../../qualification/lib/project');
-const { upstreamUrl } = require('./citations');
+const { fetchUpstream, upstreamUrl } = require('./citations');
 const drive = require('./drive');
 const { FIXTURE, REPO_ROOT } = require('./upstream');
 
@@ -60,7 +60,9 @@ function scrubber(root) {
  * a file of the upstream repository at it (memoized).
  */
 function createContext({ log = () => {}, source = FIXTURE, commit = null } = {}) {
-  const root = tempDir('psb');
+  // The real path: Playwright reports files by their real path, and a copy under a symlinked
+  // temporary folder would make every test look defined outside its spec file.
+  const root = fs.realpathSync(tempDir('psb'));
   const memo = new Map();
   const listings = new Map();
   const configs = new Map();
@@ -77,10 +79,7 @@ function createContext({ log = () => {}, source = FIXTURE, commit = null } = {})
     upstreamText(file) {
       if (!commit) throw new Error('the context has no upstream commit');
       return ctx.once(`upstream:${file}`, async () => {
-        const url = upstreamUrl(commit, file);
-        const response = await fetch(url);
-        if (!response.ok) throw new Error(`GET ${url}: ${response.status}`);
-        return response.text();
+        return fetchUpstream(upstreamUrl(commit, file));
       });
     },
 
@@ -122,10 +121,16 @@ function createContext({ log = () => {}, source = FIXTURE, commit = null } = {})
     },
 
     /** The intended-leaf listing for a selection (memoized). */
-    listing({ cwd = source, repeatEach = 1, forward = [], fullyParallel = false } = {}) {
-      const key = JSON.stringify([cwd, repeatEach, forward, fullyParallel]);
+    listing({
+      cwd = source,
+      repeatEach = 1,
+      forward = [],
+      fullyParallel = false,
+      config: given,
+    } = {}) {
+      const key = JSON.stringify([cwd, repeatEach, forward, fullyParallel, given]);
       if (!listings.has(key)) {
-        const config = ctx.config(cwd, { fullyParallel });
+        const config = given || ctx.config(cwd, { fullyParallel });
         listings.set(key, listIntended({ cwd, config, repeatEach, forward }));
       }
       return listings.get(key);
@@ -176,7 +181,9 @@ function createContext({ log = () => {}, source = FIXTURE, commit = null } = {})
 
     /**
      * Runs a partition the caller built. Options: `{ name, cwd, partition, repeatEach, workers,
-     * forward, fullyParallel }`. Memoized by `name`; the same name with other options throws.
+     * forward, fullyParallel, config }`; `config` replaces the research config of the project (a
+     * wrapper the Action generates, or the user's own config). Memoized by `name`; the same name
+     * with other options throws.
      */
     runPartition(options) {
       const signature = JSON.stringify({ ...options, name: undefined });
@@ -196,8 +203,14 @@ function createContext({ log = () => {}, source = FIXTURE, commit = null } = {})
           fullyParallel = false,
         } = options;
         const dir = ctx.dir(name);
-        const listing = ctx.listing({ cwd, repeatEach, forward, fullyParallel });
-        const config = ctx.config(cwd, { fullyParallel });
+        const listing = ctx.listing({
+          cwd,
+          repeatEach,
+          forward,
+          fullyParallel,
+          config: options.config,
+        });
+        const config = options.config || ctx.config(cwd, { fullyParallel });
         const result = drive.execute({
           cwd,
           config,

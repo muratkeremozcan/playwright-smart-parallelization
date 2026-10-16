@@ -243,6 +243,25 @@ describe('the decisions', () => {
       assert.ok(entry.decision === 'reject' || entry.s8, entry.subject);
   });
 
+  test('say for every take and adapt mechanism whether it works under each shape, with a row', () => {
+    const { SHAPES } = require('../../decisions');
+    for (const entry of MECHANISMS.filter((e) => e.decision !== 'reject')) {
+      assert.ok(entry.shapes, `${entry.subject} has no shapes`);
+      for (const shape of ['a', 'b']) {
+        const s = entry.shapes[shape];
+        assert.ok(s && typeof s.works === 'boolean' && s.s8, `${entry.subject}: shape ${shape}`);
+        assert.ok(rowStatus.has(s.row), `${entry.subject}: ${s.row} is not a row`);
+        if (s.works) assert.strictEqual(rowStatus.get(s.row), 'pass', `${entry.subject}: ${s.row}`);
+      }
+    }
+    for (const subject of Object.keys(SHAPES)) {
+      assert.ok(
+        MECHANISMS.some((e) => e.subject === subject),
+        `no mechanism ${subject}`
+      );
+    }
+  });
+
   test('cover every gap the qualifications named', () => {
     const named = ['Flakiness P5', 'Flakiness P6', 'Flakiness P7', 'Flakiness P8', 'Flakiness X2'];
     named.push('NSXBet P1', 'NSXBet P2', 'NSXBet P6', 'NSXBet P8', 'NSXBet X1', 'NSXBet X2');

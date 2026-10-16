@@ -18,6 +18,8 @@ const GROUPS = {
   sim: 'simulate',
   i: 'internals',
   n: 'network',
+  sa: 'shape A',
+  sb: 'shape B',
 };
 
 function row(id, claim, matches, facts, finding) {
