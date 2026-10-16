@@ -9,7 +9,7 @@ const sample = require('./samples/list-repeat-each-2.json');
 const leaves = require('../harness/leaves.js');
 const checks = require('../harness/checks.js');
 const { nativePartition, testListPartition } = require('../harness/partitions.js');
-const { buildControls, buildDependencyControls } = require('../harness/negative-control.js');
+const { buildControls, buildSelectionScenarios } = require('../harness/negative-control.js');
 const { parseArgs } = require('../harness/cli.js');
 
 const dependencies = {
@@ -155,21 +155,70 @@ describe('buildControls', () => {
   });
 });
 
-describe('buildDependencyControls', () => {
-  test('selects the dependency project that has a dependency of its own', () => {
-    const { forward, controls } = buildDependencyControls(dependencies, ['-c', 'a.js']);
-    assert.deepStrictEqual(forward, ['-c', 'a.js', '--project=setup']);
+describe('buildSelectionScenarios', () => {
+  const scenarios = buildSelectionScenarios(dependencies, intended, ['-c', 'a.js']);
+  const setupKey = intended.find((leaf) => leaf.project === 'setup').key;
+  const nativeShards = nativePartition(2);
+
+  // The listing a scenario's selection yields: setup (and teardown) and, when chromium is selected
+  // and keeps a test, chromium too.
+  const listingOf = (selected, projects) => ({
+    leaves: leaves.applyDependencies(
+      intended.filter((leaf) => projects.includes(leaf.project)),
+      dependencies,
+      selected
+    ),
+  });
+
+  test('selects the dependency project that has a dependency of its own, three ways', () => {
     assert.deepStrictEqual(
-      controls.map((control) => [control.expected, control.forward, control.partition]),
+      scenarios.map((scenario) => scenario.forward),
       [
-        ['none', forward, nativePartition(2)],
-        ['missing', ['-c', 'a.js'], [{ args: ['--project=teardown'] }]],
+        ['-c', 'a.js', '--project=setup'],
+        ['-c', 'a.js', '--project', 'setup', 'chromium', '--grep', 'prepare the environment'],
+        ['-c', 'a.js', '--no-deps', '--project=setup', '--project=teardown'],
       ]
     );
   });
 
-  test('the broken control is caught only once the selected project has primary leaves', () => {
-    const setupKey = intended.find((leaf) => leaf.project === 'setup').key;
+  test('pairs each scenario with a clean native run and a broken run that flags the setup leaf', () => {
+    const selected = listingOf(['setup'], ['setup', 'teardown']);
+    const filtered = listingOf(['setup', 'chromium'], ['setup', 'teardown']);
+    const flat = listingOf(['setup', 'teardown'], ['setup', 'teardown']);
+    const summary = (scenario, listing) =>
+      scenario
+        .controls(listing)
+        .map((control) => [
+          control.expected,
+          control.forward,
+          control.partition,
+          control.flagged || null,
+        ]);
+    assert.deepStrictEqual(summary(scenarios[0], selected), [
+      ['none', scenarios[0].forward, nativeShards, null],
+      ['missing', ['-c', 'a.js'], [{ args: ['--project=teardown'] }], [setupKey]],
+    ]);
+    assert.deepStrictEqual(summary(scenarios[1], filtered), [
+      ['none', scenarios[1].forward, nativeShards, null],
+      ['missing', ['-c', 'a.js'], [{ args: ['--project=teardown'] }], [setupKey]],
+    ]);
+    assert.deepStrictEqual(summary(scenarios[2], flat), [
+      ['none', scenarios[2].forward, nativeShards, null],
+      [
+        'duplicate',
+        ['-c', 'a.js', '--no-deps'],
+        [{ args: ['--project=setup'] }, { args: ['--project=setup'] }],
+        [setupKey],
+      ],
+    ]);
+  });
+
+  test('flags only leaves that are primary in the scenario listing', () => {
+    const implicit = listingOf([], ['setup', 'teardown']);
+    assert.deepStrictEqual(scenarios[0].controls(implicit)[1].flagged, []);
+  });
+
+  test('the broken controls are caught only once the selected project has primary leaves', () => {
     const missingKeys = (leavesOfRun, shards) =>
       checks
         .checkCoverage(leavesOfRun, shards)
@@ -183,11 +232,23 @@ describe('buildDependencyControls', () => {
     assert.ok(!missingKeys(intended, teardownOnly).includes(setupKey));
   });
 
+  test('refuses a filter that also selects the dependent project', () => {
+    assert.throws(
+      () => scenarios[1].controls(listingOf(['setup', 'chromium'], ['setup', 'chromium'])),
+      /also selects chromium/
+    );
+  });
+
   test('refuses a suite without a dependency project that has a dependency', () => {
     assert.throws(
-      () => buildDependencyControls({ setup: [], teardown: [], chromium: ['setup'] }, []),
+      () => buildSelectionScenarios({ setup: [], teardown: [], chromium: ['setup'] }, intended, []),
       /dependency project/
     );
+  });
+
+  test('refuses a suite without a test in the setup project', () => {
+    const withoutSetup = intended.filter((leaf) => leaf.project !== 'setup');
+    assert.throws(() => buildSelectionScenarios(dependencies, withoutSetup, []), /a setup test/);
   });
 });
 

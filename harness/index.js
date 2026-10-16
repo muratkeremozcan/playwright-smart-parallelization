@@ -50,10 +50,7 @@ function playwright(cwd, args, env = {}) {
   });
 }
 
-/**
- * The config selection (`-c` or `--config`) in forwarded args. Dependencies are declared at config
- * level, so the per-project probes carry this and nothing else of the user's selection.
- */
+/** The config selection (`-c` or `--config`) in forwarded args. Projects are declared there. */
 function configArgs(args) {
   const kept = [];
   for (let i = 0; i < args.length; i += 1) {
@@ -66,6 +63,14 @@ function configArgs(args) {
     }
   }
   return kept;
+}
+
+/**
+ * The args a per-project dependency probe carries: the config selection and `--no-deps`. Both
+ * change which projects a listing contains, so they decide the dependency map.
+ */
+function probeArgs(args) {
+  return [...configArgs(args), ...args.filter((arg) => arg === '--no-deps')];
 }
 
 function runArgs({ repeatEach = 1, workers = 1, forward = [] }) {
@@ -83,15 +88,16 @@ function listJson(cwd, args) {
 /**
  * Lists the intended leaves and the project dependency map. The listing honors the forwarded
  * selection args and repeat count. Dependencies come from one `--project=P` listing per project,
- * which carries the repeat count and config selection only. A dependency project the forwarded
- * `--project` selects by name has primary leaves unless another selected project needs it.
+ * which carries the repeat count, config selection and `--no-deps` only. A dependency project the
+ * forwarded `--project` selects by name has primary leaves unless another selected project that
+ * still has tests needs it.
  */
 function listIntended({ cwd, repeatEach = 1, forward = [] }) {
   const base = [`--repeat-each=${repeatEach}`];
   const json = listJson(cwd, [...base, ...forward]);
   const listsByProject = {};
   for (const project of projectNames(json)) {
-    const probe = listJson(cwd, [...base, ...configArgs(forward), `--project=${project}`]);
+    const probe = listJson(cwd, [...base, ...probeArgs(forward), `--project=${project}`]);
     listsByProject[project] = parseList(probe);
   }
   const dependencies = deriveDependencies(listsByProject);
@@ -209,6 +215,7 @@ module.exports = {
   configArgs,
   listIntended,
   playwrightVersion,
+  probeArgs,
   qualify,
   runPartition,
 };

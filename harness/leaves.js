@@ -175,13 +175,16 @@ function selectedProjects(args, names) {
  * Returns leaves with `dependency` set from the dependency map. A dependency project that the run
  * selects by name (`selected`) and that no other selected project needs is a project under test,
  * so its leaves are primary. Playwright runs a project that another selected project needs once per
- * dependent shard, so there it stays a dependency.
+ * dependent shard, so there it stays a dependency. Only a selected project that has leaves in
+ * `leaves` needs its dependencies: when filters leave a project with no test, Playwright drops it
+ * and runs what it would have needed as a top-level project.
  */
 function applyDependencies(leaves, dependencies, selected = []) {
+  const present = new Set(leaves.map((leaf) => leaf.project));
   const needed = new Set(
-    selected.flatMap((project) =>
-      (dependencies[project] || []).filter((dependency) => dependency !== project)
-    )
+    selected
+      .filter((project) => present.has(project))
+      .flatMap((project) => (dependencies[project] || []).filter((name) => name !== project))
   );
   const underTest = new Set(selected.filter((project) => !needed.has(project)));
   const projects = dependencyProjects(dependencies);

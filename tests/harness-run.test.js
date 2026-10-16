@@ -7,7 +7,13 @@ const os = require('node:os');
 const path = require('node:path');
 const sample = require('./samples/list-repeat-each-2.json');
 const leaves = require('../harness/leaves.js');
-const { configArgs, listIntended, qualify, runPartition } = require('../harness/index.js');
+const {
+  configArgs,
+  listIntended,
+  probeArgs,
+  qualify,
+  runPartition,
+} = require('../harness/index.js');
 const { runNegativeControl } = require('../harness/negative-control.js');
 const { main } = require('../harness/cli.js');
 
@@ -157,8 +163,27 @@ describe('qualify report', () => {
 
 describe('runNegativeControl verdicts', () => {
   // Stub qualify keyed by control position: the clean one first, then missing, duplicate, serial,
-  // not-executed, then the dependency selection pair: clean and missing.
-  const selectedListing = { ...listing, selected: true };
+  // not-executed, then three selection scenarios of a clean and a broken run each: setup selected,
+  // setup selected and filtered, setup and teardown without dependencies.
+  const setupKey = intended.find((leaf) => leaf.project === 'setup').key;
+  const withTeardown = (selected) =>
+    leaves.applyDependencies(
+      intended.filter((leaf) => ['setup', 'teardown'].includes(leaf.project)),
+      dependencies,
+      selected
+    );
+  // The listing a stub Playwright returns for the forwarded selection of each scenario.
+  const listingFor = (forward = []) => {
+    const named = forward.some((arg) => arg.startsWith('--project'));
+    if (named && forward.includes('--no-deps')) {
+      return { leaves: withTeardown(['setup', 'teardown']), dependencies };
+    }
+    if (named && forward.includes('--grep')) {
+      return { leaves: withTeardown(['setup', 'chromium']), dependencies };
+    }
+    if (named) return { leaves: withTeardown(['setup']), dependencies };
+    return listing;
+  };
 
   function runWith(reports, { options = { cwd: '/consumer' } } = {}) {
     let call = 0;
@@ -171,7 +196,7 @@ describe('runNegativeControl verdicts', () => {
         playwrightVersion: () => '9.9.9',
         listIntended: (given) => {
           listed.push(given);
-          return listed.length === 1 ? listing : selectedListing;
+          return listingFor(given.forward);
         },
         qualify: (given) => {
           qualified.push(given);
@@ -183,7 +208,7 @@ describe('runNegativeControl verdicts', () => {
   }
 
   const accepted = { ok: true, violations: [] };
-  const rejected = (kind) => ({ ok: false, violations: [{ kind }] });
+  const rejected = (kind, key) => ({ ok: false, violations: [{ kind, key }] });
   const everyPrimarySkipped = {
     ok: false,
     violations: primary.map((leaf) => ({ kind: 'not-executed', key: leaf.key })),
@@ -195,10 +220,14 @@ describe('runNegativeControl verdicts', () => {
     rejected('serial-split'),
     everyPrimarySkipped,
     accepted,
-    rejected('missing'),
+    rejected('missing', setupKey),
+    accepted,
+    rejected('missing', setupKey),
+    accepted,
+    rejected('duplicate', setupKey),
   ];
-  const clean = [0, 5];
-  const broken = [1, 2, 3, 4, 6];
+  const clean = [0, 5, 7, 9];
+  const broken = [1, 2, 3, 4, 6, 8, 10];
   const swap = (position, report) =>
     good.map((item, index) => (index === position ? report : item));
 
@@ -215,6 +244,10 @@ describe('runNegativeControl verdicts', () => {
         ['skipped at runtime', 'not-executed', true],
         ['selected setup project, clean', 'none', true],
         ['selected setup project, only teardown runs', 'missing', true],
+        ['setup and chromium selected, filtered to setup, clean', 'none', true],
+        ['setup and chromium selected, filtered to setup, only teardown runs', 'missing', true],
+        ['setup and teardown without dependencies, clean', 'none', true],
+        ['setup and teardown without dependencies, setup in every shard', 'duplicate', true],
       ]
     );
   });
@@ -235,6 +268,16 @@ describe('runNegativeControl verdicts', () => {
 
     test(`fails when broken control ${position} is rejected with the wrong kind`, () => {
       const { result } = runWith(swap(position, rejected('shard-failed')));
+      assert.strictEqual(result.ok, false);
+      assert.strictEqual(result.controls[position].passed, false);
+    });
+  }
+
+  for (const position of [6, 8, 10]) {
+    test(`fails when broken control ${position} flags something other than the setup leaf`, () => {
+      const { result } = runWith(
+        swap(position, rejected(good[position].violations[0].kind, 'other'))
+      );
       assert.strictEqual(result.ok, false);
       assert.strictEqual(result.controls[position].passed, false);
     });
@@ -265,9 +308,10 @@ describe('runNegativeControl verdicts', () => {
   });
 
   test('lists the controls of the forwarded selection from the first listing', () => {
-    const { qualified } = runWith(good);
-    for (const position of [0, 1, 2, 3, 4])
-      assert.strictEqual(qualified[position].listing, listing);
+    const { qualified, listed } = runWith(good);
+    for (const position of [0, 1, 2, 3, 4]) {
+      assert.strictEqual(qualified[position].listing, listed[0] && listingFor([]));
+    }
   });
 
   test('skips every test at runtime in the skipped control and no other', () => {
@@ -275,30 +319,58 @@ describe('runNegativeControl verdicts', () => {
     const skipEnv = { PSP_FIXTURE_SKIP_ALL: '1' };
     assert.strictEqual(qualified[4].partition.length, 2);
     for (const shard of qualified[4].partition) assert.deepStrictEqual(shard.env, skipEnv);
-    for (const position of [0, 1, 2, 3, 5, 6]) {
+    for (const position of [0, 1, 2, 3, 5, 6, 7, 8, 9, 10]) {
       for (const shard of qualified[position].partition) assert.strictEqual(shard.env, undefined);
     }
   });
 
-  test('lists the dependency selection again and keeps the config selection only', () => {
+  test('lists each selection scenario with the config selection only and runs it as listed', () => {
     const { qualified, listed } = runWith(good, {
       options: { cwd: '/consumer', forward: ['--grep', 'cart', '-c', 'a.js'] },
     });
-    assert.deepStrictEqual(listed[1].forward, ['-c', 'a.js', '--project=setup']);
+    // The unfiltered suite, then the three scenarios.
+    assert.deepStrictEqual(
+      listed.map((given) => given.forward),
+      [
+        ['--grep', 'cart', '-c', 'a.js'],
+        ['-c', 'a.js'],
+        ['-c', 'a.js', '--project=setup'],
+        ['-c', 'a.js', '--project', 'setup', 'chromium', '--grep', 'prepare the environment'],
+        ['-c', 'a.js', '--no-deps', '--project=setup', '--project=teardown'],
+      ]
+    );
+    const nativeShards = [{ args: ['--shard=1/2'] }, { args: ['--shard=2/2'] }];
     assert.deepStrictEqual(qualified[0].forward, ['--grep', 'cart', '-c', 'a.js']);
-    assert.deepStrictEqual(qualified[5].forward, ['-c', 'a.js', '--project=setup']);
-    assert.deepStrictEqual(qualified[5].partition, [
-      { args: ['--shard=1/2'] },
-      { args: ['--shard=2/2'] },
-    ]);
-    assert.strictEqual(qualified[5].listing, selectedListing);
+    assert.deepStrictEqual(qualified[5].forward, listed[2].forward);
+    assert.deepStrictEqual(qualified[5].partition, nativeShards);
     assert.deepStrictEqual(qualified[6].forward, ['-c', 'a.js']);
     assert.deepStrictEqual(qualified[6].partition, [{ args: ['--project=teardown'] }]);
-    assert.strictEqual(qualified[6].listing, selectedListing);
+    assert.deepStrictEqual(qualified[7].forward, listed[3].forward);
+    assert.deepStrictEqual(qualified[7].partition, nativeShards);
+    assert.deepStrictEqual(qualified[8].forward, ['-c', 'a.js']);
+    assert.deepStrictEqual(qualified[8].partition, [{ args: ['--project=teardown'] }]);
+    assert.deepStrictEqual(qualified[9].forward, listed[4].forward);
+    assert.deepStrictEqual(qualified[9].partition, nativeShards);
+    assert.deepStrictEqual(qualified[10].forward, ['-c', 'a.js', '--no-deps']);
+    assert.deepStrictEqual(qualified[10].partition, [
+      { args: ['--project=setup'] },
+      { args: ['--project=setup'] },
+    ]);
+  });
+
+  test('builds the dependency scenarios from the unfiltered suite, not a --no-deps listing', () => {
+    const { listed } = runWith(good, { options: { cwd: '/consumer', forward: ['--no-deps'] } });
+    assert.deepStrictEqual(listed[0].forward, ['--no-deps']);
+    assert.deepStrictEqual(listed[1].forward, []);
+  });
+
+  test('reuses the first listing when only the config selection is forwarded', () => {
+    const { listed } = runWith(good);
+    assert.strictEqual(listed.length, 4);
   });
 
   test('throws when the suite cannot form the controls', () => {
-    const run = (given, map) =>
+    const run = (given, message) =>
       assert.throws(
         () =>
           runNegativeControl(
@@ -311,7 +383,7 @@ describe('runNegativeControl verdicts', () => {
               },
             }
           ),
-        map
+        message
       );
     run({ leaves: intended.filter((leaf) => !leaf.serialGroup), dependencies }, /serial group/);
     run(
@@ -334,9 +406,24 @@ describe('listIntended and runPartition against a stub Playwright', () => {
       ['chromium', 'a.spec.js', 'works'],
     ];
     if (args.includes('--list')) {
-      const named = args.filter((arg) => arg.startsWith('--project=')).map((arg) => arg.slice(10));
-      const wanted = named.length ? named.flatMap((name) => [name, ...dependencies[name]]) : null;
-      const chosen = tests.filter(([project]) => !wanted || wanted.includes(project));
+      const named = [];
+      let collecting = false;
+      for (const arg of args) {
+        if (arg === '--project') collecting = true;
+        else if (arg.startsWith('--project=')) named.push(arg.slice(10));
+        else if (arg.startsWith('-')) collecting = false;
+        else if (collecting) named.push(arg);
+      }
+      const at = args.indexOf('--grep');
+      const grep = at === -1 ? '' : args[at + 1];
+      const noDeps = args.includes('--no-deps');
+      const selected = named.length ? named : Object.keys(dependencies);
+      // Filters apply to the selected projects. A selected project with no test left is dropped,
+      // and the projects it needs are added only for the selected projects that remain.
+      const hit = ([project, , title]) => selected.includes(project) && (!grep || title.includes(grep));
+      const top = new Set(tests.filter(hit).map(([project]) => project));
+      const needs = noDeps ? [] : [...top].flatMap((project) => dependencies[project]);
+      const chosen = tests.filter((test) => hit(test) || needs.includes(test[0]));
       const specs = chosen.map(([project, file, title]) => ({
         title, file, line: 1, column: 1, tests: [{ projectName: project, annotations: [] }],
       }));
@@ -386,6 +473,45 @@ describe('listIntended and runPartition against a stub Playwright', () => {
       ['teardown', 'dependency'],
       ['chromium', 'primary'],
     ]);
+  });
+
+  test('keeps a selected dependency project primary when filters leave its dependent no test', () => {
+    const forward = ['--project', 'setup', 'chromium', '--grep', 'prepare'];
+    assert.deepStrictEqual(roles(listIntended({ cwd, forward })), [
+      ['setup', 'primary'],
+      ['teardown', 'dependency'],
+    ]);
+  });
+
+  test('keeps setup a dependency when the filters leave chromium a test', () => {
+    const forward = ['--project', 'setup', 'chromium', '--grep', 'works'];
+    assert.deepStrictEqual(roles(listIntended({ cwd, forward })), [
+      ['setup', 'dependency'],
+      ['teardown', 'dependency'],
+      ['chromium', 'primary'],
+    ]);
+  });
+
+  test('makes every project primary under --no-deps, which empties the dependency map', () => {
+    const listed = listIntended({ cwd, forward: ['--no-deps'] });
+    assert.deepStrictEqual(roles(listed), [
+      ['setup', 'primary'],
+      ['teardown', 'primary'],
+      ['chromium', 'primary'],
+    ]);
+    assert.deepStrictEqual(listed.dependencies, { setup: [], teardown: [], chromium: [] });
+    assert.deepStrictEqual(
+      roles(listIntended({ cwd, forward: ['--project=chromium', '--no-deps'] })),
+      [['chromium', 'primary']]
+    );
+  });
+
+  test('keeps the dependency map of a run without --no-deps', () => {
+    assert.deepStrictEqual(listIntended({ cwd }).dependencies, {
+      setup: ['teardown'],
+      teardown: [],
+      chromium: ['setup', 'teardown'],
+    });
   });
 
   test('runs each shard with its own env on top of the reporter path', () => {
@@ -485,6 +611,16 @@ describe('main exit codes', () => {
       assert.strictEqual(code, 2);
       assert.strictEqual(err, 'error: playwright test --list failed\n');
     }
+  });
+});
+
+describe('probeArgs', () => {
+  test('keeps the config selection and --no-deps of forwarded args, nothing else', () => {
+    assert.deepStrictEqual(
+      probeArgs(['--grep', 'x', '--no-deps', '-c', 'a.js', '--project=chromium']),
+      ['-c', 'a.js', '--no-deps']
+    );
+    assert.deepStrictEqual(probeArgs(['--project', 'setup']), []);
   });
 });
 

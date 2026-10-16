@@ -3,10 +3,10 @@
 /**
  * Negative control. Runs a clean partition of the intended leaf set through `--test-list`, then
  * deliberately broken ones, each end to end: a dropped leaf, a duplicated leaf, a split serial
- * group and a run where every test skips at runtime. A second pair covers a dependency project
- * selected by name, one clean and one that runs only its teardown. The harness must accept the
- * clean ones and reject every broken one with its expected violation kind, otherwise a passing
- * qualification proves nothing.
+ * group and a run where every test skips at runtime. Selection scenarios add a clean and a broken
+ * run each for a dependency project selected by name, selected and filtered down to its own test,
+ * and selected with `--no-deps`. The harness must accept the clean ones and reject every broken one
+ * with its expected violation kind, otherwise a passing qualification proves nothing.
  */
 
 const fs = require('node:fs');
@@ -114,31 +114,105 @@ function pickDependencySelection(dependencies) {
 }
 
 /**
- * Controls for a dependency project selected by name (`--project=P`). Its own leaves are primary,
- * so a run that executes only the project it pulls in (its teardown) must be rejected as missing
- * them. `forward` is the selection to list the intended leaves with. Each control carries the
- * `forward` and `partition` of its run, `[{ name, expected, forward, partition }]`.
+ * Selection scenarios for a dependency project P (a setup project with a teardown project T) that
+ * a dependent project D (a browser project) needs. Each scenario is `{ forward, controls }`:
+ * `forward` is the selection to list the intended leaves with, and `controls(listing)` returns
+ * `[{ name, expected, forward, partition, flagged }]`, a clean run and a broken one. In every
+ * scenario P's own leaves are primary, so a broken run that never executes them must be rejected.
+ *
+ * - P selected by name: a run of T alone leaves P unrun (`missing`).
+ * - P and D selected, then filtered down to P's test: D has no test left, so P is still primary.
+ * - P and T selected with `--no-deps`: both are top-level, so P in every shard is `duplicate`.
+ *
+ * `leaves` is the unfiltered intended set, used to find P's test title. `base` is the config
+ * selection every scenario keeps. Other forwarded arguments are dropped.
  */
-function buildDependencyControls(dependencies, base) {
+function buildSelectionScenarios(dependencies, leaves, base) {
   const { project, implicit } = pickDependencySelection(dependencies);
-  const forward = [...base, `--project=${project}`];
-  return {
-    forward,
-    controls: [
-      {
-        name: `selected ${project} project, clean`,
-        expected: CLEAN,
-        forward,
-        partition: nativePartition(SHARD_COUNT),
+  const needed = dependencyProjects(dependencies);
+  const dependent = Object.keys(dependencies).find(
+    (name) => !needed.has(name) && dependencies[name].includes(project)
+  );
+  const own = leaves.find((leaf) => leaf.project === project);
+  if (!dependent || !own) {
+    throw new Error(
+      `the negative control needs a project that depends on ${project} and a ${project} test`
+    );
+  }
+  const grep = own.titlePath.at(-1).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const keysOf = (listing) =>
+    listing.leaves
+      .filter((leaf) => leaf.project === project && !leaf.dependency)
+      .map((leaf) => leaf.key);
+  const only = (name) => [{ args: [`--project=${name}`] }];
+
+  const selected = [...base, `--project=${project}`];
+  const filtered = [...base, '--project', project, dependent, '--grep', grep];
+  const flat = [...base, '--no-deps'];
+  const topLevel = [...flat, `--project=${project}`, `--project=${implicit}`];
+  return [
+    {
+      forward: selected,
+      controls: (listing) => [
+        {
+          name: `selected ${project} project, clean`,
+          expected: CLEAN,
+          forward: selected,
+          partition: nativePartition(SHARD_COUNT),
+        },
+        {
+          name: `selected ${project} project, only ${implicit} runs`,
+          expected: 'missing',
+          forward: base,
+          partition: only(implicit),
+          flagged: keysOf(listing),
+        },
+      ],
+    },
+    {
+      forward: filtered,
+      controls: (listing) => {
+        if (listing.leaves.some((leaf) => leaf.project === dependent)) {
+          throw new Error(
+            `the ${project} filter of the negative control also selects ${dependent}`
+          );
+        }
+        return [
+          {
+            name: `${project} and ${dependent} selected, filtered to ${project}, clean`,
+            expected: CLEAN,
+            forward: filtered,
+            partition: nativePartition(SHARD_COUNT),
+          },
+          {
+            name: `${project} and ${dependent} selected, filtered to ${project}, only ${implicit} runs`,
+            expected: 'missing',
+            forward: base,
+            partition: only(implicit),
+            flagged: keysOf(listing),
+          },
+        ];
       },
-      {
-        name: `selected ${project} project, only ${implicit} runs`,
-        expected: 'missing',
-        forward: base,
-        partition: [{ args: [`--project=${implicit}`] }],
-      },
-    ],
-  };
+    },
+    {
+      forward: topLevel,
+      controls: (listing) => [
+        {
+          name: `${project} and ${implicit} without dependencies, clean`,
+          expected: CLEAN,
+          forward: topLevel,
+          partition: nativePartition(SHARD_COUNT),
+        },
+        {
+          name: `${project} and ${implicit} without dependencies, ${project} in every shard`,
+          expected: 'duplicate',
+          forward: flat,
+          partition: [...only(project), ...only(project)],
+          flagged: keysOf(listing),
+        },
+      ],
+    },
+  ];
 }
 
 /** Adds `env` to every shard of a partition. */
@@ -160,12 +234,24 @@ function runNegativeControl(options, { log = () => {}, deps = {} } = {}) {
   log(`Playwright ${playwrightVersionValue}, Node ${process.version}`);
 
   const listing = list(options);
+  const listingControls = buildControls(listing.leaves);
   const forward = options.forward || [];
-  const dependencySelection = buildDependencyControls(listing.dependencies, configArgs(forward));
-  const dependencyListing = list({ ...options, forward: dependencySelection.forward });
+  const base = configArgs(forward);
+  // The scenarios are built from the unfiltered suite: filters or `--no-deps` in the forwarded
+  // args could hide the dependency map or the setup test they rely on.
+  const full = forward.length === base.length ? listing : list({ ...options, forward: base });
+  const scenarios = buildSelectionScenarios(full.dependencies, full.leaves, base).flatMap(
+    (scenario) => {
+      const scenarioListing = list({ ...options, forward: scenario.forward });
+      return scenario.controls(scenarioListing).map((control) => ({
+        ...control,
+        listing: scenarioListing,
+      }));
+    }
+  );
   const controls = [
-    ...buildControls(listing.leaves).map((control) => ({ ...control, forward, listing })),
-    ...dependencySelection.controls.map((control) => ({ ...control, listing: dependencyListing })),
+    ...listingControls.map((control) => ({ ...control, forward, listing })),
+    ...scenarios,
   ];
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'psp-negative-'));
   try {
@@ -213,7 +299,7 @@ function runNegativeControl(options, { log = () => {}, deps = {} } = {}) {
 
 module.exports = {
   buildControls,
-  buildDependencyControls,
+  buildSelectionScenarios,
   buildUnits,
   cleanAssignment,
   runNegativeControl,

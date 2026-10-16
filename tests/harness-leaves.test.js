@@ -180,6 +180,20 @@ describe('dependency derivation', () => {
     assert.deepStrictEqual(flags([]), [true, false, true]);
   });
 
+  test('keeps a selected project primary when its dependent has no leaf left after filters', () => {
+    const dependencies = leaves.deriveDependencies(lists);
+    const filtered = [{ project: 'setup' }, { project: 'teardown' }];
+    const flags = (selected) =>
+      leaves.applyDependencies(filtered, dependencies, selected).map((leaf) => leaf.dependency);
+    assert.deepStrictEqual(flags(['setup', 'chromium']), [false, true]);
+    assert.deepStrictEqual(flags(['setup']), [false, true]);
+    const kept = [...filtered, { project: 'chromium' }];
+    assert.deepStrictEqual(
+      leaves.applyDependencies(kept, dependencies, ['setup', 'chromium']).map((l) => l.dependency),
+      [true, true, false]
+    );
+  });
+
   test('derives dependencies from the recorded sample projects', () => {
     assert.deepStrictEqual(leaves.projectNames(sample), [
       'setup',
