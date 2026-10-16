@@ -154,6 +154,18 @@ describe('a value that looks like a rejected flag selects what Playwright select
     });
   }
 
+  test('a variadic option takes its first value even when it looks like a flag', () => {
+    const run = spawnSync(process.execPath, [cli, 'test', '--list', '--project', '--list'], {
+      cwd,
+      encoding: 'utf8',
+    });
+    assert.match(run.stderr, /Project\(s\) "--list" not found/);
+    assert.throws(
+      () => listIntended({ cwd, forward: ['--project', '--list'] }),
+      (error) => /Project\(s\) "--list" not found/.test(error.message)
+    );
+  });
+
   test('the inverted patterns keep the whole suite', () => {
     assert.strictEqual(listed(['--grep-invert', '--list']), listed([]));
   });
