@@ -134,6 +134,13 @@ Counts: high 9, medium 17, low 8, false 1, maybe-false 0. Routed: bad_plan 6 (fi
 | code review | rejected items in its own report | false | reject | its reasons hold |
 | adversarial | four simultaneous finishers fail the fourth | low | patch | documented bound in the decision record |
 
+### Loop 2, Codex round 2 (2026-10-16)
+
+| Source | Finding | Verdict | Route | Evidence or action |
+|---|---|---|---|---|
+| Codex | store.js:90 restore failures in prepare and finish recreate key 1 below surviving keys, jamming finish | medium | patch | epoch per chain: a writer that starts a chain uses its run id as the epoch, so a new chain never collides with old keys |
+| Codex | check.js:81 a partial re-run that dies before Playwright keeps the shard's earlier passing record | false | reject | that record is a complete, passing run of the same shard under the same plan, so coverage is exactly once and the history it feeds is valid; the shard job that died still turns the workflow red |
+
 ## Design Notes
 
 Consumer interface (keep it this short; the user's checkout, install and app-start steps stay theirs):
