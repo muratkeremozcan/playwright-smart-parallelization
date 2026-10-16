@@ -257,6 +257,34 @@ describe('run checks everything before Playwright starts', () => {
     ]);
   });
 
+  test('the shard process gets none of the Action inputs, the token above all', () => {
+    const { j, plan } = planned('disabled');
+    run.setup({ inputs: { plan, shard: '1' }, env: j.env });
+    // A stand-in `npx` on the PATH records the environment the user's command would see.
+    const bin = tmp('psp-bin-');
+    const seen = path.join(bin, 'env.json');
+    fs.writeFileSync(
+      path.join(bin, 'npx'),
+      `#!/usr/bin/env node\nrequire('node:fs').writeFileSync(${JSON.stringify(seen)}, JSON.stringify(process.env));\n`,
+      { mode: 0o755 }
+    );
+    const env = {
+      ...j.env,
+      PATH: `${bin}${path.delimiter}${process.env.PATH}`,
+      PSP_INPUT_GITHUB_TOKEN: 'ghs_secret',
+      PSP_INPUT_PLAN: plan,
+      KEEP_ME: 'yes',
+    };
+    const status = run.exec({ inputs: { plan, shard: '1' }, env, stdio: 'ignore' });
+    assert.strictEqual(status, 0);
+    const child = JSON.parse(fs.readFileSync(seen, 'utf8'));
+    assert.deepStrictEqual(
+      Object.keys(child).filter((name) => name.startsWith('PSP_INPUT_')),
+      []
+    );
+    assert.strictEqual(child.KEEP_ME, 'yes');
+  });
+
   test('a shard outside the plan and another installed Playwright are refused', () => {
     const { j, plan } = planned('native');
     assert.throws(

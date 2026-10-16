@@ -91,7 +91,6 @@ runs:
         PSP_INPUT_PLAN: ${{ inputs.plan }}
         PSP_INPUT_SHARD: ${{ inputs.shard }}
         PSP_INPUT_BLOB_REPORT: ${{ inputs.blob-report }}
-        PSP_INPUT_GITHUB_TOKEN: ${{ inputs.github-token }}
 
     # prepare: decide the mode of the whole run and pin one history snapshot.
     - name: Prepare, history key
@@ -112,7 +111,6 @@ runs:
         PSP_INPUT_PLAN: ${{ inputs.plan }}
         PSP_INPUT_SHARD: ${{ inputs.shard }}
         PSP_INPUT_BLOB_REPORT: ${{ inputs.blob-report }}
-        PSP_INPUT_GITHUB_TOKEN: ${{ inputs.github-token }}
     - name: Prepare, restore the newest history
       id: prepare-restore
       if: inputs.phase == 'prepare' && steps.prepare-key.outputs.restore == 'true'
@@ -139,7 +137,6 @@ runs:
         PSP_INPUT_PLAN: ${{ inputs.plan }}
         PSP_INPUT_SHARD: ${{ inputs.shard }}
         PSP_INPUT_BLOB_REPORT: ${{ inputs.blob-report }}
-        PSP_INPUT_GITHUB_TOKEN: ${{ inputs.github-token }}
         PSP_MATCHED_KEY: ${{ steps.prepare-restore.outputs.cache-matched-key }}
     - name: Prepare, upload the snapshot
       if: inputs.phase == 'prepare' && steps.prepare.outputs.mode == 'balanced'
@@ -169,7 +166,6 @@ runs:
         PSP_INPUT_PLAN: ${{ inputs.plan }}
         PSP_INPUT_SHARD: ${{ inputs.shard }}
         PSP_INPUT_BLOB_REPORT: ${{ inputs.blob-report }}
-        PSP_INPUT_GITHUB_TOKEN: ${{ inputs.github-token }}
     - name: Run, download the snapshot
       if: inputs.phase == 'run' && steps.run-setup.outputs.mode == 'balanced'
       uses: actions/download-artifact@v8
@@ -194,7 +190,6 @@ runs:
         PSP_INPUT_PLAN: ${{ inputs.plan }}
         PSP_INPUT_SHARD: ${{ inputs.shard }}
         PSP_INPUT_BLOB_REPORT: ${{ inputs.blob-report }}
-        PSP_INPUT_GITHUB_TOKEN: ${{ inputs.github-token }}
     - name: Run, upload the record
       if: always() && inputs.phase == 'run' && steps.run-setup.outputs.record == 'true'
       uses: actions/upload-artifact@v7
@@ -231,7 +226,6 @@ runs:
         PSP_INPUT_PLAN: ${{ inputs.plan }}
         PSP_INPUT_SHARD: ${{ inputs.shard }}
         PSP_INPUT_BLOB_REPORT: ${{ inputs.blob-report }}
-        PSP_INPUT_GITHUB_TOKEN: ${{ inputs.github-token }}
     - name: Finish, download the records
       if: inputs.phase == 'finish' && steps.finish-setup.outputs.records == 'true'
       uses: actions/download-artifact@v8
@@ -281,7 +275,6 @@ runs:
         PSP_INPUT_PLAN: ${{ inputs.plan }}
         PSP_INPUT_SHARD: ${{ inputs.shard }}
         PSP_INPUT_BLOB_REPORT: ${{ inputs.blob-report }}
-        PSP_INPUT_GITHUB_TOKEN: ${{ inputs.github-token }}
     - name: Finish, upload the merged report
       if: always() && steps.finish-report.outputs.merged == 'true'
       uses: actions/upload-artifact@v7
@@ -317,7 +310,6 @@ runs:
         PSP_INPUT_PLAN: ${{ inputs.plan }}
         PSP_INPUT_SHARD: ${{ inputs.shard }}
         PSP_INPUT_BLOB_REPORT: ${{ inputs.blob-report }}
-        PSP_INPUT_GITHUB_TOKEN: ${{ inputs.github-token }}
         PSP_STATE_DIR: ${{ steps.finish-setup.outputs.state-dir }}
         PSP_MATCHED_KEY: ${{ steps.cas1-read.outputs.cache-matched-key }}
     - name: History, attempt 1, save
@@ -343,7 +335,6 @@ runs:
         PSP_INPUT_PLAN: ${{ inputs.plan }}
         PSP_INPUT_SHARD: ${{ inputs.shard }}
         PSP_INPUT_BLOB_REPORT: ${{ inputs.blob-report }}
-        PSP_INPUT_GITHUB_TOKEN: ${{ inputs.github-token }}
     - name: History, attempt 1, read the key back
       id: cas1-check
       if: steps.cas1-write.outputs.save == 'true'
@@ -369,7 +360,6 @@ runs:
         PSP_INPUT_PLAN: ${{ inputs.plan }}
         PSP_INPUT_SHARD: ${{ inputs.shard }}
         PSP_INPUT_BLOB_REPORT: ${{ inputs.blob-report }}
-        PSP_INPUT_GITHUB_TOKEN: ${{ inputs.github-token }}
         PSP_STATE_DIR: ${{ steps.finish-setup.outputs.state-dir }}
         PSP_CACHE_HIT: ${{ steps.cas1-check.outputs.cache-hit }}
     # compare-and-swap, attempt 2 of 3
@@ -399,7 +389,6 @@ runs:
         PSP_INPUT_PLAN: ${{ inputs.plan }}
         PSP_INPUT_SHARD: ${{ inputs.shard }}
         PSP_INPUT_BLOB_REPORT: ${{ inputs.blob-report }}
-        PSP_INPUT_GITHUB_TOKEN: ${{ inputs.github-token }}
         PSP_STATE_DIR: ${{ steps.finish-setup.outputs.state-dir }}
         PSP_MATCHED_KEY: ${{ steps.cas2-read.outputs.cache-matched-key }}
     - name: History, attempt 2, save
@@ -425,7 +414,6 @@ runs:
         PSP_INPUT_PLAN: ${{ inputs.plan }}
         PSP_INPUT_SHARD: ${{ inputs.shard }}
         PSP_INPUT_BLOB_REPORT: ${{ inputs.blob-report }}
-        PSP_INPUT_GITHUB_TOKEN: ${{ inputs.github-token }}
     - name: History, attempt 2, read the key back
       id: cas2-check
       if: steps.cas2-write.outputs.save == 'true'
@@ -451,7 +439,6 @@ runs:
         PSP_INPUT_PLAN: ${{ inputs.plan }}
         PSP_INPUT_SHARD: ${{ inputs.shard }}
         PSP_INPUT_BLOB_REPORT: ${{ inputs.blob-report }}
-        PSP_INPUT_GITHUB_TOKEN: ${{ inputs.github-token }}
         PSP_STATE_DIR: ${{ steps.finish-setup.outputs.state-dir }}
         PSP_CACHE_HIT: ${{ steps.cas2-check.outputs.cache-hit }}
     # compare-and-swap, attempt 3 of 3
@@ -481,7 +468,6 @@ runs:
         PSP_INPUT_PLAN: ${{ inputs.plan }}
         PSP_INPUT_SHARD: ${{ inputs.shard }}
         PSP_INPUT_BLOB_REPORT: ${{ inputs.blob-report }}
-        PSP_INPUT_GITHUB_TOKEN: ${{ inputs.github-token }}
         PSP_STATE_DIR: ${{ steps.finish-setup.outputs.state-dir }}
         PSP_MATCHED_KEY: ${{ steps.cas3-read.outputs.cache-matched-key }}
     - name: History, attempt 3, save
@@ -507,7 +493,6 @@ runs:
         PSP_INPUT_PLAN: ${{ inputs.plan }}
         PSP_INPUT_SHARD: ${{ inputs.shard }}
         PSP_INPUT_BLOB_REPORT: ${{ inputs.blob-report }}
-        PSP_INPUT_GITHUB_TOKEN: ${{ inputs.github-token }}
     - name: History, attempt 3, read the key back
       id: cas3-check
       if: steps.cas3-write.outputs.save == 'true'
@@ -533,7 +518,6 @@ runs:
         PSP_INPUT_PLAN: ${{ inputs.plan }}
         PSP_INPUT_SHARD: ${{ inputs.shard }}
         PSP_INPUT_BLOB_REPORT: ${{ inputs.blob-report }}
-        PSP_INPUT_GITHUB_TOKEN: ${{ inputs.github-token }}
         PSP_STATE_DIR: ${{ steps.finish-setup.outputs.state-dir }}
         PSP_CACHE_HIT: ${{ steps.cas3-check.outputs.cache-hit }}
 
@@ -554,4 +538,3 @@ runs:
         PSP_INPUT_PLAN: ${{ inputs.plan }}
         PSP_INPUT_SHARD: ${{ inputs.shard }}
         PSP_INPUT_BLOB_REPORT: ${{ inputs.blob-report }}
-        PSP_INPUT_GITHUB_TOKEN: ${{ inputs.github-token }}

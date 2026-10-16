@@ -13,9 +13,12 @@ const { ATTEMPTS } = require('../lib/store');
 const { CACHE_PATH } = require('../lib/identity');
 const { INPUTS, envName } = require('../lib/inputs');
 
-const envBlock = (indent, extra = {}) => {
+// Only the step that reads the jobs API gets the token; above all, the step that runs the user's
+// Playwright command never has it in its environment.
+const envBlock = (indent, extra = {}, { token = false } = {}) => {
   const pad = ' '.repeat(indent);
-  const lines = INPUTS.map((i) => `${pad}${envName(i)}: \${{ inputs.${i} }}`);
+  const names = INPUTS.filter((i) => token || i !== 'github-token');
+  const lines = names.map((i) => `${pad}${envName(i)}: \${{ inputs.${i} }}`);
   for (const [k, v] of Object.entries(extra)) lines.push(`${pad}${k}: ${v}`);
   return lines.join('\n');
 };
@@ -203,7 +206,7 @@ ${envBlock(8)}
       shell: bash
       run: ${node('finish-check')}
       env:
-${envBlock(8)}
+${envBlock(8, {}, { token: true })}
     - name: Finish, merge the blob reports
       id: finish-report
       if: always() && inputs.phase == 'finish' && steps.finish-setup.outcome == 'success'

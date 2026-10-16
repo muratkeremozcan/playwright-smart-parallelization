@@ -2,7 +2,8 @@
  * Tests for action.yml, the public interface of the action.
  *
  * The file is rendered by scripts/render-action.js, so it must equal that output. Every Node step
- * receives every input under its PSP_INPUT_ name, the only actions it uses are GitHub's official
+ * receives every input under its PSP_INPUT_ name except the token, which only the step that reads
+ * the jobs API gets, the only actions it uses are GitHub's official
  * cache and artifact actions, and the compare-and-swap of the history is unrolled into exactly the
  * attempts the store counts.
  */
@@ -54,7 +55,7 @@ describe('steps', () => {
       const match = /^node "\$GITHUB_ACTION_PATH\/main\.js" ([\w-]+)$/.exec(step.run);
       assert.ok(match, step.run);
       assert.ok(STEPS[match[1]], `main.js has the step ${match[1]}`);
-      for (const input of INPUTS) {
+      for (const input of INPUTS.filter((i) => i !== 'github-token')) {
         assert.strictEqual(
           step.env[envName(input)],
           `\${{ inputs.${input} }}`,
@@ -62,6 +63,11 @@ describe('steps', () => {
         );
       }
     }
+  });
+
+  test('gives the token to the step that reads the jobs API and to no other step', () => {
+    const holders = nodeSteps.filter((s) => envName('github-token') in s.env).map((s) => s.id);
+    assert.deepStrictEqual(holders, ['finish-check']);
   });
 
   test('uses only the official cache and artifact actions, pinned to a major', () => {
