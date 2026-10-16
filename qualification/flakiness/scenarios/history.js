@@ -236,9 +236,9 @@ function interruptedAttempts(file) {
   let count = 0;
   const visit = (suite) => {
     for (const spec of suite.specs || []) {
-      // The same title in another file is another test.
-      if (spec.title !== 'volatile step' || path.basename(spec.file) !== 'volatile.spec.js')
-        continue;
+      // The file of a suite is relative to the test directory, so a file of the same name in a
+      // subdirectory is another test. The file of a spec is relative to the working directory.
+      if (spec.title !== 'volatile step' || suite.file !== 'volatile.spec.js') continue;
       for (const test of spec.tests) {
         count += test.results.filter((result) => result.status === 'interrupted').length;
       }

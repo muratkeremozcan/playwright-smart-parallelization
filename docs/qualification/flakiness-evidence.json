@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-16T07:33:52.165Z",
+  "generatedAt": "2026-10-16T07:46:51.540Z",
   "group": "all",
   "versions": {
     "engine": "@flakiness/playwright@2.0.2",
@@ -704,7 +704,7 @@
         "buildExit": 0,
         "testsInSuite": 54,
         "testsHintedWithCompleteInput": 54,
-        "testsHintedWithOneReport": 48,
+        "testsHintedWithOneReport": 50,
         "unreadableInputExit": 1,
         "unreadableInputMessage": "cannot read report \"absent-shard-2.json\": ENOENT: no such file or directory, open 'absent-shard-2.json'"
       }
@@ -799,12 +799,12 @@
       "evidence": {
         "testId": "volatile.spec.js › volatile step",
         "pricesBeforeMs": {
-          "chromium": 1030,
-          "firefox": 1133
+          "chromium": 1040,
+          "firefox": 1144
         },
         "pricesAfterMs": {
-          "chromium": 1030,
-          "firefox": 1133
+          "chromium": 1040,
+          "firefox": 1144
         }
       }
     },
@@ -817,12 +817,12 @@
       "evidence": {
         "testId": "volatile.spec.js › volatile step",
         "pricesBeforeMs": {
-          "chromium": 1030,
-          "firefox": 1133
+          "chromium": 1040,
+          "firefox": 1144
         },
         "pricesAfterMs": {
-          "chromium": 9102,
-          "firefox": 9089
+          "chromium": 9091,
+          "firefox": 9078
         }
       }
     },
@@ -836,14 +836,14 @@
         "exit": 130,
         "reportWritten": true,
         "interruptedAttempts": 1,
-        "cancelledAttemptMs": 322,
+        "cancelledAttemptMs": 320,
         "pricesBeforeMs": {
-          "chromium": 1030,
-          "firefox": 1133
+          "chromium": 1040,
+          "firefox": 1144
         },
         "pricesAfterMs": {
-          "chromium": 1030,
-          "firefox": 1133
+          "chromium": 1040,
+          "firefox": 1144
         }
       }
     },
@@ -854,14 +854,14 @@
       "title": "a test that now takes 100 ms instead of a second is merged into history",
       "status": "fail",
       "evidence": {
-        "newRunMs": 126,
+        "newRunMs": 122,
         "pricesBeforeMs": {
-          "chromium": 1030,
-          "firefox": 1133
+          "chromium": 1040,
+          "firefox": 1144
         },
         "pricesAfterMs": {
-          "chromium": 1030,
-          "firefox": 1133
+          "chromium": 1040,
+          "firefox": 1144
         }
       }
     },
@@ -890,11 +890,11 @@
       "title": "history rebuilt from the reports of a window of recent passing runs",
       "status": "pass",
       "evidence": {
-        "durationBeforeMs": 1133,
-        "durationInFasterWindowMs": 124,
-        "durationWithFailedRunInWindowMs": 9102,
-        "durationWithFailedRunLeftOutMs": 1133,
-        "durationWithSlowPassingRunInWindowMs": 1133
+        "durationBeforeMs": 1144,
+        "durationInFasterWindowMs": 125,
+        "durationWithFailedRunInWindowMs": 9091,
+        "durationWithFailedRunLeftOutMs": 1144,
+        "durationWithSlowPassingRunInWindowMs": 1144
       }
     },
     {
@@ -1197,7 +1197,7 @@
     "serial": 208285,
     "balance": 233352,
     "assignment": 171216,
-    "history": 160609,
+    "history": 160860,
     "privacy": 222521
   }
 }
