@@ -13,7 +13,7 @@ const { execute, filterProjects, plan, writeJson } = require('../drive');
 const { assign } = require('../engine');
 const { coverageKinds } = require('./coverage');
 
-const SLOW_CLOCK = path.resolve(__dirname, '..', 'slow-clock.js');
+const SLOW_CLOCK = path.resolve(__dirname, '..', '..', 'lib', 'slow-clock.js');
 
 function digest(value) {
   return crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex').slice(0, 12);

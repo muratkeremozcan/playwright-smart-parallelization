@@ -150,24 +150,33 @@ the harness has no allowance for a leaf that is meant to skip. Other engines plu
 
 ## Engine qualification
 
-`qualification/nsxbet` installs the latest published `@nsxbet/playwright-orchestrator` in its own
-directory with a committed lockfile and drives it through the harness. It runs the eight
-compatibility proofs plus a damaged timing file and two runs racing to publish history, checks that
-the plan and timing steps make no outbound connection, and measures balance and footprint against
-native sharding. [`docs/qualification/nsxbet.md`](docs/qualification/nsxbet.md) holds the verdict,
-the resolved versions and the evidence for every row.
+Each candidate engine is installed from npm in its own directory with a committed lockfile and
+driven through the harness: `qualification/nsxbet` for `@nsxbet/playwright-orchestrator` and
+`qualification/flakiness` for `@flakiness/playwright`. Both run the same eight compatibility proofs
+plus a damaged timing file and two runs racing to publish history, check that the engine makes no
+outbound connection, and measure balance and footprint against native sharding. Shared code lives
+in `qualification/lib`.
+
+- [`docs/qualification/nsxbet.md`](docs/qualification/nsxbet.md) holds the NSXBet verdict, the
+  resolved versions and the evidence for every row.
+- [`docs/qualification/flakiness.md`](docs/qualification/flakiness.md) does the same for Flakiness.
+- [`docs/qualification/comparison.md`](docs/qualification/comparison.md) puts the two side by side.
 
 ```sh
 npm run qualify:install
 npm run qualify:nsxbet
 npm run qualify:nsxbet:test
+npm run qualify:flakiness
+npm run qualify:flakiness:test
 ```
 
-`qualify:nsxbet` writes `qualification/nsxbet/evidence.json` (`--out FILE` picks another path).
-`--group coverage|serial|assignment|history|privacy` collects one group, and `--merge FILE...` joins the evidence of the groups.
-`qualify:nsxbet:test` asserts every result; with `PSP_NSX_EVIDENCE=FILE` it reads an earlier
-evidence file instead of collecting again. The `Qualification` workflow runs both on pull requests
-that touch `qualification/`, `harness/` or the fixture, with the five groups on separate runners.
+`qualify:ENGINE` writes `qualification/ENGINE/evidence.json` (`--out FILE` picks another path).
+`--group NAME` collects one group (`coverage`, `serial`, `assignment`, `history` and `privacy` for
+both engines, plus `balance` for Flakiness), and `--merge FILE...` joins the evidence of the groups.
+`qualify:ENGINE:test` asserts every result; with `PSP_NSX_EVIDENCE=FILE` or `PSP_FLK_EVIDENCE=FILE`
+it reads an earlier evidence file instead of collecting again. The `Qualification` workflow runs
+both engines on pull requests that touch `qualification/`, `harness/` or the fixture, with every
+group on its own runner.
 
 ## License
 

@@ -9,20 +9,16 @@ const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 const { assign, extractTiming, mergeTiming, packageRoot, runEngine } = require('../engine');
+const { directoryBytes, median, size } = require('../../lib/measure');
 const { chromiumList } = require('./assignment');
 
 const REPEATS = 5;
-
-function median(values) {
-  const sorted = [...values].sort((a, b) => a - b);
-  return sorted[Math.floor(sorted.length / 2)];
-}
 
 function repeat(call) {
   return Math.round(median(Array.from({ length: REPEATS }, () => call().ms)));
 }
 
-const RSS_PRELOAD = path.resolve(__dirname, '..', 'peak-rss.js');
+const RSS_PRELOAD = path.resolve(__dirname, '..', '..', 'lib', 'peak-rss.js');
 
 /**
  * Median peak resident set size, in kilobytes, of `REPEATS` runs of a command. `call` receives
@@ -65,20 +61,6 @@ function memory(dir, { list, timing, report, artifact, merged }) {
       mergeTiming({ existing: timing, artifacts: [artifact], output: merged }, options)
     ),
   };
-}
-
-function directoryBytes(dir) {
-  let total = 0;
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) total += directoryBytes(full);
-    else if (entry.isFile()) total += fs.statSync(full).size;
-  }
-  return total;
-}
-
-function size(file) {
-  return fs.statSync(file).size;
 }
 
 function footprint(ctx) {

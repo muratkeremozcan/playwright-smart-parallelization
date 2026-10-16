@@ -9,6 +9,8 @@
  * `fail` is a reproduced failure. Only rows about the engine decide a proof or an extra case.
  */
 
+const { verdictFor } = require('../lib/evidence');
+
 const EXPECTED_ROWS = {
   '1.combined': 'fail',
   '1.jobs': 'pass',
@@ -76,6 +78,7 @@ const ROW_SUBJECTS = {
   '6.missing-blob': 'playwright',
 };
 
-const VERDICT = 'does not qualify';
+// Derived from the proof results by the rule in `qualification/lib/evidence.js`.
+const VERDICT = verdictFor(EXPECTED_PROOFS);
 
 module.exports = { EXPECTED_EXTRAS, EXPECTED_PROOFS, EXPECTED_ROWS, ROW_SUBJECTS, VERDICT };

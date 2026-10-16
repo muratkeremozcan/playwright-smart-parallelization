@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
-const { GUARD, attemptsIn, guardEnv, readLog } = require('../../scenarios/network');
+const { GUARD, attemptsIn, guardEnv, readLog } = require('../netcheck');
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'psp-guard-test-'));
 after(() => fs.rmSync(dir, { recursive: true, force: true }));
@@ -71,7 +71,7 @@ describe('net-guard', () => {
 });
 
 describe('peak-rss', () => {
-  const PRELOAD = path.resolve(__dirname, '..', '..', 'peak-rss.js');
+  const PRELOAD = path.resolve(__dirname, '..', 'peak-rss.js');
 
   test('appends the peak memory of a process to the log when it exits', () => {
     const log = path.join(dir, 'rss.log');

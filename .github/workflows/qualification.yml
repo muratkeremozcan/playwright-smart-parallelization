@@ -1,7 +1,9 @@
-# Qualifies the NSXBet Playwright orchestrator against the consumer fixture. Five independent
-# groups of checks collect evidence, one per runner, then a final job merges the evidence and
-# asserts every result with `node --test`. It runs on demand and on pull requests that touch the
-# qualification code, the harness or the fixture.
+# Qualifies the NSXBet Playwright orchestrator and the Flakiness Playwright reporter against the
+# consumer fixture. The independent groups of checks of each engine collect evidence, one per
+# runner, then one final job per engine merges its evidence and asserts every result with
+# `node --test`. A failed leg of one engine leaves the assertions of the other engine running. It
+# runs on demand and on pull requests that touch the qualification code, the harness or the
+# fixture.
 name: Qualification
 
 on:
@@ -21,16 +23,21 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  collect:
-    name: collect ${{ matrix.group }}
+  collect-nsxbet:
+    name: collect nsxbet ${{ matrix.group }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        # Each group runs alone on its runner, so the groups that measure balance (serial) and
-        # footprint (privacy) have no other work competing with them.
-        group: [coverage, serial, assignment, history, privacy]
+        # Each group runs alone on its runner, so the groups that measure balance and footprint
+        # have no other work competing with them.
+        group:
+          - coverage
+          - serial
+          - assignment
+          - history
+          - privacy
     steps:
       - uses: actions/checkout@v7
         with:
@@ -44,6 +51,7 @@ jobs:
             package-lock.json
             fixtures/consumer/package-lock.json
             qualification/nsxbet/package-lock.json
+            qualification/flakiness/package-lock.json
 
       - name: Install
         run: |
@@ -60,13 +68,63 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: evidence-${{ matrix.group }}
+          name: evidence-nsxbet-${{ matrix.group }}
           path: ${{ runner.temp }}/evidence-${{ matrix.group }}.json
           if-no-files-found: ignore
 
-  assert:
-    name: assert the results
-    needs: collect
+  collect-flakiness:
+    name: collect flakiness ${{ matrix.group }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        # Each group runs alone on its runner, so the groups that measure balance and footprint
+        # have no other work competing with them.
+        group:
+          - coverage
+          - serial
+          - balance
+          - assignment
+          - history
+          - privacy
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            fixtures/consumer/package-lock.json
+            qualification/nsxbet/package-lock.json
+            qualification/flakiness/package-lock.json
+
+      - name: Install
+        run: |
+          npm ci
+          npm run qualify:install
+
+      - name: Collect evidence
+        env:
+          GROUP: ${{ matrix.group }}
+          OS_BLOCK: ${{ matrix.group == 'privacy' && '--require-os-block' || '' }}
+        run: npm run qualify:flakiness -- --group "$GROUP" --out "$RUNNER_TEMP/evidence-$GROUP.json" $OS_BLOCK
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: evidence-flakiness-${{ matrix.group }}
+          path: ${{ runner.temp }}/evidence-${{ matrix.group }}.json
+          if-no-files-found: ignore
+
+  assert-nsxbet:
+    name: assert the nsxbet results
+    needs: collect-nsxbet
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -80,7 +138,7 @@ jobs:
 
       - uses: actions/download-artifact@v7
         with:
-          pattern: evidence-*
+          pattern: evidence-nsxbet-*
           path: ${{ runner.temp }}/parts
 
       - name: Merge the evidence
@@ -96,5 +154,40 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: nsxbet-evidence
+          path: ${{ runner.temp }}/evidence.json
+          if-no-files-found: ignore
+
+  assert-flakiness:
+    name: assert the flakiness results
+    needs: collect-flakiness
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: evidence-flakiness-*
+          path: ${{ runner.temp }}/parts
+
+      - name: Merge the evidence
+        run: node qualification/flakiness/run.js --merge "$RUNNER_TEMP"/parts/*/*.json --out "$RUNNER_TEMP/evidence.json"
+
+      - name: Assert the results
+        env:
+          PSP_FLK_EVIDENCE: ${{ runner.temp }}/evidence.json
+        run: npm run qualify:flakiness:test
+
+      - name: Upload merged evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: flakiness-evidence
           path: ${{ runner.temp }}/evidence.json
           if-no-files-found: ignore
