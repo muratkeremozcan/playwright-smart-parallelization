@@ -13,6 +13,7 @@ const { resolveFromCwd } = require('../../lib/playwright');
 const { greenProject, redProject } = require('../../lib/variants');
 const { buildTimings } = require('../engine');
 const { scrub } = require('../playwright');
+const { PROJECTS, VOLATILE, greenBaseline } = require('./volatile');
 const {
   buildHistory,
   flakinessReports,
@@ -28,10 +29,6 @@ const CANCEL_AFTER_MS = 300;
 const SIGINT_EXIT = 130;
 const SLOW_FAILURE_MS = 3000;
 const FASTER_MS = 100;
-// The browser projects of the fixture.
-const PROJECTS = ['chromium', 'firefox'];
-// The volatile test, as `testDurations` keys it.
-const VOLATILE = 'volatile.spec.js › volatile step';
 
 /** The first line of a stderr text with each path reduced to its file name. */
 function message(stderr) {
@@ -143,14 +140,7 @@ function noneLowered(before, after, share = 0.9) {
 
 /** The volatile variants: a passing run as history, and failing runs of the same test. */
 function volatileRuns(ctx) {
-  // The durations stay unrounded: equal durations in two projects are stored once by `build`,
-  // which row `8.equal-durations` covers on its own, and these rows measure the longest-duration
-  // rule on history that keeps each project apart.
-  const green = ctx.baseline({ name: 'volatile-green', cwd: greenProject(ctx), roundMs: 0 });
-  const perProject = testDurations(green.history.file, { byEnvironment: true });
-  if (perProject.get(`chromium › ${VOLATILE}`) === perProject.get(`firefox › ${VOLATILE}`)) {
-    throw new Error('the volatile test took exactly as long in both projects; run again');
-  }
+  const green = greenBaseline(ctx);
   const options = {
     cwd: redProject(ctx),
     shards: 2,
@@ -232,7 +222,9 @@ function interruptedAttempts(file) {
   let count = 0;
   const visit = (suite) => {
     for (const spec of suite.specs || []) {
-      if (spec.title !== 'volatile step') continue;
+      // The same title in another file is another test.
+      if (spec.title !== 'volatile step' || path.basename(spec.file) !== 'volatile.spec.js')
+        continue;
       for (const test of spec.tests) {
         count += test.results.filter((result) => result.status === 'interrupted').length;
       }
@@ -448,6 +440,7 @@ module.exports = {
   failedRuns,
   equalDurations,
   fasterTest,
+  interruptedAttempts,
   lostUpdates,
   racingPublish,
   shardReports,

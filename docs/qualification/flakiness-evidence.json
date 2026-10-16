@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-16T07:07:52.951Z",
+  "generatedAt": "2026-10-16T07:29:52.108Z",
   "group": "all",
   "versions": {
     "engine": "@flakiness/playwright@2.0.2",
@@ -699,11 +699,11 @@
       "id": "6.missing-shard-report",
       "proof": 6,
       "title": "the report of shard 2 is missing when history is built",
-      "status": "fail",
+      "status": "pass",
       "evidence": {
         "buildExit": 0,
         "testsWithCompleteInput": 28,
-        "testsWithOneReport": 26,
+        "testsWithOneReport": 28,
         "unreadableInputExit": 1,
         "unreadableInputMessage": "cannot read report \"absent-shard-2.json\": ENOENT: no such file or directory, open 'absent-shard-2.json'"
       }
@@ -752,8 +752,8 @@
         "testsExecuted": 58,
         "attachmentReferences": 16,
         "attachmentReferencesByName": {
-          "note": 6,
-          "error-context": 10
+          "error-context": 10,
+          "note": 6
         },
         "attachmentsStored": 16
       }
@@ -766,7 +766,7 @@
       "status": "fail",
       "evidence": {
         "exit": 0,
-        "mergedTotal": 29,
+        "mergedTotal": 30,
         "completeTotal": 58
       }
     },
@@ -798,12 +798,12 @@
       "evidence": {
         "testId": "volatile.spec.js › volatile step",
         "pricesBeforeMs": {
-          "chromium": 1022,
-          "firefox": 1033
+          "chromium": 1039,
+          "firefox": 1143
         },
         "pricesAfterMs": {
-          "chromium": 1022,
-          "firefox": 1033
+          "chromium": 1039,
+          "firefox": 1143
         }
       }
     },
@@ -816,12 +816,12 @@
       "evidence": {
         "testId": "volatile.spec.js › volatile step",
         "pricesBeforeMs": {
-          "chromium": 1022,
-          "firefox": 1033
+          "chromium": 1039,
+          "firefox": 1143
         },
         "pricesAfterMs": {
-          "chromium": 9083,
-          "firefox": 9086
+          "chromium": 9088,
+          "firefox": 9094
         }
       }
     },
@@ -835,14 +835,14 @@
         "exit": 130,
         "reportWritten": true,
         "interruptedAttempts": 1,
-        "cancelledAttemptMs": 321,
+        "cancelledAttemptMs": 317,
         "pricesBeforeMs": {
-          "chromium": 1022,
-          "firefox": 1033
+          "chromium": 1039,
+          "firefox": 1143
         },
         "pricesAfterMs": {
-          "chromium": 1022,
-          "firefox": 1033
+          "chromium": 1039,
+          "firefox": 1143
         }
       }
     },
@@ -853,14 +853,14 @@
       "title": "a test that now takes 100 ms instead of a second is merged into history",
       "status": "fail",
       "evidence": {
-        "newRunMs": 123,
+        "newRunMs": 122,
         "pricesBeforeMs": {
-          "chromium": 1022,
-          "firefox": 1033
+          "chromium": 1039,
+          "firefox": 1143
         },
         "pricesAfterMs": {
-          "chromium": 1022,
-          "firefox": 1033
+          "chromium": 1039,
+          "firefox": 1143
         }
       }
     },
@@ -889,11 +889,11 @@
       "title": "history rebuilt from the reports of a window of recent passing runs",
       "status": "pass",
       "evidence": {
-        "durationBeforeMs": 1033,
+        "durationBeforeMs": 1143,
         "durationInFasterWindowMs": 123,
-        "durationWithFailedRunInWindowMs": 9086,
-        "durationWithFailedRunLeftOutMs": 1033,
-        "durationWithSlowPassingRunInWindowMs": 1033
+        "durationWithFailedRunInWindowMs": 9094,
+        "durationWithFailedRunLeftOutMs": 1143,
+        "durationWithSlowPassingRunInWindowMs": 1143
       }
     },
     {
@@ -1040,7 +1040,7 @@
     {
       "number": 6,
       "title": "Exit codes, retries, traces and reports stay valid",
-      "status": "fail"
+      "status": "pass"
     },
     {
       "number": 7,
@@ -1196,7 +1196,7 @@
     "serial": 208285,
     "balance": 233352,
     "assignment": 171216,
-    "history": 160288,
+    "history": 160050,
     "privacy": 222521
   }
 }

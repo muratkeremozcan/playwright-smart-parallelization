@@ -187,7 +187,7 @@ function createContext({ log = () => {}, source = FIXTURE } = {}) {
     /**
      * Native sharding with the Flakiness reporter present (it writes the reports the history is
      * built from) and the timings file built from those reports. `name` keys the run, `cwd`
-     * picks the project (the fixture by default) and `roundMs` rounds the durations, none for 0.
+     * picks the project (the fixture by default) `roundMs` rounds the durations, none for 0, and `env` is added to the environment of every shard.
      */
     baseline({
       name = 'native2',
@@ -195,14 +195,15 @@ function createContext({ log = () => {}, source = FIXTURE } = {}) {
       cwd = source,
       fullyParallel = false,
       roundMs = HISTORY_ROUND_MS,
+      env,
     } = {}) {
-      const asked = JSON.stringify({ shards, cwd, fullyParallel, roundMs });
+      const asked = JSON.stringify({ shards, cwd, fullyParallel, roundMs, env });
       if (baselines.has(name) && baselines.get(name) !== asked) {
         throw new Error(`baseline ${name} was asked for again with other options`);
       }
       baselines.set(name, asked);
       return ctx.once(`baseline:${name}`, () => {
-        const run = ctx.run({ name, shards, cwd, workers: 1, fullyParallel, json: true });
+        const run = ctx.run({ name, shards, cwd, workers: 1, fullyParallel, json: true, env });
         const history = drive.buildHistory({
           dir: run.dir,
           reports: drive.flakinessReports(run.partition),

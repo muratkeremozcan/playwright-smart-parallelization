@@ -10,8 +10,9 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-// The volatile test lasts `PSP_VOLATILE_MS` ms (one second by default) in the green variant, and
-// fails after `PSP_FAIL_AFTER_MS` ms (at once by default) in the red one.
+// The volatile test lasts `PSP_VOLATILE_MS` ms (one second by default) in the green variant, plus
+// `PSP_VOLATILE_FIREFOX_EXTRA_MS` in the firefox project, and fails after `PSP_FAIL_AFTER_MS` ms
+// (at once by default) in the red one.
 const GREEN = `'use strict';
 
 const { test, request } = require('@playwright/test');
@@ -25,7 +26,8 @@ test('volatile step', async ({}, testInfo) => {
     setTimeout(() => process.kill(process.ppid, 'SIGINT'), Number(process.env.PSP_CANCEL_AFTER_MS));
   }
   try {
-    await sleep(Number(process.env.PSP_VOLATILE_MS || 1000));
+    const extra = testInfo.project.name === 'firefox' ? process.env.PSP_VOLATILE_FIREFOX_EXTRA_MS : 0;
+    await sleep(Number(process.env.PSP_VOLATILE_MS || 1000) + Number(extra || 0));
   } finally {
     await api.tracing.stop({ path: testInfo.outputPath('api-trace.zip') });
   }

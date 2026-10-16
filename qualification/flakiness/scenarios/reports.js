@@ -17,8 +17,9 @@ const {
   statsOf,
 } = require('../../lib/artifacts');
 const { coverageKinds } = require('../../lib/scoring');
-const { greenProject, redProject } = require('../../lib/variants');
+const { redProject } = require('../../lib/variants');
 const { flakinessReports, testDurations } = require('../drive');
+const { greenBaseline } = require('./volatile');
 
 // The volatile test runs in two projects and fails on all three attempts (retries: 2).
 const EXPECTED_ATTEMPTS = 6;
@@ -26,11 +27,7 @@ const EXPECTED_ATTEMPTS = 6;
 /** The failing variant: balanced from the passing variant's history, and natively without the reporter. */
 function redRuns(ctx) {
   const cwd = redProject(ctx);
-  const green = ctx.baseline({
-    name: 'volatile-green',
-    cwd: greenProject(ctx),
-    roundMs: 0,
-  });
+  const green = greenBaseline(ctx);
   const red = ctx.run({
     name: 'volatile-red',
     cwd,

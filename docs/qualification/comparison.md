@@ -13,7 +13,7 @@ A proof fails when any of its engine rows fails.
 | P3    | Filters and project selection mean the same as before                          | pass   | pass      |
 | P4    | Every shard uses one assignment                                                | pass   | pass      |
 | P5    | Corrupt or mismatched input cannot split shards                                | pass   | fail      |
-| P6    | Exit codes, retries, traces and reports stay valid                             | fail   | fail      |
+| P6    | Exit codes, retries, traces and reports stay valid                             | fail   | pass      |
 | P7    | A run with no history is complete, new tests are kept                          | pass   | fail      |
 | P8    | Failed or cancelled runs and a damaged history file never replace good history | fail   | fail      |
 | X1    | One shard with a damaged timing file                                           | fail   | pass      |
@@ -30,7 +30,7 @@ The engines run different batteries. The table counts the engine rows of each pr
 | P3    | 2 (0)                | 2 (0)                   |
 | P4    | 1 (0)                | 3 (0)                   |
 | P5    | 6 (0)                | 10 (2)                  |
-| P6    | 4 (1)                | 4 (1)                   |
+| P6    | 4 (1)                | 4 (0)                   |
 | P7    | 2 (0)                | 3 (1)                   |
 | P8    | 3 (3)                | 6 (3)                   |
 | X1    | 2 (2)                | 1 (0)                   |

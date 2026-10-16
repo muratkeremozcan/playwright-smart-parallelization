@@ -108,6 +108,7 @@ describe('fixture variants', () => {
     const green = edits.find(([name]) => name === 'variant-green')[1]['tests/volatile.spec.js'];
     const red = edits.find(([name]) => name === 'variant-red')[1]['tests/volatile.spec.js'];
     assert.match(green, /process\.env\.PSP_VOLATILE_MS \|\| 1000/);
+    assert.match(green, /PSP_VOLATILE_FIREFOX_EXTRA_MS/);
     assert.match(red, /process\.env\.PSP_FAIL_AFTER_MS \|\| 0/);
   });
 
