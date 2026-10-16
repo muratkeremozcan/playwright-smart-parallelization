@@ -12,7 +12,7 @@ const { spawnSync } = require('node:child_process');
 const { resolveFromCwd } = require('../../lib/playwright');
 const { greenProject, redProject } = require('../../lib/variants');
 const { buildTimings } = require('../engine');
-const { scrub } = require('../playwright');
+const { listShard, parsePlan, scrub } = require('../playwright');
 const { PROJECTS, VOLATILE, greenBaseline } = require('./volatile');
 const {
   buildHistory,
@@ -65,6 +65,19 @@ function reportAndHistory(ctx, name) {
   return { dir, base: ctx.baseline().history.file, reports: runReports(ctx) };
 }
 
+/** How many tests of the fixture the reporter finds a duration hint for in a timings file. */
+function hintedTests(ctx, timings) {
+  const listed = listShard({
+    cwd: ctx.cwd,
+    config: ctx.config(),
+    shard: '1/2',
+    env: { PSP_FLK_TIMINGS: timings, FLAKINESS_OUTPUT_DIR: ctx.reportDir('hints') },
+  });
+  const plan = parsePlan(listed.output);
+  if (!plan) throw new Error('the reporter printed no plan for the timings file');
+  return { hinted: plan.hinted, tests: plan.tests };
+}
+
 /** A shard report missing, or damaged, when history is built. */
 function shardReports(ctx) {
   const { dir, reports } = reportAndHistory(ctx, 'shard-reports');
@@ -75,17 +88,18 @@ function shardReports(ctx) {
     inputs: [first, path.join(dir, 'absent-shard-2.json')],
     output: path.join(dir, 'absent.json'),
   });
-  const completeTests = testDurations(complete.file).size;
-  const partialTests = testDurations(partial.file).size;
+  const completeHints = hintedTests(ctx, complete.file);
+  const partialHints = hintedTests(ctx, partial.file);
   return {
     id: '6.missing-shard-report',
     proof: 6,
     title: 'the report of shard 2 is missing when history is built',
-    status: partialTests < completeTests ? 'fail' : 'pass',
+    status: partialHints.hinted < completeHints.hinted ? 'fail' : 'pass',
     evidence: {
       buildExit: partial.call.status,
-      testsWithCompleteInput: completeTests,
-      testsWithOneReport: partialTests,
+      testsInSuite: completeHints.tests,
+      testsHintedWithCompleteInput: completeHints.hinted,
+      testsHintedWithOneReport: partialHints.hinted,
       unreadableInputExit: absent.status,
       unreadableInputMessage: message(absent.stderr),
     },

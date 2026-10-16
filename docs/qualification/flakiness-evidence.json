@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-16T07:29:52.108Z",
+  "generatedAt": "2026-10-16T07:33:52.165Z",
   "group": "all",
   "versions": {
     "engine": "@flakiness/playwright@2.0.2",
@@ -699,11 +699,12 @@
       "id": "6.missing-shard-report",
       "proof": 6,
       "title": "the report of shard 2 is missing when history is built",
-      "status": "pass",
+      "status": "fail",
       "evidence": {
         "buildExit": 0,
-        "testsWithCompleteInput": 28,
-        "testsWithOneReport": 28,
+        "testsInSuite": 54,
+        "testsHintedWithCompleteInput": 54,
+        "testsHintedWithOneReport": 48,
         "unreadableInputExit": 1,
         "unreadableInputMessage": "cannot read report \"absent-shard-2.json\": ENOENT: no such file or directory, open 'absent-shard-2.json'"
       }
@@ -798,12 +799,12 @@
       "evidence": {
         "testId": "volatile.spec.js › volatile step",
         "pricesBeforeMs": {
-          "chromium": 1039,
-          "firefox": 1143
+          "chromium": 1030,
+          "firefox": 1133
         },
         "pricesAfterMs": {
-          "chromium": 1039,
-          "firefox": 1143
+          "chromium": 1030,
+          "firefox": 1133
         }
       }
     },
@@ -816,12 +817,12 @@
       "evidence": {
         "testId": "volatile.spec.js › volatile step",
         "pricesBeforeMs": {
-          "chromium": 1039,
-          "firefox": 1143
+          "chromium": 1030,
+          "firefox": 1133
         },
         "pricesAfterMs": {
-          "chromium": 9088,
-          "firefox": 9094
+          "chromium": 9102,
+          "firefox": 9089
         }
       }
     },
@@ -835,14 +836,14 @@
         "exit": 130,
         "reportWritten": true,
         "interruptedAttempts": 1,
-        "cancelledAttemptMs": 317,
+        "cancelledAttemptMs": 322,
         "pricesBeforeMs": {
-          "chromium": 1039,
-          "firefox": 1143
+          "chromium": 1030,
+          "firefox": 1133
         },
         "pricesAfterMs": {
-          "chromium": 1039,
-          "firefox": 1143
+          "chromium": 1030,
+          "firefox": 1133
         }
       }
     },
@@ -853,14 +854,14 @@
       "title": "a test that now takes 100 ms instead of a second is merged into history",
       "status": "fail",
       "evidence": {
-        "newRunMs": 122,
+        "newRunMs": 126,
         "pricesBeforeMs": {
-          "chromium": 1039,
-          "firefox": 1143
+          "chromium": 1030,
+          "firefox": 1133
         },
         "pricesAfterMs": {
-          "chromium": 1039,
-          "firefox": 1143
+          "chromium": 1030,
+          "firefox": 1133
         }
       }
     },
@@ -889,11 +890,11 @@
       "title": "history rebuilt from the reports of a window of recent passing runs",
       "status": "pass",
       "evidence": {
-        "durationBeforeMs": 1143,
-        "durationInFasterWindowMs": 123,
-        "durationWithFailedRunInWindowMs": 9094,
-        "durationWithFailedRunLeftOutMs": 1143,
-        "durationWithSlowPassingRunInWindowMs": 1143
+        "durationBeforeMs": 1133,
+        "durationInFasterWindowMs": 124,
+        "durationWithFailedRunInWindowMs": 9102,
+        "durationWithFailedRunLeftOutMs": 1133,
+        "durationWithSlowPassingRunInWindowMs": 1133
       }
     },
     {
@@ -1040,7 +1041,7 @@
     {
       "number": 6,
       "title": "Exit codes, retries, traces and reports stay valid",
-      "status": "pass"
+      "status": "fail"
     },
     {
       "number": 7,
@@ -1196,7 +1197,7 @@
     "serial": 208285,
     "balance": 233352,
     "assignment": 171216,
-    "history": 160050,
+    "history": 160609,
     "privacy": 222521
   }
 }

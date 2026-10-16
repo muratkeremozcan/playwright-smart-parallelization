@@ -275,7 +275,8 @@ describe('proof 6: exit codes, retries and artifacts', () => {
   test('building history from the report of one shard succeeds with fewer tests', () => {
     const missing = row('6.missing-shard-report');
     assert.strictEqual(missing.buildExit, 0);
-    assert.ok(missing.testsWithOneReport < missing.testsWithCompleteInput);
+    assert.strictEqual(missing.testsHintedWithCompleteInput, missing.testsInSuite);
+    assert.ok(missing.testsHintedWithOneReport < missing.testsHintedWithCompleteInput);
     assert.strictEqual(missing.unreadableInputExit, 1);
   });
 });
