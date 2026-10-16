@@ -141,6 +141,13 @@ Counts: high 9, medium 17, low 8, false 1, maybe-false 0. Routed: bad_plan 6 (fi
 | Codex | store.js:90 restore failures in prepare and finish recreate key 1 below surviving keys, jamming finish | medium | patch | epoch per chain: a writer that starts a chain uses its run id as the epoch, so a new chain never collides with old keys |
 | Codex | check.js:81 a partial re-run that dies before Playwright keeps the shard's earlier passing record | false | reject | that record is a complete, passing run of the same shard under the same plan, so coverage is exactly once and the history it feeds is valid; the shard job that died still turns the workflow red |
 
+### Loop 3, Codex round 3 (2026-10-16)
+
+| Source | Finding | Verdict | Route | Evidence or action |
+|---|---|---|---|---|
+| Codex | store.js:92 two cold writers pick different run-id epochs and one run's samples are lost | medium | patch | a new chain uses the UTC date as its epoch, so same-day cold writers collide and merge |
+| Codex | identity.js:48 the v1 prefix restores old sequence-only keys the new parser rejects | medium | patch | prefix versioned to `psp-history-v2-` |
+
 ## Design Notes
 
 Consumer interface (keep it this short; the user's checkout, install and app-start steps stay theirs):
