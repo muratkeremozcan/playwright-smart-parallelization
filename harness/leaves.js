@@ -97,23 +97,15 @@ function dependencyProjects(dependencies) {
 }
 
 /**
- * Returns leaves with `dependency` set. This is the one classification rule. `leaves` is what
- * Playwright lists for the selection, filters and `--no-deps` already applied, so a project appears
- * in it only when a test of it survives, either because the selection keeps it or because another
- * listed project needs it. A leaf is a dependency, exempt from exactly-once coverage, only when
- * another listed project needs its project. Every other leaf is primary, which includes a setup or
- * teardown project the filters left standing on its own. A project a listed project pulled in is
- * needed by that project, and a project needed by a pulled-in one is needed by its puller too
- * (`dependencies` is transitive), so the pulled-in projects never change the answer.
+ * Returns leaves with `dependency` set. This is the one classification rule. `topLevel` holds the
+ * projects whose own tests the selection keeps, as Playwright reports them: it applies
+ * `--repeat-each` to those projects only and runs every other listed project once, as a dependency
+ * of a top-level one. A leaf is a dependency, exempt from exactly-once coverage, when its project is
+ * not top-level. Every other leaf is primary, which includes a setup or teardown project the
+ * filters or `--project` left standing on its own, and every project under `--no-deps`.
  */
-function classify(leaves, dependencies) {
-  const present = projectsOf(leaves);
-  const needed = new Set(
-    present.flatMap((project) =>
-      (dependencies[project] || []).filter((dependency) => dependency !== project)
-    )
-  );
-  return leaves.map((leaf) => ({ ...leaf, dependency: needed.has(leaf.project) }));
+function classify(leaves, topLevel) {
+  return leaves.map((leaf) => ({ ...leaf, dependency: !topLevel.has(leaf.project) }));
 }
 
 /** A leaf as a listing knows it: the reporter's run fields (outcome, attempts, duration) dropped. */

@@ -79,18 +79,24 @@ function listWithReporter(cwd, args) {
 }
 
 /**
- * Lists the intended leaves and the project dependency map from one listing with the user's
- * selection. Which leaves are dependencies follows `classify`. Under the user's own `--no-deps`
- * Playwright runs no dependencies, so the map is empty and every leaf is primary.
+ * Lists the intended leaves and the project dependency map. The leaves come from a listing with
+ * the user's selection. A second listing with the same selection and `--repeat-each=2` tells the
+ * top-level projects apart: Playwright repeats the projects whose own tests the selection keeps and
+ * runs the ones it only pulled in once, so the projects with a repeated leaf are top-level (see
+ * `classify`). Playwright thus answers `--project`, filters and `--no-deps` for the harness, with no
+ * argument read here.
  */
 function listIntended({ cwd, config, repeatEach = 1, forward = [] }) {
-  const args = [`--repeat-each=${repeatEach}`, ...selectionArgs({ config, forward })];
-  const listed = listWithReporter(cwd, args);
-  const declared = dependencyMap(listed.projects);
-  const dependencies = forward.includes('--no-deps')
-    ? Object.fromEntries(Object.keys(declared).map((name) => [name, []]))
-    : declared;
-  return { leaves: classify(listed.leaves.map(listedLeaf), dependencies), dependencies };
+  const selection = selectionArgs({ config, forward });
+  const listed = listWithReporter(cwd, [`--repeat-each=${repeatEach}`, ...selection]);
+  const probe = listWithReporter(cwd, [...selection, '--repeat-each=2']);
+  const topLevel = new Set(
+    probe.leaves.filter((leaf) => leaf.repeatIndex > 0).map((leaf) => leaf.project)
+  );
+  return {
+    leaves: classify(listed.leaves.map(listedLeaf), topLevel),
+    dependencies: dependencyMap(listed.projects),
+  };
 }
 
 /**

@@ -130,48 +130,35 @@ describe('dependencyMap', () => {
 });
 
 describe('classify, the one classification rule', () => {
-  const dependencies = {
-    setup: ['teardown'],
-    teardown: [],
-    chromium: ['setup', 'teardown'],
-  };
-  const roles = (present, map = dependencies) =>
+  const roles = (present, topLevel) =>
     leaves
       .classify(
         present.map((project) => ({ project })),
-        map
+        new Set(topLevel)
       )
       .map((leaf) => [leaf.project, leaf.dependency ? 'dependency' : 'primary']);
 
-  test('a project is a dependency only when another listed project needs it', () => {
-    assert.deepStrictEqual(roles(['setup', 'chromium', 'teardown']), [
+  test('a project is a dependency unless Playwright treats it as top-level', () => {
+    assert.deepStrictEqual(roles(['setup', 'chromium', 'teardown'], ['chromium']), [
       ['setup', 'dependency'],
       ['chromium', 'primary'],
       ['teardown', 'dependency'],
     ]);
-    assert.deepStrictEqual(roles(['setup', 'teardown']), [
+    assert.deepStrictEqual(roles(['setup', 'teardown'], ['setup']), [
       ['setup', 'primary'],
       ['teardown', 'dependency'],
     ]);
   });
 
   test('a project the filters left standing alone is primary', () => {
-    assert.deepStrictEqual(roles(['teardown']), [['teardown', 'primary']]);
-    assert.deepStrictEqual(roles(['setup']), [['setup', 'primary']]);
-    assert.deepStrictEqual(roles(['chromium']), [['chromium', 'primary']]);
+    assert.deepStrictEqual(roles(['teardown'], ['teardown']), [['teardown', 'primary']]);
   });
 
-  test('with no dependencies nothing is a dependency', () => {
-    const none = { setup: [], teardown: [], chromium: [] };
-    assert.deepStrictEqual(roles(['setup', 'teardown', 'chromium'], none), [
+  test('when every listed project is top-level nothing is a dependency', () => {
+    assert.deepStrictEqual(roles(['setup', 'teardown'], ['setup', 'teardown']), [
       ['setup', 'primary'],
       ['teardown', 'primary'],
-      ['chromium', 'primary'],
     ]);
-  });
-
-  test('a project does not need itself', () => {
-    assert.deepStrictEqual(roles(['a'], { a: ['a'] }), [['a', 'primary']]);
   });
 });
 

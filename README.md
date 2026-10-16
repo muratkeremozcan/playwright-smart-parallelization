@@ -58,13 +58,15 @@ selected exactly once, that each selected leaf ran to a result (a leaf that skip
 a `not-executed` violation), that no serial group was split across shards, and that each shard ran
 the setup and teardown leaves its tests depend on exactly once.
 
-One rule classifies the leaves. Playwright lists a project only when a test of it survives
-`--project`, `--grep`, tag and file filters, or when a listed project needs it. A leaf is a
-dependency, exempt from exactly-once coverage, only when another listed project needs its project.
-Every other leaf is primary, including a setup or teardown project the filters left standing alone.
-Under `--no-deps` there are no dependencies, so every leaf is primary. The harness writes a JSON
-report with the Playwright and Node versions, per-shard durations, the slowest shard and the
-imbalance.
+One rule classifies the leaves, and Playwright supplies its input. A second listing with the same
+selection and `--repeat-each=2` shows which projects are top-level: Playwright repeats the projects
+whose own tests `--project`, `--grep`, tag and file filters keep, and runs a project it only pulled
+in as a dependency once. A leaf of a project that repeats is primary. A leaf of a project that does
+not is a dependency, exempt from exactly-once coverage but required in every shard that runs a
+project needing it. So a setup or teardown project the filters left standing alone is primary, and
+`--no-deps`, whether it is a flag or the value of another option, needs no argument handling here.
+The harness writes a JSON report with the Playwright and Node versions, per-shard durations, the
+slowest shard and the imbalance.
 
 ```sh
 (cd fixtures/consumer && npm ci)
@@ -76,18 +78,25 @@ npm run harness:negative
 `--report` and `--negative-control`. Arguments after `--` go to both the list and the run commands.
 It exits 1 on any violation.
 
-`harness:negative` runs five clean partitions and eight deliberately broken ones. It exits 0 only if
-each clean one is accepted and each broken one is rejected with the expected violation. The broken
-ones are a dropped leaf, a duplicated leaf, a split serial group, a run where every test skips at
-runtime, and four runs that execute only the teardown or run setup in every shard: with
-`--project=setup`, with setup and a browser project selected and then filtered down to the setup
-test, with the same filter and no project named, and with setup and teardown selected under
-`--no-deps`. The skip run sets `PSP_FIXTURE_SKIP_ALL=1`, which makes every fixture test skip, and
-must flag every primary leaf. The selection runs build their own selection and ignore the forwarded
-arguments, except that `--config` applies to them. They need a suite whose setup project has a
-teardown project and a project that depends on it. A suite that skips tests by design fails the
-`not-executed` check: the harness has no allowance for a leaf that is meant to skip. Other engines
-plug in as `{ args, env }` shards through `harness/partitions.js`.
+`harness:negative` runs six clean partitions and nine deliberately broken ones. It exits 0 only if
+each clean one is accepted and each broken one is rejected with the expected violation. Four broken
+ones are a dropped leaf, a duplicated leaf, a split serial group, and a run where every test skips
+at runtime. The other five run a selection of the setup project:
+
+- `--project=setup`, with a run that executes only the teardown.
+- Setup and a browser project selected and then filtered down to the setup test, with a run that
+  executes only the teardown.
+- The same filter with no project named, with the same run.
+- Setup and teardown selected under `--no-deps`, with setup in every shard.
+- `--grep-invert --no-deps`, where Playwright reads `--no-deps` as the pattern and keeps the
+  dependencies, with the browser projects run apart from setup.
+
+The skip run sets `PSP_FIXTURE_SKIP_ALL=1`, which makes every fixture test skip, and must flag every
+primary leaf. The selection runs build their own selection and ignore the forwarded arguments,
+except that `--config` applies to them. They need a suite whose setup project has a teardown project
+and a project that depends on it. A suite that skips tests by design fails the `not-executed` check:
+the harness has no allowance for a leaf that is meant to skip. Other engines plug in as
+`{ args, env }` shards through `harness/partitions.js`.
 
 ## License
 

@@ -95,6 +95,21 @@ const TABLE = [
     roles: { setup: 'dependency', teardown: 'dependency', chromium: 'primary' },
   },
   {
+    name: 'a forwarded --repeat-each 1 does not hide the top-level projects',
+    forward: ['--repeat-each=1'],
+    roles: { setup: 'dependency', teardown: 'dependency', chromium: 'primary', firefox: 'primary' },
+  },
+  {
+    name: '--grep-invert with --no-deps as its value: the flag is not set, dependencies stay',
+    forward: ['--grep-invert', '--no-deps'],
+    roles: { setup: 'dependency', teardown: 'dependency', chromium: 'primary', firefox: 'primary' },
+  },
+  {
+    name: '--project chromium setup --no-deps: both run on their own',
+    forward: ['--project', 'chromium', 'setup', '--no-deps'],
+    roles: { setup: 'primary', chromium: 'primary' },
+  },
+  {
     name: '--no-deps: every project runs on its own',
     forward: ['--no-deps'],
     roles: { setup: 'primary', teardown: 'primary', chromium: 'primary', firefox: 'primary' },
@@ -201,6 +216,26 @@ describe('dependency classification over the selection, on real Playwright', () 
         ];
         assert.deepStrictEqual(checkAll(intended.leaves, intended.dependencies, shards), []);
       });
+
+      if (Object.values(row.roles).includes('dependency')) {
+        test('rejects primary leaves run apart from the dependency leaves they need', () => {
+          const intended = listed();
+          const apart = [
+            {
+              index: 1,
+              exitCode: 0,
+              leaves: intended.leaves.filter((l) => !l.dependency).map(run),
+            },
+            { index: 2, exitCode: 0, leaves: [] },
+          ];
+          const missing = checkAll(intended.leaves, intended.dependencies, apart)
+            .filter((violation) => violation.kind === 'dependency-missing')
+            .map((violation) => violation.key);
+          for (const leaf of intended.leaves.filter((l) => l.dependency)) {
+            assert.ok(missing.includes(leaf.key), `${leaf.key} was not required`);
+          }
+        });
+      }
 
       test('reports every primary leaf that is dropped or run twice', () => {
         const intended = listed();

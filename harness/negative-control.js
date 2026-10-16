@@ -125,6 +125,9 @@ function pickDependencySelection(dependencies) {
  * - P and D selected, then filtered down to P's test: D has no test left, so P is still primary.
  * - The same filter with no project named at all, where every project is selected.
  * - P and T selected with `--no-deps`: both are top-level, so P in every shard is `duplicate`.
+ * - `--grep-invert --no-deps`: Playwright reads `--no-deps` as the grep-invert pattern, so the
+ *   dependencies stay in the listing, and a run that separates the dependent projects from them is
+ *   `dependency-missing`.
  *
  * `leaves` is the unfiltered intended set, used to find P's test title. The scenarios build their
  * own selection, so forwarded arguments do not reach them; the `config` option does.
@@ -178,6 +181,11 @@ function buildSelectionScenarios(dependencies, leaves) {
   const unnamed = ['--grep', grep];
   const flat = ['--no-deps'];
   const topLevel = [...flat, `--project=${project}`, `--project=${implicit}`];
+  // The grep keeps the run short: only the browser projects' "loads the page" tests remain.
+  const consumed = ['--grep-invert', '--no-deps', '--grep', 'loads the page'];
+  const dependents = Object.keys(dependencies).filter(
+    (name) => !needed.has(name) && dependencies[name].includes(project)
+  );
   return [
     {
       forward: selected,
@@ -216,6 +224,27 @@ function buildSelectionScenarios(dependencies, leaves) {
           flagged: keysOf(listing),
         },
       ],
+    },
+    {
+      forward: consumed,
+      controls: (listing) => {
+        const dependencyKeys = listing.leaves.filter((leaf) => leaf.dependency).map((l) => l.key);
+        return [
+          {
+            name: '--grep-invert --no-deps, dependencies stay, clean',
+            expected: CLEAN,
+            forward: consumed,
+            partition: nativePartition(SHARD_COUNT),
+          },
+          {
+            name: `--grep-invert --no-deps, ${dependents.join(' and ')} run apart from ${project}`,
+            expected: 'dependency-missing',
+            forward: consumed,
+            partition: dependents.map((name) => ({ args: [`--project=${name}`, '--no-deps'] })),
+            flagged: dependencyKeys,
+          },
+        ];
+      },
     },
   ];
 }

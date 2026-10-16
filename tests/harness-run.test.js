@@ -155,17 +155,25 @@ describe('runNegativeControl verdicts', () => {
   // not-executed, then three selection scenarios of a clean and a broken run each: setup selected,
   // setup selected and filtered, setup and teardown without dependencies.
   const setupKey = intended.find((leaf) => leaf.project === 'setup').key;
-  const withTeardown = (map = dependencies) =>
+  const withTeardown = (topLevel = ['setup']) =>
     leaves.classify(
       intended.filter((leaf) => ['setup', 'teardown'].includes(leaf.project)),
-      map
+      new Set(topLevel)
     );
-  const noDeps = Object.fromEntries(Object.keys(dependencies).map((name) => [name, []]));
   // The listing a stub Playwright returns for the forwarded selection of each scenario.
   const listingFor = (forward = []) => {
+    if (forward.includes('--grep-invert')) {
+      return {
+        leaves: leaves.classify(
+          intended.filter((leaf) => ['setup', 'teardown', 'chromium'].includes(leaf.project)),
+          new Set(['chromium'])
+        ),
+        dependencies,
+      };
+    }
     const named = forward.some((arg) => arg.startsWith('--project'));
     if (named && forward.includes('--no-deps')) {
-      return { leaves: withTeardown(noDeps), dependencies: noDeps };
+      return { leaves: withTeardown(['setup', 'teardown']), dependencies };
     }
     if (forward.includes('prepare the environment')) {
       return { leaves: withTeardown(), dependencies };
@@ -202,6 +210,13 @@ describe('runNegativeControl verdicts', () => {
     ok: false,
     violations: primary.map((leaf) => ({ kind: 'not-executed', key: leaf.key })),
   };
+  const dependencyKeys = ['setup', 'teardown'].map(
+    (name) => intended.find((leaf) => leaf.project === name).key
+  );
+  const dependencyMissing = {
+    ok: false,
+    violations: dependencyKeys.map((key) => ({ kind: 'dependency-missing', key })),
+  };
   const good = [
     accepted,
     rejected('missing'),
@@ -216,9 +231,11 @@ describe('runNegativeControl verdicts', () => {
     rejected('missing', setupKey),
     accepted,
     rejected('duplicate', setupKey),
+    accepted,
+    dependencyMissing,
   ];
-  const clean = [0, 5, 7, 9, 11];
-  const broken = [1, 2, 3, 4, 6, 8, 10, 12];
+  const clean = [0, 5, 7, 9, 11, 13];
+  const broken = [1, 2, 3, 4, 6, 8, 10, 12, 14];
   const swap = (position, report) =>
     good.map((item, index) => (index === position ? report : item));
 
@@ -241,6 +258,12 @@ describe('runNegativeControl verdicts', () => {
         ['no project named, filtered to setup, only teardown runs', 'missing', true],
         ['setup and teardown without dependencies, clean', 'none', true],
         ['setup and teardown without dependencies, setup in every shard', 'duplicate', true],
+        ['--grep-invert --no-deps, dependencies stay, clean', 'none', true],
+        [
+          '--grep-invert --no-deps, chromium and firefox run apart from setup',
+          'dependency-missing',
+          true,
+        ],
       ]
     );
   });
@@ -266,7 +289,7 @@ describe('runNegativeControl verdicts', () => {
     });
   }
 
-  for (const position of [6, 8, 10, 12]) {
+  for (const position of [6, 8, 10, 12, 14]) {
     test(`fails when broken control ${position} flags something other than the setup leaf`, () => {
       const { result } = runWith(
         swap(position, rejected(good[position].violations[0].kind, 'other'))
@@ -312,7 +335,7 @@ describe('runNegativeControl verdicts', () => {
     const skipEnv = { PSP_FIXTURE_SKIP_ALL: '1' };
     assert.strictEqual(qualified[4].partition.length, 2);
     for (const shard of qualified[4].partition) assert.deepStrictEqual(shard.env, skipEnv);
-    for (const position of [0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12]) {
+    for (const position of [0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]) {
       for (const shard of qualified[position].partition) assert.strictEqual(shard.env, undefined);
     }
   });
@@ -332,6 +355,7 @@ describe('runNegativeControl verdicts', () => {
         ['--project', 'setup', 'chromium', '--grep', 'prepare the environment'],
         ['--grep', 'prepare the environment'],
         ['--no-deps', '--project=setup', '--project=teardown'],
+        ['--grep-invert', '--no-deps', '--grep', 'loads the page'],
       ]
     );
     for (const given of [...listed, ...qualified]) assert.strictEqual(given.config, 'a.config.js');
@@ -357,6 +381,13 @@ describe('runNegativeControl verdicts', () => {
       { args: ['--project=setup'] },
       { args: ['--project=setup'] },
     ]);
+    assert.deepStrictEqual(qualified[13].forward, listed[6].forward);
+    assert.deepStrictEqual(qualified[13].partition, nativeShards);
+    assert.deepStrictEqual(qualified[14].forward, listed[6].forward);
+    assert.deepStrictEqual(qualified[14].partition, [
+      { args: ['--project=chromium', '--no-deps'] },
+      { args: ['--project=firefox', '--no-deps'] },
+    ]);
   });
 
   test('builds the dependency scenarios from the unfiltered suite, not a --no-deps listing', () => {
@@ -367,7 +398,7 @@ describe('runNegativeControl verdicts', () => {
 
   test('reuses the first listing when only the config selection is forwarded', () => {
     const { listed } = runWith(good);
-    assert.strictEqual(listed.length, 5);
+    assert.strictEqual(listed.length, 6);
   });
 
   test('throws when the suite cannot form the controls', () => {

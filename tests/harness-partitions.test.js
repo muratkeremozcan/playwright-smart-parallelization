@@ -157,14 +157,14 @@ describe('buildSelectionScenarios', () => {
 
   // The listing a scenario's selection yields: setup (and teardown) and, when chromium is selected
   // and keeps a test, chromium too.
-  const listingOf = (projects, map = dependencies) => ({
+  const listingOf = (projects, topLevel) => ({
     leaves: leaves.classify(
       intended.filter((leaf) => projects.includes(leaf.project)),
-      map
+      new Set(topLevel)
     ),
   });
 
-  test('selects the dependency project that has a dependency of its own, four ways', () => {
+  test('selects the dependency project that has a dependency of its own, five ways', () => {
     assert.deepStrictEqual(
       scenarios.map((scenario) => scenario.forward),
       [
@@ -172,15 +172,15 @@ describe('buildSelectionScenarios', () => {
         ['--project', 'setup', 'chromium', '--grep', 'prepare the environment'],
         ['--grep', 'prepare the environment'],
         ['--no-deps', '--project=setup', '--project=teardown'],
+        ['--grep-invert', '--no-deps', '--grep', 'loads the page'],
       ]
     );
   });
 
   test('pairs each scenario with a clean native run and a broken run that flags the setup leaf', () => {
-    const selected = listingOf(['setup', 'teardown']);
-    const filtered = listingOf(['setup', 'teardown']);
-    const noDeps = Object.fromEntries(Object.keys(dependencies).map((name) => [name, []]));
-    const flat = listingOf(['setup', 'teardown'], noDeps);
+    const selected = listingOf(['setup', 'teardown'], ['setup']);
+    const filtered = listingOf(['setup', 'teardown'], ['setup']);
+    const flat = listingOf(['setup', 'teardown'], ['setup', 'teardown']);
     const summary = (scenario, listing) =>
       scenario
         .controls(listing)
@@ -211,6 +211,24 @@ describe('buildSelectionScenarios', () => {
         [setupKey],
       ],
     ]);
+    const consumed = leaves.classify(
+      intended.filter((leaf) => ['setup', 'teardown', 'chromium'].includes(leaf.project)),
+      new Set(['chromium'])
+    );
+    const consumedListing = { leaves: consumed };
+    const dependencyKeys = consumed.filter((leaf) => leaf.dependency).map((leaf) => leaf.key);
+    assert.deepStrictEqual(summary(scenarios[4], consumedListing), [
+      ['none', scenarios[4].forward, nativeShards, null],
+      [
+        'dependency-missing',
+        scenarios[4].forward,
+        [
+          { args: ['--project=chromium', '--no-deps'] },
+          { args: ['--project=firefox', '--no-deps'] },
+        ],
+        dependencyKeys,
+      ],
+    ]);
   });
 
   test('the broken controls are caught only once the selected project has primary leaves', () => {
@@ -224,7 +242,7 @@ describe('buildSelectionScenarios', () => {
     ];
     const selected = leaves.classify(
       intended.filter((leaf) => ['setup', 'teardown'].includes(leaf.project)),
-      dependencies
+      new Set(['setup'])
     );
     assert.ok(missingKeys(selected, teardownOnly).includes(setupKey));
     assert.ok(!missingKeys(intended, teardownOnly).includes(setupKey));
@@ -232,7 +250,8 @@ describe('buildSelectionScenarios', () => {
 
   test('refuses a filter that also selects the dependent project', () => {
     assert.throws(
-      () => scenarios[1].controls(listingOf(['setup', 'chromium', 'teardown'])),
+      () =>
+        scenarios[1].controls(listingOf(['setup', 'chromium', 'teardown'], ['setup', 'chromium'])),
       /also selects chromium/
     );
   });
