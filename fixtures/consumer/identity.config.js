@@ -8,5 +8,8 @@ const { defineConfig } = require('@playwright/test');
 module.exports = defineConfig({
   testDir: './identity-tests',
   reporter: 'list',
-  projects: [{ testMatch: /.*\.spec\.js/ }, { testMatch: /.*\.spec\.js/ }],
+  projects: [
+    { name: 'one', testMatch: /.*\.spec\.js/ },
+    { name: 'two', testMatch: /.*\.spec\.js/ },
+  ],
 });

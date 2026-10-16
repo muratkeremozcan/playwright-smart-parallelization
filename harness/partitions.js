@@ -8,7 +8,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { listLine } = require('./leaves');
+const { listLine, loadLine } = require('./leaves');
 
 /** Native Playwright sharding: `--shard=i/n` for i in 1..n. */
 function nativePartition(count) {
@@ -25,6 +25,11 @@ function nativePartition(count) {
  * shard. `leaves` is the intended set the keys come from. One list file per shard is written into
  * `dir`. `--test-list` selects a test in all of its repeats and adds dependency projects itself,
  * so each test appears once per shard however many of its repeats or dependencies are assigned.
+ *
+ * A test matches by the file of its call, which is a helper's file when a helper registers it, and
+ * Playwright loads only the files a list line names. A helper is not a test file, so every leaf
+ * also gets a load line for its spec file with a title no test has: it loads the spec and selects
+ * nothing by itself. Which specs a shard loads then decides which of the helper's tests it runs.
  */
 function testListPartition(assignment, leaves, dir) {
   const byKey = new Map(leaves.map((leaf) => [leaf.key, leaf]));
@@ -33,7 +38,10 @@ function testListPartition(assignment, leaves, dir) {
     for (const key of keys) {
       const leaf = byKey.get(key);
       if (!leaf) throw new Error(`unknown leaf key in assignment: ${key}`);
-      if (!leaf.dependency) lines.add(listLine(leaf));
+      if (!leaf.dependency) {
+        lines.add(listLine(leaf));
+        if (leaf.specFile !== leaf.file) lines.add(loadLine(leaf));
+      }
     }
     const file = path.join(dir, `shard-${index + 1}.txt`);
     fs.writeFileSync(file, `${[...lines].join('\n')}\n`);

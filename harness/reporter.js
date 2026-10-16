@@ -11,7 +11,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { buildLeaf, serialGroupId, toPosix } = require('./leaves');
+const { assertNamedProjects, buildLeaf, serialGroupId, toPosix } = require('./leaves');
 
 const sameLocation = (a, b) => a.file === b.file && a.line === b.line && a.column === b.column;
 
@@ -40,15 +40,14 @@ function outermostSerialSuite(test) {
   return matching[0];
 }
 
-function leafOf(test, projects = []) {
+function leafOf(test) {
   const project = test.parent.project();
   const testDir = project.testDir;
   const [, , specFile, ...titlePath] = test.titlePath();
-  const projectIndex = projects.indexOf(project);
   const serial = outermostSerialSuite(test);
   const serialGroup = serial
     ? serialGroupId({
-        projectIndex,
+        project: project.name,
         specFile,
         suiteTitles: serial.titlePath().slice(3),
         repeatIndex: test.repeatEachIndex,
@@ -57,7 +56,6 @@ function leafOf(test, projects = []) {
   const leaf = buildLeaf({
     id: test.id,
     project: project.name,
-    projectIndex,
     specFile,
     file: toPosix(path.relative(testDir, test.location.file)),
     titlePath,
@@ -79,11 +77,11 @@ function leafOf(test, projects = []) {
  * Leaves of every test, failing closed when two distinct serial suites get one group id or two
  * tests get one key: a collision would let a split group or a dropped test qualify.
  */
-function leavesOf(tests, projects) {
+function leavesOf(tests) {
   const groups = new Map();
   const keys = new Set();
   return tests.map((test) => {
-    const leaf = leafOf(test, projects);
+    const leaf = leafOf(test);
     if (keys.has(leaf.key)) throw new Error(`two tests share the id ${leaf.key} (${leaf.label})`);
     keys.add(leaf.key);
     if (leaf.serialGroup) {
@@ -116,7 +114,8 @@ class HarnessReporter {
     if (!target || !this.suite) return;
     const durationMs =
       typeof result.duration === 'number' ? result.duration : Date.now() - this.startedAt;
-    const leaves = leavesOf(this.suite.allTests(), this.config ? this.config.projects : []);
+    assertNamedProjects((this.config && this.config.projects) || []);
+    const leaves = leavesOf(this.suite.allTests());
     const projects = ((this.config && this.config.projects) || []).map((project) => ({
       name: project.name,
       dependencies: project.dependencies || [],

@@ -78,6 +78,11 @@ function listWithReporter(cwd, args) {
           result.stderr.trim().split('\n').slice(0, 3).join('\n')
       );
     }
+    // The reporter fails closed with an error of its own: show that, not the stack around it.
+    const reporterError = /^Error: (.+)$/m.exec(result.stderr || '');
+    if (reporterError && (result.stderr || '').includes(REPORTER)) {
+      throw new Error(reporterError[1]);
+    }
     if (result.status !== 0 || !fs.existsSync(resultFile)) {
       throw new Error(`playwright test --list failed (exit ${result.status}): ${result.stderr}`);
     }

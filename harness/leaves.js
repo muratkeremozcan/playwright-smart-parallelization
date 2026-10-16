@@ -9,6 +9,8 @@
 const path = require('node:path');
 
 const TITLE_SEPARATOR = ' › ';
+// A title no test has, for list lines that only load a file.
+const LOAD_ONLY_TITLE = '\u0000load only';
 
 function toPosix(file) {
   return String(file).split(path.sep).join('/').replace(/\\/g, '/');
@@ -25,26 +27,24 @@ function groupBase(group) {
 }
 
 /**
- * Serial group id: `projectIndex|spec file|suite titles|#repeat`. The suite is the outermost serial
+ * Serial group id: `project|spec file|suite titles|#repeat`. The suite is the outermost serial
  * suite of the test, found by the reporter from the suite ancestry. Unlike a call site, its titles
- * tell apart sibling suites that one helper builds, and the project index tells apart projects
- * that share a name (unnamed ones).
+ * tell apart sibling suites that one helper builds.
  */
-function serialGroupId({ projectIndex, specFile, suiteTitles, repeatIndex }) {
-  return `${projectIndex}|${specFile}|${suiteTitles.join(TITLE_SEPARATOR)}|#${repeatIndex}`;
+function serialGroupId({ project, specFile, suiteTitles, repeatIndex }) {
+  return `${project}|${specFile}|${suiteTitles.join(TITLE_SEPARATOR)}|#${repeatIndex}`;
 }
 
 /**
  * Builds a leaf. `id` is Playwright's own test id, unique per project, spec file, title path and
- * repeat, and it is the leaf key: file, project and title can collide (unnamed projects, a helper
- * that registers the same tests for several spec files), the id cannot. `label` is the readable
+ * repeat, and it is the leaf key: a key from the call location collides when a helper registers
+ * the same tests for several spec files, the id cannot. `label` is the readable
  * name used in output, `testRef` names one test across its repeats, and `file` with `line` and
  * `column` is the location of the test call for the `--test-list` form.
  */
 function buildLeaf({
   id,
   project,
-  projectIndex,
   specFile,
   file,
   titlePath,
@@ -56,7 +56,7 @@ function buildLeaf({
   return {
     key: id,
     label: leafLabel({ project, specFile, titlePath, repeatIndex }),
-    testRef: `${projectIndex}|${specFile}|${titlePath.join(TITLE_SEPARATOR)}`,
+    testRef: `${project}|${specFile}|${titlePath.join(TITLE_SEPARATOR)}`,
     file,
     specFile,
     project,
@@ -67,6 +67,27 @@ function buildLeaf({
     line,
     column,
   };
+}
+
+/**
+ * Every project needs a unique non-empty name. Playwright accepts unnamed projects, but the
+ * harness keys its dependency map, its serial groups and its `--test-list` selections by name, and
+ * unnamed projects would overwrite each other in all three.
+ */
+function assertNamedProjects(projects) {
+  const seen = new Set();
+  projects.forEach((project, position) => {
+    if (!project.name) {
+      throw new Error(
+        `project #${position + 1} has no name: every project needs a unique non-empty name ` +
+          'for the harness'
+      );
+    }
+    if (seen.has(project.name)) {
+      throw new Error(`project name "${project.name}" is used twice: names must be unique`);
+    }
+    seen.add(project.name);
+  });
 }
 
 /** Distinct project names that appear in a list of leaves. */
@@ -131,8 +152,18 @@ function listLine(leaf) {
   return `[${leaf.project}]${TITLE_SEPARATOR}${leaf.file}:${leaf.line}:${leaf.column}${TITLE_SEPARATOR}${leaf.titlePath.join(TITLE_SEPARATOR)}`;
 }
 
+/**
+ * A `--test-list` line that loads the spec file of a leaf and selects no test: its title path is
+ * one no test has. Needed when the leaf's call location is a helper, which Playwright does not
+ * load as a test file.
+ */
+function loadLine(leaf) {
+  return `[${leaf.project}]${TITLE_SEPARATOR}${leaf.specFile}:1:1${TITLE_SEPARATOR}${LOAD_ONLY_TITLE}`;
+}
+
 module.exports = {
   TITLE_SEPARATOR,
+  assertNamedProjects,
   buildLeaf,
   classify,
   dependencyMap,
@@ -141,6 +172,7 @@ module.exports = {
   leafLabel,
   listLine,
   listedLeaf,
+  loadLine,
   projectsOf,
   serialGroupId,
   toPosix,

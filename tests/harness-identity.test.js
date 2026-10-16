@@ -1,14 +1,19 @@
 /**
- * Leaf and serial group identity on real Playwright. `identity.config.js` has two unnamed
- * projects, tests that a helper registers for two spec files, nested serial suites whose inner
+ * Leaf and serial group identity on real Playwright. `identity.config.js` has two projects over the
+ * same specs, tests that a helper registers for two spec files, nested serial suites whose inner
  * suite sits above the outer one, and sibling serial suites built at one call site. A name,
  * file and title key, or a group id from a call site or a line number, collapses or confuses
  * these. `only.config.js` has a focused test with `forbidOnly` off.
  */
 
-const { test, describe } = require('node:test');
+const { test, describe, after } = require('node:test');
 const assert = require('node:assert');
-const { checkAll, listIntended, qualify } = require('../harness/index.js');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { checkAll, listIntended, qualify, runPartition } = require('../harness/index.js');
+const { listLine } = require('../harness/leaves.js');
+const { testListPartition } = require('../harness/partitions.js');
 const { runNegativeControl } = require('../harness/negative-control.js');
 const { main } = require('../harness/cli.js');
 const { requireFixture } = require('./support/fixture.js');
@@ -29,34 +34,31 @@ function split(leaves, first) {
 }
 
 describe('leaf identity', () => {
-  test('two unnamed projects and a shared helper give 24 leaves with unique keys', () => {
+  test('two projects and a shared helper give 24 leaves with unique keys', () => {
     const { leaves } = intended();
     assert.strictEqual(leaves.length, 24);
     assert.strictEqual(new Set(leaves.map((leaf) => leaf.key)).size, 24);
   });
 
-  test('leaves that share a label stay distinct leaves', () => {
+  test('a key from project, call location, title and repeat would collapse leaves', () => {
     const { leaves } = intended();
-    const labels = new Map();
-    for (const leaf of leaves) labels.set(leaf.label, (labels.get(leaf.label) || 0) + 1);
-    assert.ok(
-      [...labels.values()].some((count) => count > 1),
-      'the fixture has no label clash'
+    const naive = leaves.map(
+      (leaf) => `${leaf.project}|${leaf.file}|${leaf.titlePath.join(' › ')}|#${leaf.repeatIndex}`
     );
-    assert.strictEqual(new Set(leaves.map((leaf) => leaf.label)).size, 12);
-    assert.strictEqual(new Set(leaves.map((leaf) => leaf.testRef)).size, 24);
+    assert.ok(new Set(naive).size < leaves.length, 'the fixture has no collision');
+    assert.strictEqual(new Set(leaves.map((leaf) => leaf.label)).size, 24);
   });
 
   test("a helper's tests are told apart by spec file although the call sits in the helper", () => {
     const { leaves } = intended();
-    const a = where(leaves, 'shared-a.spec.js').filter((leaf) => leaf.project === '');
-    const b = where(leaves, 'shared-b.spec.js').filter((leaf) => leaf.project === '');
+    const a = where(leaves, 'shared-a.spec.js').filter((leaf) => leaf.project === 'one');
+    const b = where(leaves, 'shared-b.spec.js').filter((leaf) => leaf.project === 'one');
     assert.deepStrictEqual([...new Set([...a, ...b].map((leaf) => leaf.file))], ['factory.js']);
     const keys = new Set([...a, ...b].map((leaf) => leaf.key));
     assert.strictEqual(keys.size, a.length + b.length);
   });
 
-  test('running one of two leaves that share a label is not enough', () => {
+  test('running one of two leaves the helper registers is not enough', () => {
     const { leaves, dependencies } = intended();
     const clash = leaves.filter((leaf) => leaf.titlePath.at(-1) === 'shared loads');
     assert.ok(clash.length >= 4);
@@ -83,7 +85,7 @@ describe('serial group identity', () => {
     const { leaves } = intended();
     const nested = where(leaves, 'nested.spec.js');
     assert.strictEqual(nested.length, 8);
-    for (const project of [0, 1]) {
+    for (const project of ['one', 'two']) {
       const ofProject = nested.filter((leaf) => leaf.testRef.startsWith(`${project}|`));
       assert.strictEqual(ofProject.length, 4);
       assert.strictEqual(groupsOf(ofProject).size, 1);
@@ -93,7 +95,7 @@ describe('serial group identity', () => {
 
   test('splitting the outer suite across shards is a serial-split', () => {
     const { leaves, dependencies } = intended();
-    const outer = where(leaves, 'nested.spec.js').filter((leaf) => leaf.testRef.startsWith('0|'));
+    const outer = where(leaves, 'nested.spec.js').filter((leaf) => leaf.testRef.startsWith('one|'));
     const first = outer.filter((leaf) => leaf.titlePath.at(-1) === 'outer before');
     const violations = checkAll(leaves, dependencies, split(leaves, first));
     assert.deepStrictEqual(kinds(violations), ['serial-split']);
@@ -102,7 +104,7 @@ describe('serial group identity', () => {
   test('splitting only the inner suite from its outer suite is a serial-split', () => {
     const { leaves, dependencies } = intended();
     const inner = where(leaves, 'nested.spec.js').filter(
-      (leaf) => leaf.testRef.startsWith('0|') && leaf.titlePath.includes('inner')
+      (leaf) => leaf.testRef.startsWith('one|') && leaf.titlePath.includes('inner')
     );
     const violations = checkAll(leaves, dependencies, split(leaves, inner));
     assert.deepStrictEqual(kinds(violations), ['serial-split']);
@@ -111,7 +113,7 @@ describe('serial group identity', () => {
   test('sibling suites built at one call site are separate groups', () => {
     const { leaves } = intended();
     const siblings = where(leaves, 'siblings.spec.js').filter((leaf) =>
-      leaf.testRef.startsWith('0|')
+      leaf.testRef.startsWith('one|')
     );
     assert.strictEqual(siblings.length, 4);
     assert.strictEqual(groupsOf(siblings).size, 2);
@@ -126,11 +128,56 @@ describe('serial group identity', () => {
   test('splitting one sibling is a serial-split', () => {
     const { leaves, dependencies } = intended();
     const half = where(leaves, 'siblings.spec.js').filter(
-      (leaf) => leaf.testRef.startsWith('0|') && leaf.titlePath.join() === 'left,first'
+      (leaf) => leaf.testRef.startsWith('one|') && leaf.titlePath.join() === 'left,first'
     );
     assert.deepStrictEqual(kinds(checkAll(leaves, dependencies, split(leaves, half))), [
       'serial-split',
     ]);
+  });
+});
+
+describe("explicit test-list partitions of a helper's tests", () => {
+  const dirs = [];
+  after(() => {
+    for (const dir of dirs) fs.rmSync(dir, { recursive: true, force: true });
+  });
+  const tempDir = () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'psp-identity-'));
+    dirs.push(dir);
+    return dir;
+  };
+
+  const bySpec = (leaves, specs) =>
+    leaves.filter((leaf) => specs.includes(leaf.specFile)).map((leaf) => leaf.key);
+
+  test('execute every leaf exactly once when the specs that call the helper are split', () => {
+    const { leaves, dependencies } = intended();
+    const assignment = [
+      bySpec(leaves, ['shared-a.spec.js', 'nested.spec.js']),
+      bySpec(leaves, ['shared-b.spec.js', 'siblings.spec.js']),
+    ];
+    const partition = testListPartition(assignment, leaves, tempDir());
+    const shards = runPartition({ cwd, config: 'identity.config.js' }, partition);
+    assert.deepStrictEqual(
+      shards.map((shard) => shard.leaves.length),
+      [12, 12]
+    );
+    assert.deepStrictEqual(checkAll(leaves, dependencies, shards), []);
+  });
+
+  test("run nothing of the helper's tests when only the helper is selected", () => {
+    const { leaves, dependencies } = intended();
+    const helper = leaves.filter((leaf) => leaf.file === 'factory.js');
+    assert.ok(helper.length > 0);
+    const dir = tempDir();
+    const file = path.join(dir, 'helper-only.txt');
+    fs.writeFileSync(file, `${helper.map(listLine).join('\n')}\n`);
+    const shards = runPartition({ cwd, config: 'identity.config.js' }, [
+      { args: ['--test-list', file] },
+    ]);
+    assert.strictEqual(shards[0].leaves.length, 0);
+    const missing = checkAll(leaves, dependencies, shards).filter((v) => v.kind === 'missing');
+    assert.strictEqual(missing.length, leaves.length);
   });
 });
 

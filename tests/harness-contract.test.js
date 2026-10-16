@@ -111,6 +111,11 @@ describe('a selection the harness cannot qualify is rejected on real Playwright'
       message: /config shards the run/,
     },
     {
+      name: 'projects without a name',
+      options: { config: 'unnamed.config.js' },
+      message: /project #1 has no name.*unique non-empty name/,
+    },
+    {
       name: 'an empty selection that Playwright accepts with --pass-with-no-tests',
       options: { forward: ['--grep', 'no such test', '--pass-with-no-tests'] },
       message: /no test to qualify/,
@@ -148,6 +153,14 @@ describe('a selection the harness cannot qualify is rejected on real Playwright'
       });
     });
   }
+
+  test('a reporter error reaches the user without the stack around it', () => {
+    assert.throws(
+      () => listIntended({ cwd: real, config: 'unnamed.config.js' }),
+      (error) =>
+        /^project #1 has no name/.test(error.message) && !/--list failed/.test(error.message)
+    );
+  });
 
   test('Playwright itself exits 0 for the empty selection, so the harness must check', () => {
     const forward = ['--grep', 'no such test', '--pass-with-no-tests'];

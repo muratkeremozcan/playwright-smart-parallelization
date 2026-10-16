@@ -56,6 +56,28 @@ describe('testListPartition', () => {
     ]);
   });
 
+  test('adds a load-only line for the spec of a leaf whose call sits in a helper', () => {
+    const helper = {
+      key: 'k',
+      project: 'p',
+      file: 'factory.js',
+      specFile: 'a.spec.js',
+      titlePath: ['t'],
+      line: 7,
+      column: 3,
+      dependency: false,
+    };
+    const own = { ...helper, key: 'o', file: 'b.spec.js', specFile: 'b.spec.js', titlePath: ['u'] };
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'psp-partition-test-'));
+    tempDirs.push(dir);
+    const [shard] = testListPartition([['k', 'o']], [helper, own], dir);
+    const lines = fs.readFileSync(shard.args[1], 'utf8').trim().split('\n');
+    assert.strictEqual(lines.length, 3);
+    assert.strictEqual(lines[0], '[p] › factory.js:7:3 › t');
+    assert.strictEqual(lines[1], '[p] › a.spec.js:1:1 › \u0000load only');
+    assert.strictEqual(lines[2], '[p] › b.spec.js:7:3 › u');
+  });
+
   test('leaves dependency leaves out, since Playwright adds them', () => {
     const setupKey = intended.find((leaf) => leaf.project === 'setup').key;
     const { shards } = build([[setupKey]]);

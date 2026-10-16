@@ -138,21 +138,18 @@ describe('HarnessReporter', () => {
     assert.notStrictEqual(first.testRef, second.testRef);
   });
 
-  test('tells projects that share a name apart by their index in the config', () => {
-    const unnamedA = { name: '', testDir, dependencies: [] };
-    const unnamedB = { name: '', testDir, dependencies: [] };
-    const a = fakeTest({ id: 'a', file: 's.spec.js', project: unnamedA, title: 't' });
-    const b = fakeTest({ id: 'b', file: 's.spec.js', project: unnamedB, title: 't' });
-    const [first, second] = runReporter(
-      [a, b],
-      { duration: 1 },
-      {
-        projects: [unnamedA, unnamedB],
-      }
-    ).read().leaves;
-    assert.strictEqual(first.label, second.label);
-    assert.notStrictEqual(first.testRef, second.testRef);
-    assert.notStrictEqual(first.key, second.key);
+  test('fails closed on a project without a name or with a repeated name', () => {
+    const unnamed = { name: '', testDir, dependencies: [] };
+    const t = fakeTest({ id: 'a', file: 's.spec.js', project: unnamed, title: 't' });
+    assert.throws(
+      () => runReporter([t], { duration: 1 }, { projects: [unnamed] }),
+      /project #1 has no name/
+    );
+    const twin = { name: 'chromium', testDir, dependencies: [] };
+    assert.throws(
+      () => runReporter([plain], { duration: 1 }, { projects: [chromium, twin] }),
+      /project name "chromium" is used twice/
+    );
   });
 
   test('records outcome, attempts, duration, serial group and location', () => {
@@ -167,7 +164,7 @@ describe('HarnessReporter', () => {
       { outcome: 'flaky', attempts: 2, durationMs: 140 }
     );
     assert.strictEqual(first.serialGroup, null);
-    assert.strictEqual(second.serialGroup, '1|serial-retry.spec.js|retry|#0');
+    assert.strictEqual(second.serialGroup, 'firefox|serial-retry.spec.js|retry|#0');
     assert.deepStrictEqual([first.line, first.column], [7, 3]);
   });
 
@@ -186,7 +183,7 @@ describe('HarnessReporter', () => {
       }).read().leaves;
       assert.deepStrictEqual(
         leaves.map((leaf) => leaf.serialGroup),
-        ['0|groups.spec.js|outer|#0', '0|groups.spec.js|outer|#0']
+        ['chromium|groups.spec.js|outer|#0', 'chromium|groups.spec.js|outer|#0']
       );
     });
 
@@ -228,7 +225,7 @@ describe('HarnessReporter', () => {
     test('take the outermost of nested serial suites that share one location', () => {
       const outer = { title: 'a', line: 5, serial: true };
       const inner = { title: 'b', line: 5, serial: true };
-      assert.strictEqual(group([member('x', [outer, inner])]), '0|groups.spec.js|a|#0');
+      assert.strictEqual(group([member('x', [outer, inner])]), 'chromium|groups.spec.js|a|#0');
     });
 
     test('fail closed when the serial ancestors cannot be matched exactly', () => {

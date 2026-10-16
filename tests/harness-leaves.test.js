@@ -85,15 +85,15 @@ describe('leaves listed by the reporter from the real fixture', () => {
 });
 
 describe('serialGroupId and leafLabel', () => {
-  test('build the group id from the project index, spec file, suite titles and repeat', () => {
+  test('build the group id from the project, spec file, suite titles and repeat', () => {
     assert.strictEqual(
       leaves.serialGroupId({
-        projectIndex: 2,
+        project: 'chromium',
         specFile: 'a.spec.js',
         suiteTitles: ['outer', 'inner'],
         repeatIndex: 1,
       }),
-      '2|a.spec.js|outer › inner|#1'
+      'chromium|a.spec.js|outer › inner|#1'
     );
   });
 
@@ -179,6 +179,28 @@ describe('classify, the one classification rule', () => {
   });
 });
 
+describe('assertNamedProjects', () => {
+  const named = (name) => ({ name, dependencies: [] });
+
+  test('accepts unique non-empty names, including one like an Object.prototype accessor', () => {
+    assert.doesNotThrow(() => leaves.assertNamedProjects([named('a'), named('__proto__')]));
+  });
+
+  test('rejects an unnamed project, naming its position', () => {
+    assert.throws(
+      () => leaves.assertNamedProjects([named('a'), named('')]),
+      /project #2 has no name.*unique non-empty name/
+    );
+  });
+
+  test('rejects a repeated name', () => {
+    assert.throws(
+      () => leaves.assertNamedProjects([named('a'), named('a')]),
+      /project name "a" is used twice/
+    );
+  });
+});
+
 describe('key helpers', () => {
   test('groupBase strips the repeat suffix', () => {
     assert.strictEqual(leaves.groupBase('1|f|a › b|#12'), '1|f|a › b');
@@ -188,7 +210,6 @@ describe('key helpers', () => {
     const leaf = leaves.buildLeaf({
       id: 'abc',
       project: 'p',
-      projectIndex: 3,
       specFile: 'a.spec.js',
       file: 'factory.js',
       titlePath: ['t'],
@@ -198,8 +219,9 @@ describe('key helpers', () => {
       column: 3,
     });
     assert.strictEqual(leaf.key, 'abc');
-    assert.strictEqual(leaf.testRef, '3|a.spec.js|t');
+    assert.strictEqual(leaf.testRef, 'p|a.spec.js|t');
     assert.strictEqual(leaf.label, 'p|a.spec.js|t|#2');
     assert.strictEqual(leaves.listLine(leaf), '[p] › factory.js:7:3 › t');
+    assert.match(leaves.loadLine(leaf), /^\[p\] › a\.spec\.js:1:1 › .+$/);
   });
 });
