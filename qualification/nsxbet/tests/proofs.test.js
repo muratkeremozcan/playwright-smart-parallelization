@@ -318,8 +318,9 @@ describe('proof 8: history safety', () => {
     assert.ok(evidenceRow.durationAfterMs < evidenceRow.durationBeforeMs);
   });
 
-  test('a cancelled run records the partial duration of the interrupted test', () => {
-    const { interrupted } = row('8.cancelled-run');
+  test('a cancelled run lowers the interrupted test in history to the moving average', () => {
+    const { interrupted, mergeExit } = row('8.cancelled-run');
+    assert.strictEqual(mergeExit, 0);
     assert.deepStrictEqual(
       interrupted.map((entry) => entry.id),
       ['volatile.spec.js::volatile step']
@@ -327,6 +328,12 @@ describe('proof 8: history safety', () => {
     for (const entry of interrupted) {
       assert.ok(entry.recordedMs !== null, entry.id);
       assert.ok(entry.recordedMs < entry.historyMs, entry.id);
+      // The engine's moving average: alpha 0.3 on the new observation.
+      assert.strictEqual(
+        entry.mergedMs,
+        Math.round(0.3 * entry.recordedMs + 0.7 * entry.historyMs)
+      );
+      assert.ok(entry.mergedMs < entry.historyMs, entry.id);
     }
   });
 });
@@ -337,9 +344,17 @@ describe('privacy', () => {
     for (const kind of ['connect', 'dns.lookup', 'fetch']) assert.ok(attempts.includes(kind), kind);
   });
 
-  test('assign, extract-timing and merge-timing attempt no connection', () => {
+  test('assign, extract-timing and merge-timing attempt no connection and spawn nothing', () => {
     const evidenceRow = row('net.plan-timing');
     assert.strictEqual(evidenceRow.attempts, 0);
+    assert.deepStrictEqual(evidenceRow.spawns, []);
+    assert.deepStrictEqual(evidenceRow.exits, [0, 0, 0, 0]);
+  });
+
+  test('an engine that shells out to curl is rejected by the same check', () => {
+    const evidenceRow = row('net.mutation-control');
+    assert.strictEqual(evidenceRow.mutatedStatus, 'fail');
+    assert.ok(evidenceRow.spawns.includes('curl'));
     assert.deepStrictEqual(evidenceRow.exits, [0, 0, 0, 0]);
   });
 
@@ -374,8 +389,18 @@ describe('balance and footprint', () => {
   });
 
   test('footprint numbers are recorded', () => {
-    const { install, runtimeMs, artifactBytes } = evidence.footprint;
+    const { install, runtimeMs, peakRssKb, artifactBytes } = evidence.footprint;
     assert.ok(install.packages > 0 && install.nodeModulesBytes > 0);
+    assert.deepStrictEqual(Object.keys(peakRssKb), [
+      'bareNode',
+      'version',
+      'assignCold',
+      'assignHistory',
+      'extractTiming',
+      'mergeTiming',
+    ]);
+    assert.ok(Object.values(peakRssKb).every((kb) => kb > 10000));
+    assert.ok(peakRssKb.assignHistory >= peakRssKb.bareNode);
     assert.ok(Object.values(runtimeMs).every((ms) => ms > 0));
     assert.ok(artifactBytes.assignmentJson > 0 && artifactBytes.mergedHistory > 0);
   });

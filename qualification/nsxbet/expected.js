@@ -47,6 +47,7 @@ const EXPECTED_ROWS = {
   'x2.racing-publish': 'fail',
   'net.guard-control': 'pass',
   'net.plan-timing': 'pass',
+  'net.mutation-control': 'pass',
   'net.os-block': 'pass',
 };
 

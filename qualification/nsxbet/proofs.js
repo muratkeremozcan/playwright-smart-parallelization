@@ -65,48 +65,107 @@ function summarizeProofs(rows) {
   return PROOFS.map((proof) => ({ ...proof, status: proofStatus(rows, proof.number) }));
 }
 
-async function collectEvidence({ log = () => {}, requireOsBlock = false } = {}) {
+/**
+ * The scenarios of each group. Groups share no state, so each can run on its own runner; the
+ * group that measures balance (`serial`) and the one that measures footprint (`privacy`) hold all
+ * the runs of their measurement, so no other work competes with it.
+ */
+const GROUPS = {
+  coverage: (ctx) => [...exactlyOnce(ctx), ...filters(ctx), ...newTests(ctx)],
+  serial: (ctx) => serialGroups(ctx),
+  assignment: (ctx) => [singleAssignment(ctx), ...damagedTiming(ctx), recomputePerShard(ctx)],
+  history: (ctx) => [
+    ...shardArtifacts(ctx),
+    ...reportProofs(ctx),
+    damagedExisting(ctx),
+    failedRun(ctx),
+    cancelledRun(ctx),
+    racingPublish(ctx),
+  ],
+};
+
+const GROUP_NAMES = [...Object.keys(GROUPS), 'privacy'];
+
+async function collectEvidence({ log = () => {}, requireOsBlock = false, group = 'all' } = {}) {
+  const names = group === 'all' ? GROUP_NAMES : [group];
+  for (const name of names) {
+    if (!GROUP_NAMES.includes(name)) throw new Error(`unknown group ${name}`);
+  }
   const started = Date.now();
   const ctx = createContext({ log });
   try {
-    return await collect(ctx, { started, requireOsBlock });
+    const rows = [];
+    for (const name of names) {
+      if (name !== 'privacy') rows.push(...GROUPS[name](ctx));
+    }
+    if (names.includes('privacy')) rows.push(...(await networkRows(ctx, { requireOsBlock })));
+    const info = engineInfo();
+    return {
+      generatedAt: new Date().toISOString(),
+      group,
+      versions: {
+        engine: `${info.name}@${info.version}`,
+        playwright: playwrightVersion(ctx.cwd),
+        node: process.version,
+        platform: `${process.platform}-${process.arch}`,
+      },
+      rows: rows.map((row) => ({ subject: 'engine', ...row })),
+      proofs: summarizeProofs(rows),
+      extras: summarizeExtras(rows),
+      balance: names.includes('serial') ? balance(ctx) : null,
+      footprint: names.includes('privacy') ? footprint(ctx) : null,
+      durationMs: Date.now() - started,
+    };
   } finally {
     if (!process.env.PSP_KEEP_TMP) ctx.dispose();
   }
 }
 
-async function collect(ctx, { started, requireOsBlock }) {
-  const scenarios = [
-    () => exactlyOnce(ctx),
-    () => serialGroups(ctx),
-    () => filters(ctx),
-    () => [singleAssignment(ctx)],
-    () => damagedTiming(ctx),
-    () => [recomputePerShard(ctx)],
-    () => shardArtifacts(ctx),
-    () => reportProofs(ctx),
-    () => newTests(ctx),
-    () => [damagedExisting(ctx), failedRun(ctx), cancelledRun(ctx), racingPublish(ctx)],
-  ];
-  const rows = scenarios.flatMap((scenario) => scenario());
-  rows.push(...(await networkRows(ctx, { requireOsBlock })));
-
-  const info = engineInfo();
+/**
+ * Joins the evidence of separate groups into one: rows are concatenated, balance and footprint
+ * come from the group that measured them, and the proofs are rolled up again. Throws on a
+ * repeated row, on different versions or when two groups hold the same measurement.
+ */
+function mergeEvidence(parts) {
+  if (parts.length === 0) throw new Error('nothing to merge');
+  const [first] = parts;
+  const ids = new Set();
+  for (const part of parts) {
+    if (JSON.stringify(part.versions) !== JSON.stringify(first.versions)) {
+      throw new Error('the parts were collected with different versions');
+    }
+    for (const row of part.rows) {
+      if (ids.has(row.id)) throw new Error(`row ${row.id} appears in two parts`);
+      ids.add(row.id);
+    }
+  }
+  const only = (key) => {
+    const found = parts.map((part) => part[key]).filter(Boolean);
+    if (found.length > 1) throw new Error(`${key} appears in two parts`);
+    return found[0] || null;
+  };
+  const rows = parts.flatMap((part) => part.rows);
   return {
     generatedAt: new Date().toISOString(),
-    versions: {
-      engine: `${info.name}@${info.version}`,
-      playwright: playwrightVersion(ctx.cwd),
-      node: process.version,
-      platform: `${process.platform}-${process.arch}`,
-    },
-    rows: rows.map((row) => ({ subject: 'engine', ...row })),
+    group: 'all',
+    versions: first.versions,
+    rows,
     proofs: summarizeProofs(rows),
     extras: summarizeExtras(rows),
-    balance: balance(ctx),
-    footprint: footprint(ctx),
-    durationMs: Date.now() - started,
+    balance: only('balance'),
+    footprint: only('footprint'),
+    durationMs: Math.max(...parts.map((part) => part.durationMs)),
+    legsMs: Object.fromEntries(parts.map((part) => [part.group, part.durationMs])),
   };
 }
 
-module.exports = { EXTRAS, PROOFS, collectEvidence, proofStatus, summarizeExtras, summarizeProofs };
+module.exports = {
+  EXTRAS,
+  GROUP_NAMES,
+  PROOFS,
+  collectEvidence,
+  mergeEvidence,
+  proofStatus,
+  summarizeExtras,
+  summarizeProofs,
+};

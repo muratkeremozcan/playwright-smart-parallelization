@@ -12,7 +12,7 @@ The rows below come from `npm run qualify:nsxbet`. The tests in `qualification/n
 | -------------------- | ------------------------------------- |
 | Engine package       | @nsxbet/playwright-orchestrator@2.0.1 |
 | Playwright (fixture) | 1.64.1                                |
-| Node                 | v22.20.0                              |
+| Node                 | v26.5.0                               |
 | Platform             | darwin-arm64                          |
 
 The package was installed in `qualification/nsxbet/` floated to `latest`; its lockfile is committed. The fixture is `fixtures/consumer` with its own lockfile. The package exposes `assign`, `extract-timing` and `merge-timing`. It has no `plan` command.
@@ -87,10 +87,11 @@ Two cases outside the eight proofs have their own results.
 | `7.new-renamed`             | pass   | A renamed test and a new file of two tests run, are listed as estimates and enter history. The old name stays in history until `--current-tests` or the 30 day age prunes it.                                                                                                                                                                   |
 | `8.damaged-history`         | fail   | `merge-timing --existing` with a damaged history file exits 0 and writes only the new artifact. The rest of the history is gone.                                                                                                                                                                                                                |
 | `8.failed-run`              | fail   | The report of a run in which the one second test failed at once is merged: its history entry drops from the passing run's duration, pulled toward the few milliseconds of the failure.                                                                                                                                                          |
-| `8.cancelled-run`           | fail   | A run cancelled with SIGINT 300 ms into the test: the interrupted test is recorded with the partial duration it had reached.                                                                                                                                                                                                                    |
+| `8.cancelled-run`           | fail   | A run cancelled with SIGINT 300 ms into the test: the interrupted test is recorded with the partial duration it had reached, and merging that artifact lowers the test in history to the moving average of the partial and the old duration.                                                                                                    |
 | `x2.racing-publish`         | fail   | Two runs merge into the same base history and publish in the opposite order: the later publish carries none of the other run's updates, and its `updatedAt` is later although its run is older. History entries hold only `duration`, `file`, `lastRun` and `runs`.                                                                             |
 | `net.guard-control`         | pass   | The preload guard records and refuses a connect, a DNS lookup, a `fetch` and an HTTP request.                                                                                                                                                                                                                                                   |
-| `net.plan-timing`           | pass   | Cold `assign`, `assign` with history, `extract-timing` and `merge-timing` under the guard attempt no connection and spawn no process.                                                                                                                                                                                                           |
+| `net.plan-timing`           | pass   | Cold `assign`, `assign` with history, `extract-timing` and `merge-timing` under the guard attempt no connection and spawn no process. A spawned program such as `curl` is outside the reach of the guard, so any spawn fails the row.                                                                                                           |
+| `net.mutation-control`      | pass   | A copy of the engine whose `assign` also runs `curl` is rejected by the same check, with the `curl` spawns in the evidence.                                                                                                                                                                                                                     |
 | `net.os-block`              | pass   | The same steps under an OS-level network block (macOS `sandbox-exec` in the reference run, Linux `unshare -n` in CI) exit 0 and give the same assignment as without it. The block was first shown to stop a loopback connection that succeeds without it.                                                                                       |
 
 ## Serial groups and file affinity
@@ -103,29 +104,35 @@ Native sharding against the engine for two and three shards, one worker per shar
 
 | Shards | Strategy                             | Leaves per shard | Shard ms             | Slowest ms | Imbalance | Slowest vs native | Violations     |
 | ------ | ------------------------------------ | ---------------- | -------------------- | ---------- | --------- | ----------------- | -------------- |
-| 2      | native `--shard`                     | 26 / 26          | 13843 / 13859        | 13859      | 0.1%      | baseline          | none           |
-| 2      | engine                               | 18 / 34          | 14472 / 13464        | 14472      | 3.6%      | +4.4%             | serial-split 2 |
-| 2      | engine with serial groups kept whole | 25 / 27          | 14188 / 13959        | 14188      | 0.8%      | +2.4%             | none           |
-| 3      | native `--shard`                     | 18 / 17 / 17     | 12249 / 3779 / 12323 | 12323      | 30.4%     | baseline          | none           |
-| 3      | engine                               | 19 / 12 / 21     | 9459 / 9895 / 9639   | 9895       | 2.4%      | -19.7%            | serial-split 2 |
-| 3      | engine with serial groups kept whole | 5 / 5 / 42       | 9732 / 9720 / 9034   | 9732       | 2.5%      | -21.0%            | none           |
+| 2      | native `--shard`                     | 26 / 26          | 13968 / 14127        | 14127      | 0.6%      | baseline          | none           |
+| 2      | engine                               | 18 / 34          | 14720 / 13831        | 14720      | 3.1%      | +4.2%             | serial-split 2 |
+| 2      | engine with serial groups kept whole | 26 / 26          | 14152 / 14332        | 14332      | 0.6%      | +1.5%             | none           |
+| 3      | native `--shard`                     | 18 / 17 / 17     | 12536 / 4026 / 12648 | 12648      | 29.9%     | baseline          | none           |
+| 3      | engine                               | 20 / 11 / 21     | 9685 / 9981 / 9897   | 9981       | 1.3%      | -21.1%            | serial-split 2 |
+| 3      | engine with serial groups kept whole | 5 / 5 / 42       | 9772 / 9753 / 9709   | 9772       | 0.3%      | -22.7%            | none           |
 
 ## Footprint
 
-Runtimes are the median of five calls and include Node start-up. The fixture has 26 tests per project.
+Runtimes and peak memory are the median of five calls and include Node start-up. Peak memory is the resident set size of the process, read by a preload when the process exits, next to an empty Node process. Shards run with the reporters the project already has, so the engine adds no memory to the Playwright run. The fixture has 26 tests per project.
 
 | Measure                                            | Value                       |
 | -------------------------------------------------- | --------------------------- |
 | Packages installed (engine and dependencies)       | 59                          |
 | `node_modules` size                                | 9.3 MiB                     |
 | Engine package size                                | 157.7 KiB                   |
-| `--version` (Node and CLI start-up)                | 69 ms                       |
-| `assign`, no history, 3 shards                     | 569 ms                      |
-| `assign`, with history, 3 shards                   | 182 ms                      |
+| `--version` (Node and CLI start-up)                | 77 ms                       |
+| `assign`, no history, 3 shards                     | 584 ms                      |
+| `assign`, with history, 3 shards                   | 156 ms                      |
 | `extract-timing`, one shard report                 | 72 ms                       |
-| `merge-timing`, one artifact into history          | 67 ms                       |
+| `merge-timing`, one artifact into history          | 74 ms                       |
+| Peak memory, empty Node process                    | 42.4 MiB                    |
+| Peak memory, `--version`                           | 63.3 MiB                    |
+| Peak memory, `assign`, no history                  | 72.0 MiB                    |
+| Peak memory, `assign`, with history                | 72.2 MiB                    |
+| Peak memory, `extract-timing`                      | 63.7 MiB                    |
+| Peak memory, `merge-timing`                        | 64.2 MiB                    |
 | Assignment JSON                                    | 2.5 KiB                     |
-| Test-list file per shard                           | 0.6 KiB / 0.3 KiB / 0.3 KiB |
+| Test-list file per shard                           | 0.2 KiB / 0.3 KiB / 0.6 KiB |
 | Timing artifact per shard                          | 1.5 KiB                     |
 | Merged history file                                | 4.9 KiB                     |
 | Playwright JSON report (input to `extract-timing`) | 49.5 KiB                    |
@@ -134,7 +141,7 @@ The engine writes no report of its own and adds no reporter or fixture to the Pl
 
 ## Privacy
 
-The plan and timing steps make no outbound connection. Two independent checks cover them. A preload (`qualification/nsxbet/net-guard.js`) records and refuses every socket, DNS lookup and `fetch` in the process and its Node children; its control row shows it catches each kind. The same steps also ran under an OS-level network block, after the block was shown to stop a connection to a local listener. Both ran for cold and warm `assign`, `extract-timing` and `merge-timing`.
+The plan and timing steps make no outbound connection. Two independent checks cover them. A preload (`qualification/nsxbet/net-guard.js`) records and refuses every socket, DNS lookup and `fetch` in the process and its Node children, and records every process the engine spawns; its control row shows it catches each kind, and the mutation control row shows a spawned `curl` fails the check. The same steps also ran under an OS-level network block, after the block was shown to stop a connection to a local listener. Both ran for cold and warm `assign`, `extract-timing` and `merge-timing`.
 
 ## Smallest remaining integration gap
 
@@ -154,4 +161,4 @@ npm run qualify:nsxbet
 npm run qualify:nsxbet:test
 ```
 
-`qualify:nsxbet` writes `qualification/nsxbet/evidence.json`. `qualify:nsxbet:test` asserts every result; with `PSP_NSX_EVIDENCE=FILE` it reads an evidence file instead of collecting again. The reference evidence behind this document is `docs/qualification/nsxbet-evidence.json`.
+`qualify:nsxbet` writes `qualification/nsxbet/evidence.json`; `--group coverage|serial|assignment|history|privacy` collects one group, and `--merge FILE...` joins the evidence of the groups. The `Qualification` workflow runs the five groups on separate runners and merges them before asserting. `qualify:nsxbet:test` asserts every result; with `PSP_NSX_EVIDENCE=FILE` it reads an evidence file instead of collecting again. The reference evidence behind this document is `docs/qualification/nsxbet-evidence.json`.

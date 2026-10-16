@@ -5,8 +5,9 @@
  * the package's own `bin/run.js` with the current Node binary, so what is qualified is the
  * published package as installed by `qualification/nsxbet/package-lock.json`.
  *
- * `wrap` is an optional command prefix (an OS-level network block, for example) and `env` extra
- * environment variables (the network guard preload, for example).
+ * `wrap` is an optional command prefix (an OS-level network block, for example), `env` extra
+ * environment variables (the network guard preload, for example) and `root` the package
+ * directory to run (a modified copy, for the negative control of the network check).
  */
 
 const { spawnSync } = require('node:child_process');
@@ -29,8 +30,8 @@ function engineInfo() {
  * Runs one engine command. Returns `{ status, stdout, stderr, ms }`; `status` is the exit code,
  * or 1 when the process was killed by a signal.
  */
-function runEngine(args, { cwd = __dirname, env = {}, wrap = [] } = {}) {
-  const command = [...wrap, process.execPath, path.join(packageRoot(), 'bin', 'run.js'), ...args];
+function runEngine(args, { cwd = __dirname, env = {}, wrap = [], root = packageRoot() } = {}) {
+  const command = [...wrap, process.execPath, path.join(root, 'bin', 'run.js'), ...args];
   const started = process.hrtime.bigint();
   const result = spawnSync(command[0], command.slice(1), {
     cwd,

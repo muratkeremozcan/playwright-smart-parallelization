@@ -24,6 +24,14 @@ const evidence = {
   ],
   footprint: {
     install: { packages: 59, nodeModulesBytes: 9787094, enginePackageBytes: 161525 },
+    peakRssKb: {
+      bareNode: 40960,
+      version: 61440,
+      assignCold: 81920,
+      assignHistory: 71680,
+      extractTiming: 66560,
+      mergeTiming: 64512,
+    },
     runtimeMs: {
       version: 74,
       assignCold: 581,
@@ -88,6 +96,8 @@ describe('renderVersions and renderFootprint', () => {
     assert.ok(text.includes('157.7 KiB'));
     assert.ok(text.includes('581 ms'));
     assert.ok(text.includes('0.6 KiB / 0.3 KiB'));
+    assert.ok(text.includes('40.0 MiB'));
+    assert.ok(text.includes('80.0 MiB'));
   });
 });
 

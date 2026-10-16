@@ -89,7 +89,7 @@ function renderBalance(evidence) {
 
 /** Install size, runtime of each command and artifact sizes. */
 function renderFootprint(evidence) {
-  const { install, runtimeMs, artifactBytes } = evidence.footprint;
+  const { install, runtimeMs, peakRssKb, artifactBytes } = evidence.footprint;
   return table(
     ['Measure', 'Value'],
     [
@@ -101,6 +101,12 @@ function renderFootprint(evidence) {
       ['`assign`, with history, 3 shards', `${runtimeMs.assignHistory} ms`],
       ['`extract-timing`, one shard report', `${runtimeMs.extractTiming} ms`],
       ['`merge-timing`, one artifact into history', `${runtimeMs.mergeTiming} ms`],
+      ['Peak memory, empty Node process', mib(peakRssKb.bareNode * KIB)],
+      ['Peak memory, `--version`', mib(peakRssKb.version * KIB)],
+      ['Peak memory, `assign`, no history', mib(peakRssKb.assignCold * KIB)],
+      ['Peak memory, `assign`, with history', mib(peakRssKb.assignHistory * KIB)],
+      ['Peak memory, `extract-timing`', mib(peakRssKb.extractTiming * KIB)],
+      ['Peak memory, `merge-timing`', mib(peakRssKb.mergeTiming * KIB)],
       ['Assignment JSON', kib(artifactBytes.assignmentJson)],
       ['Test-list file per shard', artifactBytes.testListPerShard.map(kib).join(' / ')],
       ['Timing artifact per shard', kib(artifactBytes.timingArtifact)],

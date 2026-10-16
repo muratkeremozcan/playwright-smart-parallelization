@@ -1,6 +1,7 @@
-# Qualifies the NSXBet Playwright orchestrator against the consumer fixture. The job collects the
-# evidence once, uploads it, and then asserts every result with `node --test`. It runs on demand
-# and on pull requests that touch the qualification code, the harness or the fixture.
+# Qualifies the NSXBet Playwright orchestrator against the consumer fixture. Five independent
+# groups of checks collect evidence, one per runner, then a final job merges the evidence and
+# asserts every result with `node --test`. It runs on demand and on pull requests that touch the
+# qualification code, the harness or the fixture.
 name: Qualification
 
 on:
@@ -20,10 +21,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  nsxbet:
-    name: NSXBet playwright-orchestrator
+  collect:
+    name: collect ${{ matrix.group }}
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        # Each group runs alone on its runner, so the groups that measure balance (serial) and
+        # footprint (privacy) have no other work competing with them.
+        group: [coverage, serial, assignment, history, privacy]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -44,14 +51,47 @@ jobs:
           npm run qualify:install
 
       - name: Collect evidence
-        run: npm run qualify:nsxbet -- --out "$RUNNER_TEMP/evidence.json" --require-os-block
+        env:
+          GROUP: ${{ matrix.group }}
+          OS_BLOCK: ${{ matrix.group == 'privacy' && '--require-os-block' || '' }}
+        run: npm run qualify:nsxbet -- --group "$GROUP" --out "$RUNNER_TEMP/evidence-$GROUP.json" $OS_BLOCK
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: evidence-${{ matrix.group }}
+          path: ${{ runner.temp }}/evidence-${{ matrix.group }}.json
+          if-no-files-found: ignore
+
+  assert:
+    name: assert the results
+    needs: collect
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: evidence-*
+          path: ${{ runner.temp }}/parts
+
+      - name: Merge the evidence
+        run: node qualification/nsxbet/run.js --merge "$RUNNER_TEMP"/parts/*/*.json --out "$RUNNER_TEMP/evidence.json"
 
       - name: Assert the results
         env:
           PSP_NSX_EVIDENCE: ${{ runner.temp }}/evidence.json
         run: npm run qualify:nsxbet:test
 
-      - name: Upload evidence
+      - name: Upload merged evidence
         if: always()
         uses: actions/upload-artifact@v7
         with:

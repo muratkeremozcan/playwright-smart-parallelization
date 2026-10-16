@@ -253,18 +253,27 @@ function cancelledRun(ctx) {
   });
   const timings = readJson(artifact).tests;
   const recorded = interrupted.filter((id) => id in timings);
+  const output = path.join(dir, 'merged.json');
+  const merge = mergeTiming({ existing: history, artifacts: [artifact], output });
+  const before = readJson(history).tests;
+  const after = readJson(output).tests;
+  const lowered = interrupted.filter(
+    (id) => (after[id]?.duration ?? before[id].duration) < before[id].duration
+  );
   return {
     id: '8.cancelled-run',
     proof: 8,
     title: `a run cancelled with SIGINT ${CANCEL_AFTER_MS} ms into a test is merged into history`,
-    status: recorded.length === 0 ? 'pass' : 'fail',
+    status: recorded.length === 0 && lowered.length === 0 ? 'pass' : 'fail',
     evidence: {
       exit: result.status,
       extractExit: extracted.status,
+      mergeExit: merge.status,
       interrupted: interrupted.map((id) => ({
         id,
         recordedMs: timings[id] ?? null,
-        historyMs: readJson(history).tests[id]?.duration ?? null,
+        historyMs: before[id]?.duration ?? null,
+        mergedMs: after[id]?.duration ?? null,
       })),
     },
   };

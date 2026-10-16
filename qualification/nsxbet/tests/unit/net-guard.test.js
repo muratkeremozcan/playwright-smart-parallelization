@@ -69,3 +69,29 @@ describe('net-guard', () => {
     assert.deepStrictEqual(attemptsIn(entries), []);
   });
 });
+
+describe('peak-rss', () => {
+  const PRELOAD = path.resolve(__dirname, '..', '..', 'peak-rss.js');
+
+  test('appends the peak memory of a process to the log when it exits', () => {
+    const log = path.join(dir, 'rss.log');
+    spawnSync(process.execPath, ['-e', 'Buffer.alloc(50 * 1024 * 1024, 1)'], {
+      env: { ...process.env, NODE_OPTIONS: `--require "${PRELOAD}"`, PSP_RSS_LOG: log },
+    });
+    const [entry] = fs
+      .readFileSync(log, 'utf8')
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => JSON.parse(line));
+    assert.ok(entry.maxRssKb > 50 * 1024, `peak ${entry.maxRssKb} KB`);
+  });
+
+  test('writes nothing without a log path', () => {
+    const result = spawnSync(process.execPath, ['--require', PRELOAD, '-e', '0'], {
+      env: { ...process.env, PSP_RSS_LOG: '' },
+      encoding: 'utf8',
+    });
+    assert.strictEqual(result.status, 0);
+    assert.strictEqual(result.stderr, '');
+  });
+});

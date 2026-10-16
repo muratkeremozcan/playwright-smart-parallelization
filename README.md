@@ -164,9 +164,10 @@ npm run qualify:nsxbet:test
 ```
 
 `qualify:nsxbet` writes `qualification/nsxbet/evidence.json` (`--out FILE` picks another path).
+`--group coverage|serial|assignment|history|privacy` collects one group, and `--merge FILE...` joins the evidence of the groups.
 `qualify:nsxbet:test` asserts every result; with `PSP_NSX_EVIDENCE=FILE` it reads an earlier
 evidence file instead of collecting again. The `Qualification` workflow runs both on pull requests
-that touch `qualification/`, `harness/` or the fixture.
+that touch `qualification/`, `harness/` or the fixture, with the five groups on separate runners.
 
 ## License
 

@@ -98,23 +98,72 @@ function planAndTiming(ctx, options, label) {
   };
 }
 
-function planTiming(ctx) {
-  const log = path.join(ctx.dir('network'), 'steps.log');
+/**
+ * Runs the plan and timing steps under the guard and judges them: every step exits 0, nothing
+ * attempts a connection and nothing spawns another process, because a spawned program is outside
+ * the reach of the guard. `root` runs a different copy of the engine package.
+ */
+function judgePlanTiming(ctx, { label, root }) {
+  const log = path.join(ctx.dir(`network-${label}`), 'steps.log');
   fs.rmSync(log, { force: true });
-  const run = planAndTiming(ctx, { env: guardEnv(log) }, 'guard');
+  const run = planAndTiming(ctx, { env: guardEnv(log), root }, label);
   const entries = readLog(log);
   const attempts = attemptsIn(entries);
+  const spawns = entries.filter((entry) => entry.kind === 'spawn').map((entry) => entry.target);
+  return {
+    status:
+      run.exits.every((code) => code === 0) && attempts.length === 0 && spawns.length === 0
+        ? 'pass'
+        : 'fail',
+    evidence: { steps: run.steps, exits: run.exits, attempts: attempts.length, spawns },
+  };
+}
+
+function planTiming(ctx) {
+  const { status, evidence } = judgePlanTiming(ctx, { label: 'guard' });
   return {
     id: 'net.plan-timing',
     proof: 'net',
     title: 'assign, extract-timing and merge-timing under the guard',
-    status: run.exits.every((code) => code === 0) && attempts.length === 0 ? 'pass' : 'fail',
-    evidence: {
-      steps: run.steps,
-      exits: run.exits,
-      attempts: attempts.length,
-      spawns: entries.length,
-    },
+    status,
+    evidence,
+  };
+}
+
+/**
+ * A copy of the installed engine whose `assign` also calls `curl`. The copy is the negative
+ * control of the network check: it must be rejected, or an empty log would prove nothing about
+ * programs the engine starts.
+ */
+function mutatedEngine(ctx) {
+  const dir = ctx.dir('network-mutated');
+  const modules = path.join(dir, 'node_modules');
+  fs.cpSync(path.resolve(__dirname, '..', 'node_modules'), modules, { recursive: true });
+  const root = path.join(modules, '@nsxbet', 'playwright-orchestrator');
+  const file = path.join(root, 'dist', 'commands', 'assign.js');
+  const source = fs.readFileSync(file, 'utf8');
+  const hook = 'const { flags } = await this.parse(Assign);';
+  if (!source.includes(hook)) throw new Error('assign.js has changed: update the mutation');
+  const call = '__curl("curl", ["-s", "http://vendor.invalid/upload"], { stdio: "ignore" });';
+  fs.writeFileSync(
+    file,
+    `import { execFileSync as __curl } from "node:child_process";\n${source.replace(
+      hook,
+      `${hook}\n        try { ${call} } catch {}`
+    )}`
+  );
+  return root;
+}
+
+function mutationControl(ctx) {
+  const root = mutatedEngine(ctx);
+  const { status, evidence } = judgePlanTiming(ctx, { label: 'mutated', root });
+  return {
+    id: 'net.mutation-control',
+    proof: 'net',
+    title: 'an engine that shells out to curl is rejected by the same check',
+    status: status === 'fail' && evidence.spawns.includes('curl') ? 'pass' : 'fail',
+    evidence: { mutatedStatus: status, spawns: evidence.spawns, exits: evidence.exits },
   };
 }
 
@@ -194,7 +243,12 @@ async function osBlockRow(ctx, { required }) {
 }
 
 async function networkRows(ctx, { requireOsBlock = false } = {}) {
-  return [guardControl(ctx), planTiming(ctx), await osBlockRow(ctx, { required: requireOsBlock })];
+  return [
+    guardControl(ctx),
+    planTiming(ctx),
+    mutationControl(ctx),
+    await osBlockRow(ctx, { required: requireOsBlock }),
+  ];
 }
 
 module.exports = { GUARD, attemptsIn, guardEnv, networkRows, osBlock, readLog };

@@ -1,256 +1,13 @@
 {
-  "generatedAt": "2026-10-15T22:31:26.014Z",
+  "generatedAt": "2026-10-16T00:08:04.301Z",
+  "group": "all",
   "versions": {
     "engine": "@nsxbet/playwright-orchestrator@2.0.1",
     "playwright": "1.64.1",
-    "node": "v22.20.0",
+    "node": "v26.5.0",
     "platform": "darwin-arm64"
   },
   "rows": [
-    {
-      "subject": "engine",
-      "id": "1.combined",
-      "proof": 1,
-      "title": "one list for the whole config, as the Quick Start does",
-      "status": "fail",
-      "evidence": {
-        "coverageViolations": {
-          "duplicate": 36
-        },
-        "kinds": {
-          "duplicate": 36,
-          "serial-split": 6
-        }
-      }
-    },
-    {
-      "subject": "engine",
-      "id": "1.jobs",
-      "proof": 1,
-      "title": "one assignment and set of jobs per project",
-      "status": "pass",
-      "evidence": {
-        "coverageViolations": {},
-        "kinds": {},
-        "jobs": 4
-      }
-    },
-    {
-      "subject": "engine",
-      "id": "1.merged",
-      "proof": 1,
-      "title": "one assignment per project merged into one list per shard",
-      "status": "pass",
-      "evidence": {
-        "coverageViolations": {},
-        "kinds": {
-          "serial-split": 2
-        }
-      }
-    },
-    {
-      "subject": "engine",
-      "id": "1.repeat-each",
-      "proof": 1,
-      "title": "--repeat-each 2 on three shards",
-      "status": "fail",
-      "evidence": {
-        "coverageViolations": {
-          "duplicate": 76
-        },
-        "kinds": {
-          "shard-failed": 1,
-          "duplicate": 76,
-          "serial-split": 12
-        }
-      }
-    },
-    {
-      "subject": "integration",
-      "id": "1.grouped-repeat-each",
-      "proof": 1,
-      "title": "--repeat-each 2 on three shards, through the shim",
-      "status": "pass",
-      "evidence": {
-        "coverageViolations": {},
-        "kinds": {}
-      }
-    },
-    {
-      "subject": "engine",
-      "id": "2.cold",
-      "proof": 2,
-      "title": "no history, default file affinity",
-      "status": "fail",
-      "evidence": {
-        "splitGroups": ["chromium|oversized.spec.js|0:0|#0", "firefox|oversized.spec.js|0:0|#0"],
-        "failedShards": [],
-        "coverageViolations": {},
-        "failedTests": [],
-        "kinds": {
-          "serial-split": 2
-        }
-      }
-    },
-    {
-      "subject": "engine",
-      "id": "2.history",
-      "proof": 2,
-      "title": "with history, default file affinity",
-      "status": "fail",
-      "evidence": {
-        "splitGroups": ["chromium|oversized.spec.js|0:0|#0", "firefox|oversized.spec.js|0:0|#0"],
-        "failedShards": [],
-        "coverageViolations": {},
-        "failedTests": [],
-        "kinds": {
-          "serial-split": 2
-        }
-      }
-    },
-    {
-      "subject": "engine",
-      "id": "2.no-affinity",
-      "proof": 2,
-      "title": "with history, --no-file-affinity",
-      "status": "fail",
-      "evidence": {
-        "splitGroups": [
-          "chromium|oversized.spec.js|0:0|#0",
-          "chromium|serial-flow.spec.js|0:0|#0",
-          "firefox|oversized.spec.js|0:0|#0",
-          "firefox|serial-flow.spec.js|0:0|#0"
-        ],
-        "failedShards": [2],
-        "coverageViolations": {},
-        "failedTests": ["two uses the session from one"],
-        "kinds": {
-          "shard-failed": 1,
-          "serial-split": 4
-        }
-      }
-    },
-    {
-      "subject": "engine",
-      "id": "2.huge-penalty",
-      "proof": 2,
-      "title": "with history, --file-affinity-penalty 100000000",
-      "status": "fail",
-      "evidence": {
-        "splitGroups": [
-          "chromium|serial-flow.spec.js|0:0|#0",
-          "firefox|serial-flow.spec.js|0:0|#0"
-        ],
-        "failedShards": [2],
-        "coverageViolations": {},
-        "failedTests": ["two uses the session from one"],
-        "kinds": {
-          "shard-failed": 1,
-          "serial-split": 2
-        }
-      }
-    },
-    {
-      "subject": "integration",
-      "id": "2.grouped-cold",
-      "proof": 2,
-      "title": "serial groups as one test, no history",
-      "status": "pass",
-      "evidence": {
-        "splitGroups": [],
-        "failedShards": [],
-        "coverageViolations": {},
-        "failedTests": [],
-        "kinds": {}
-      }
-    },
-    {
-      "subject": "integration",
-      "id": "2.grouped-history-2",
-      "proof": 2,
-      "title": "serial groups as one test, history, 2 shards",
-      "status": "pass",
-      "evidence": {
-        "splitGroups": [],
-        "failedShards": [],
-        "coverageViolations": {},
-        "failedTests": [],
-        "kinds": {}
-      }
-    },
-    {
-      "subject": "integration",
-      "id": "2.grouped-history-3",
-      "proof": 2,
-      "title": "serial groups as one test, history, 3 shards",
-      "status": "pass",
-      "evidence": {
-        "splitGroups": [],
-        "failedShards": [],
-        "coverageViolations": {},
-        "failedTests": [],
-        "kinds": {}
-      }
-    },
-    {
-      "subject": "engine",
-      "id": "2.dependencies",
-      "proof": 2,
-      "title": "setup and teardown run once per shard that needs them",
-      "status": "pass",
-      "evidence": {
-        "runsChecked": 5,
-        "dependencyViolations": [],
-        "dependencyExecutions": [
-          {
-            "setup|global.setup.js|prepare the environment|#0": 2,
-            "teardown|global.teardown.js|clean up the environment|#0": 2
-          },
-          {
-            "setup|global.setup.js|prepare the environment|#0": 2,
-            "teardown|global.teardown.js|clean up the environment|#0": 2
-          },
-          {
-            "setup|global.setup.js|prepare the environment|#0": 2,
-            "teardown|global.teardown.js|clean up the environment|#0": 2
-          },
-          {
-            "setup|global.setup.js|prepare the environment|#0": 2,
-            "teardown|global.teardown.js|clean up the environment|#0": 2
-          },
-          {
-            "setup|global.setup.js|prepare the environment|#0": 2,
-            "teardown|global.teardown.js|clean up the environment|#0": 2
-          }
-        ]
-      }
-    },
-    {
-      "subject": "engine",
-      "id": "3.grep",
-      "proof": 3,
-      "title": "--grep applied to the list and to the run",
-      "status": "pass",
-      "evidence": {
-        "coverageViolations": {},
-        "kinds": {},
-        "intended": 14
-      }
-    },
-    {
-      "subject": "engine",
-      "id": "3.project",
-      "proof": 3,
-      "title": "--project=firefox applied to the list and to the run",
-      "status": "pass",
-      "evidence": {
-        "coverageViolations": {},
-        "kinds": {
-          "serial-split": 1
-        },
-        "intended": 26
-      }
-    },
     {
       "subject": "engine",
       "id": "4.single-assignment",
@@ -441,8 +198,8 @@
             "estimated": 26,
             "isOptimal": true,
             "expectedDurations": {
-              "1": 5876,
-              "2": 5876
+              "1": 5850,
+              "2": 5850
             }
           }
         ]
@@ -468,16 +225,141 @@
     },
     {
       "subject": "engine",
+      "id": "1.combined",
+      "proof": 1,
+      "title": "one list for the whole config, as the Quick Start does",
+      "status": "fail",
+      "evidence": {
+        "coverageViolations": {
+          "duplicate": 36
+        },
+        "kinds": {
+          "duplicate": 36,
+          "serial-split": 6
+        }
+      }
+    },
+    {
+      "subject": "engine",
+      "id": "1.jobs",
+      "proof": 1,
+      "title": "one assignment and set of jobs per project",
+      "status": "pass",
+      "evidence": {
+        "coverageViolations": {},
+        "kinds": {},
+        "jobs": 4
+      }
+    },
+    {
+      "subject": "engine",
+      "id": "1.merged",
+      "proof": 1,
+      "title": "one assignment per project merged into one list per shard",
+      "status": "pass",
+      "evidence": {
+        "coverageViolations": {},
+        "kinds": {
+          "serial-split": 2
+        }
+      }
+    },
+    {
+      "subject": "engine",
+      "id": "1.repeat-each",
+      "proof": 1,
+      "title": "--repeat-each 2 on three shards",
+      "status": "fail",
+      "evidence": {
+        "coverageViolations": {
+          "duplicate": 76
+        },
+        "kinds": {
+          "shard-failed": 1,
+          "duplicate": 76,
+          "serial-split": 12
+        }
+      }
+    },
+    {
+      "subject": "integration",
+      "id": "1.grouped-repeat-each",
+      "proof": 1,
+      "title": "--repeat-each 2 on three shards, through the shim",
+      "status": "pass",
+      "evidence": {
+        "coverageViolations": {},
+        "kinds": {}
+      }
+    },
+    {
+      "subject": "engine",
+      "id": "3.grep",
+      "proof": 3,
+      "title": "--grep applied to the list and to the run",
+      "status": "pass",
+      "evidence": {
+        "coverageViolations": {},
+        "kinds": {},
+        "intended": 14
+      }
+    },
+    {
+      "subject": "engine",
+      "id": "3.project",
+      "proof": 3,
+      "title": "--project=firefox applied to the list and to the run",
+      "status": "pass",
+      "evidence": {
+        "coverageViolations": {},
+        "kinds": {
+          "serial-split": 1
+        },
+        "intended": 26
+      }
+    },
+    {
+      "subject": "engine",
+      "id": "7.cold",
+      "proof": 7,
+      "title": "no history: the full intended suite runs",
+      "status": "pass",
+      "evidence": {
+        "coverageViolations": {},
+        "testsPlanned": 52,
+        "testsEstimated": 52
+      }
+    },
+    {
+      "subject": "engine",
+      "id": "7.new-renamed",
+      "proof": 7,
+      "title": "history from before a rename and a new file of two tests",
+      "status": "pass",
+      "evidence": {
+        "coverageViolations": {},
+        "estimatedTests": [
+          "cart.spec.js::cart::adds one item",
+          "wishlist.spec.js::wishlist::adds a product",
+          "wishlist.spec.js::wishlist::shares the list"
+        ],
+        "staleEntryKeptAfterMerge": true,
+        "staleEntryPrunedWithCurrentTests": true,
+        "newEntriesAfterMerge": 3
+      }
+    },
+    {
+      "subject": "engine",
       "id": "x1.damaged-shard-artifact",
       "proof": "x1",
       "title": "shard 2 timing artifact damaged when history is merged",
       "status": "fail",
       "evidence": {
         "exit": 0,
-        "stderr": [" \u203a   Warning: Failed to load timing artifact: damaged-shard-2.json"],
+        "stderr": [" ›   Warning: Failed to load timing artifact: damaged-shard-2.json"],
         "testsBefore": 28,
         "testsAfter": 28,
-        "testsUpdated": 11
+        "testsUpdated": 19
       }
     },
     {
@@ -488,10 +370,10 @@
       "status": "fail",
       "evidence": {
         "exit": 0,
-        "stderr": [" \u203a   Warning: Failed to load timing artifact: absent-shard-2.json"],
+        "stderr": [" ›   Warning: Failed to load timing artifact: absent-shard-2.json"],
         "testsBefore": 28,
         "testsAfter": 28,
-        "testsUpdated": 11
+        "testsUpdated": 19
       }
     },
     {
@@ -550,36 +432,6 @@
     },
     {
       "subject": "engine",
-      "id": "7.cold",
-      "proof": 7,
-      "title": "no history: the full intended suite runs",
-      "status": "pass",
-      "evidence": {
-        "coverageViolations": {},
-        "testsPlanned": 52,
-        "testsEstimated": 52
-      }
-    },
-    {
-      "subject": "engine",
-      "id": "7.new-renamed",
-      "proof": 7,
-      "title": "history from before a rename and a new file of two tests",
-      "status": "pass",
-      "evidence": {
-        "coverageViolations": {},
-        "estimatedTests": [
-          "cart.spec.js::cart::adds one item",
-          "wishlist.spec.js::wishlist::adds a product",
-          "wishlist.spec.js::wishlist::shares the list"
-        ],
-        "staleEntryKeptAfterMerge": true,
-        "staleEntryPrunedWithCurrentTests": true,
-        "newEntriesAfterMerge": 3
-      }
-    },
-    {
-      "subject": "engine",
       "id": "8.damaged-history",
       "proof": 8,
       "title": "the existing history file is damaged when one shard artifact is merged",
@@ -588,7 +440,7 @@
         "exit": 0,
         "stderr": [],
         "testsBefore": 28,
-        "testsAfter": 11
+        "testsAfter": 19
       }
     },
     {
@@ -600,7 +452,7 @@
       "evidence": {
         "testId": "volatile.spec.js::volatile step",
         "durationBeforeMs": 1050,
-        "durationAfterMs": 756
+        "durationAfterMs": 753
       }
     },
     {
@@ -612,11 +464,13 @@
       "evidence": {
         "exit": 130,
         "extractExit": 0,
+        "mergeExit": 0,
         "interrupted": [
           {
             "id": "volatile.spec.js::volatile step",
-            "recordedMs": 318,
-            "historyMs": 1050
+            "recordedMs": 320,
+            "historyMs": 1050,
+            "mergedMs": 831
           }
         ]
       }
@@ -630,8 +484,8 @@
       "evidence": {
         "testsInHistory": 28,
         "updatesLost": 28,
-        "publishedUpdatedAt": "2026-10-15T22:31:23.064Z",
-        "newerRunUpdatedAt": "2026-10-15T22:31:22.995Z",
+        "publishedUpdatedAt": "2026-10-16T00:07:18.947Z",
+        "newerRunUpdatedAt": "2026-10-16T00:07:18.872Z",
         "publishedIsLaterThanNewerRun": true,
         "entryKeys": ["duration", "file", "lastRun", "runs"],
         "topLevelKeys": ["tests", "updatedAt", "version"]
@@ -658,7 +512,19 @@
         "steps": ["assign cold", "assign history", "extract-timing", "merge-timing"],
         "exits": [0, 0, 0, 0],
         "attempts": 0,
-        "spawns": 0
+        "spawns": []
+      }
+    },
+    {
+      "subject": "engine",
+      "id": "net.mutation-control",
+      "proof": "net",
+      "title": "an engine that shells out to curl is rejected by the same check",
+      "status": "pass",
+      "evidence": {
+        "mutatedStatus": "fail",
+        "spawns": ["curl", "curl"],
+        "exits": [0, 0, 0, 0]
       }
     },
     {
@@ -673,6 +539,155 @@
         "steps": ["assign cold", "assign history", "extract-timing", "merge-timing"],
         "exits": [0, 0, 0, 0],
         "sameAssignmentAsOpen": true
+      }
+    },
+    {
+      "subject": "engine",
+      "id": "2.cold",
+      "proof": 2,
+      "title": "no history, default file affinity",
+      "status": "fail",
+      "evidence": {
+        "splitGroups": ["chromium|oversized.spec.js|0:0|#0", "firefox|oversized.spec.js|0:0|#0"],
+        "failedShards": [],
+        "coverageViolations": {},
+        "failedTests": [],
+        "kinds": {
+          "serial-split": 2
+        }
+      }
+    },
+    {
+      "subject": "engine",
+      "id": "2.history",
+      "proof": 2,
+      "title": "with history, default file affinity",
+      "status": "fail",
+      "evidence": {
+        "splitGroups": ["chromium|oversized.spec.js|0:0|#0", "firefox|oversized.spec.js|0:0|#0"],
+        "failedShards": [],
+        "coverageViolations": {},
+        "failedTests": [],
+        "kinds": {
+          "serial-split": 2
+        }
+      }
+    },
+    {
+      "subject": "engine",
+      "id": "2.no-affinity",
+      "proof": 2,
+      "title": "with history, --no-file-affinity",
+      "status": "fail",
+      "evidence": {
+        "splitGroups": [
+          "chromium|oversized.spec.js|0:0|#0",
+          "chromium|serial-flow.spec.js|0:0|#0",
+          "firefox|oversized.spec.js|0:0|#0",
+          "firefox|serial-retry.spec.js|0:0|#0"
+        ],
+        "failedShards": [1, 2],
+        "coverageViolations": {},
+        "failedTests": ["two depends on the state from one", "two uses the session from one"],
+        "kinds": {
+          "shard-failed": 2,
+          "serial-split": 4
+        }
+      }
+    },
+    {
+      "subject": "engine",
+      "id": "2.huge-penalty",
+      "proof": 2,
+      "title": "with history, --file-affinity-penalty 100000000",
+      "status": "fail",
+      "evidence": {
+        "splitGroups": [
+          "chromium|serial-flow.spec.js|0:0|#0",
+          "firefox|serial-flow.spec.js|0:0|#0"
+        ],
+        "failedShards": [2],
+        "coverageViolations": {},
+        "failedTests": ["two uses the session from one"],
+        "kinds": {
+          "shard-failed": 1,
+          "serial-split": 2
+        }
+      }
+    },
+    {
+      "subject": "integration",
+      "id": "2.grouped-cold",
+      "proof": 2,
+      "title": "serial groups as one test, no history",
+      "status": "pass",
+      "evidence": {
+        "splitGroups": [],
+        "failedShards": [],
+        "coverageViolations": {},
+        "failedTests": [],
+        "kinds": {}
+      }
+    },
+    {
+      "subject": "integration",
+      "id": "2.grouped-history-2",
+      "proof": 2,
+      "title": "serial groups as one test, history, 2 shards",
+      "status": "pass",
+      "evidence": {
+        "splitGroups": [],
+        "failedShards": [],
+        "coverageViolations": {},
+        "failedTests": [],
+        "kinds": {}
+      }
+    },
+    {
+      "subject": "integration",
+      "id": "2.grouped-history-3",
+      "proof": 2,
+      "title": "serial groups as one test, history, 3 shards",
+      "status": "pass",
+      "evidence": {
+        "splitGroups": [],
+        "failedShards": [],
+        "coverageViolations": {},
+        "failedTests": [],
+        "kinds": {}
+      }
+    },
+    {
+      "subject": "engine",
+      "id": "2.dependencies",
+      "proof": 2,
+      "title": "setup and teardown run once per shard that needs them",
+      "status": "pass",
+      "evidence": {
+        "runsChecked": 5,
+        "dependencyViolations": [],
+        "dependencyExecutions": [
+          {
+            "setup|global.setup.js|prepare the environment|#0": 2,
+            "teardown|global.teardown.js|clean up the environment|#0": 2
+          },
+          {
+            "setup|global.setup.js|prepare the environment|#0": 2,
+            "teardown|global.teardown.js|clean up the environment|#0": 2
+          },
+          {
+            "setup|global.setup.js|prepare the environment|#0": 2,
+            "teardown|global.teardown.js|clean up the environment|#0": 2
+          },
+          {
+            "setup|global.setup.js|prepare the environment|#0": 2,
+            "teardown|global.teardown.js|clean up the environment|#0": 2
+          },
+          {
+            "setup|global.setup.js|prepare the environment|#0": 2,
+            "teardown|global.teardown.js|clean up the environment|#0": 2
+          }
+        ]
       }
     }
   ],
@@ -734,57 +749,57 @@
     {
       "shards": 2,
       "native": {
-        "durationsMs": [13843, 13859],
+        "durationsMs": [13968, 14127],
         "leaves": [26, 26],
-        "slowestMs": 13859,
-        "imbalance": 0.0005775756263085698,
+        "slowestMs": 14127,
+        "imbalance": 0.005659369994660972,
         "violations": {}
       },
       "engine": {
-        "durationsMs": [14472, 13464],
+        "durationsMs": [14720, 13831],
         "leaves": [18, 34],
-        "slowestMs": 14472,
-        "imbalance": 0.03608247422680412,
+        "slowestMs": 14720,
+        "imbalance": 0.03113726314314735,
         "violations": {
           "serial-split": 2
         },
-        "slowestVsNative": 0.04423118551122015
+        "slowestVsNative": 0.041976357329935585
       },
       "grouped": {
-        "durationsMs": [14188, 13959],
-        "leaves": [25, 27],
-        "slowestMs": 14188,
-        "imbalance": 0.008135858173162326,
+        "durationsMs": [14152, 14332],
+        "leaves": [26, 26],
+        "slowestMs": 14332,
+        "imbalance": 0.006319337171745541,
         "violations": {},
-        "slowestVsNative": 0.023739086514178512
+        "slowestVsNative": 0.014511219650315
       }
     },
     {
       "shards": 3,
       "native": {
-        "durationsMs": [12249, 3779, 12323],
+        "durationsMs": [12536, 4026, 12648],
         "leaves": [18, 17, 17],
-        "slowestMs": 12323,
-        "imbalance": 0.3039751684243941,
+        "slowestMs": 12648,
+        "imbalance": 0.29900718931872655,
         "violations": {}
       },
       "engine": {
-        "durationsMs": [9459, 9895, 9639],
-        "leaves": [19, 12, 21],
-        "slowestMs": 9895,
-        "imbalance": 0.02386783016590205,
+        "durationsMs": [9685, 9981, 9897],
+        "leaves": [20, 11, 21],
+        "slowestMs": 9981,
+        "imbalance": 0.012853905219361979,
         "violations": {
           "serial-split": 2
         },
-        "slowestVsNative": -0.1970299440071411
+        "slowestVsNative": -0.21086337760910817
       },
       "grouped": {
-        "durationsMs": [9732, 9720, 9034],
+        "durationsMs": [9772, 9753, 9709],
         "leaves": [5, 5, 42],
-        "slowestMs": 9732,
-        "imbalance": 0.024924524327739877,
+        "slowestMs": 9772,
+        "imbalance": 0.002804953136758631,
         "violations": {},
-        "slowestVsNative": -0.21025724255457276
+        "slowestVsNative": -0.2273877292852625
       }
     }
   ],
@@ -795,19 +810,34 @@
       "enginePackageBytes": 161525
     },
     "runtimeMs": {
-      "version": 69,
-      "assignCold": 569,
-      "assignHistory": 182,
+      "version": 77,
+      "assignCold": 584,
+      "assignHistory": 156,
       "extractTiming": 72,
-      "mergeTiming": 67
+      "mergeTiming": 74
+    },
+    "peakRssKb": {
+      "bareNode": 43376,
+      "version": 64784,
+      "assignCold": 73776,
+      "assignHistory": 73952,
+      "extractTiming": 65264,
+      "mergeTiming": 65744
     },
     "artifactBytes": {
       "assignmentJson": 2562,
-      "testListPerShard": [590, 283, 334],
+      "testListPerShard": [241, 311, 655],
       "timingArtifact": 1583,
       "mergedHistory": 5039,
-      "playwrightJsonReport": 50738
+      "playwrightJsonReport": 50730
     }
   },
-  "durationMs": 487111
+  "durationMs": 262663,
+  "legsMs": {
+    "assignment": 48862,
+    "coverage": 192794,
+    "history": 141916,
+    "privacy": 44786,
+    "serial": 262663
+  }
 }
