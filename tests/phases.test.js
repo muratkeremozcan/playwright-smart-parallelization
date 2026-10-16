@@ -451,10 +451,10 @@ describe('the compare-and-swap steps', () => {
     );
   const slot = (epoch, seq) => ({ epoch, seq });
 
-  test('a cold history starts a chain under the run id and verifies it', () => {
+  test('a cold history starts a chain under the date of the finish and verifies it', () => {
     const state = store.newState({ key, run: runOf(5) });
     const written = store.write(state, { matchedKey: '', text: null });
-    assert.strictEqual(written.key, cacheKey(key, 5, 1));
+    assert.strictEqual(written.key, cacheKey(key, 20261016, 1));
     assert.deepStrictEqual(store.verify(state, { text: written.text }), { retry: false });
     assert.strictEqual(state.status, 'published');
   });
@@ -487,11 +487,11 @@ describe('the compare-and-swap steps', () => {
     store.verify(state, { text: written.text });
     assert.strictEqual(state.status, 'published');
     assert.throws(
-      () => store.write(state, { matchedKey: 'psp-history-v1-other-1-1', text: entry(1) }),
+      () => store.write(state, { matchedKey: 'psp-history-v2-other-1-1', text: entry(1) }),
       /outside this history/
     );
     assert.throws(
-      () => store.write(state, { matchedKey: `psp-history-v1-${key}-1`, text: entry(1) }),
+      () => store.write(state, { matchedKey: `psp-history-v2-${key}-1`, text: entry(1) }),
       /outside this history/
     );
   });
@@ -504,22 +504,43 @@ describe('the compare-and-swap steps', () => {
     );
   });
 
-  test('higher keys of an old epoch never block a fresh chain: it publishes on its first attempt', () => {
-    // An old chain 1-2..1-4 survives an eviction the cache hides; prepare and finish see nothing.
-    const old = new Map([2, 3, 4].map((seq) => [cacheKey(key, 1, seq), entry(seq)]));
+  test('higher keys of an older day never block a fresh chain: it publishes on its first attempt', () => {
+    // An old chain 20261015-2..4 survives an eviction the cache hides; prepare and finish see nothing.
+    const old = new Map([2, 3, 4].map((seq) => [cacheKey(key, 20261015, seq), entry(seq)]));
     const state = store.newState({ key, run: runOf(300) });
     const written = store.write(state, { matchedKey: '', text: null });
-    assert.strictEqual(written.key, cacheKey(key, 300, 1));
+    assert.strictEqual(written.key, cacheKey(key, 20261016, 1));
     assert.ok(!old.has(written.key));
     assert.deepStrictEqual(store.verify(state, { text: written.text }), { retry: false });
     assert.strictEqual(state.status, 'published');
     assert.strictEqual(state.attempted.length, 1);
     // The next writer reads the newest entry, the fresh one, and continues its chain.
-    const next = store.newState({ key, run: runOf(301), pinned: slot(300, 1) });
+    const next = store.newState({ key, run: runOf(301), pinned: slot(20261016, 1) });
     assert.strictEqual(
       store.write(next, { matchedKey: written.key, text: written.text }).key,
-      cacheKey(key, 300, 2)
+      cacheKey(key, 20261016, 2)
     );
+  });
+
+  test('two cold writers of one day meet on the first key, and the newest entry holds both runs', () => {
+    // The Actions cache: immutable keys, the newest entry by prefix.
+    const cache = new Map();
+    const save = (k, text) => cache.has(k) || cache.set(k, text);
+    const newest = () => [...cache.keys()].pop() || '';
+    const a = store.newState({ key, run: runOf(401) });
+    const b = store.newState({ key, run: runOf(402) });
+    const wa = store.write(a, { matchedKey: '', text: null });
+    const wb = store.write(b, { matchedKey: '', text: null });
+    assert.strictEqual(wa.key, wb.key);
+    save(wa.key, wa.text);
+    save(wb.key, wb.text);
+    assert.deepStrictEqual(store.verify(a, { text: cache.get(wa.key) }), { retry: false });
+    assert.deepStrictEqual(store.verify(b, { text: cache.get(wb.key) }), { retry: true });
+    const again = store.write(b, { matchedKey: newest(), text: cache.get(newest()) });
+    save(again.key, again.text);
+    assert.deepStrictEqual(store.verify(b, { text: cache.get(again.key) }), { retry: false });
+    assert.strictEqual(newest(), cacheKey(key, 20261016, 2));
+    assert.deepStrictEqual(JSON.parse(cache.get(newest())).runs, [401, 402]);
   });
 
   test('a prefix read that misses after prepare pinned an entry publishes nothing', () => {
@@ -551,7 +572,7 @@ describe('the compare-and-swap steps', () => {
     assert.strictEqual(state.status, 'failed');
     assert.deepStrictEqual(
       state.attempted,
-      [slot(9, 1), slot(9, 1), slot(9, 1)],
+      [slot(20261016, 1), slot(20261016, 1), slot(20261016, 1)],
       'the pending key is retried'
     );
   });

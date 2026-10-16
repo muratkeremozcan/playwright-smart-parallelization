@@ -17,6 +17,9 @@ const { parseHistory, serializeHistory, emptyHistory } = require('../lib/history
 const { cacheKey, cachePrefix } = require('../lib/identity');
 const { sha256 } = require('../lib/util');
 
+// The epoch of a chain the model starts: the day its runs finish on (PSP_TODAY).
+const EPOCH = 20261016;
+
 const COMMAND = 'npx playwright test --project=chromium --grep-invert=oversized --reporter=dot';
 
 function workspace() {
@@ -139,7 +142,7 @@ describe('cold start, warm run, failed shard and rollback', () => {
     assert.match(warm.finish.summary, /\| 1 \| 1 \| \d+ \| /);
     assert.strictEqual(
       newest(ctx.world, warm.plan.key).key,
-      cacheKey(warm.plan.key, 101, 2),
+      cacheKey(warm.plan.key, EPOCH, 2),
       'the cold chain continues'
     );
   });
@@ -201,8 +204,8 @@ describe('cold start, warm run, failed shard and rollback', () => {
 
 /** The first entry of the history: the one cold start published and the warm run pinned. */
 function newestBefore(ctx, run) {
-  // Cold start opened the chain under its own run id, 101.
-  return ctx.world.cache.get(cacheKey(run.plan.key, 101, 1)).files['history.json'].toString();
+  // Cold start opened the chain under the day of its finish.
+  return ctx.world.cache.get(cacheKey(run.plan.key, EPOCH, 1)).files['history.json'].toString();
 }
 
 describe('finish against one recorded run', () => {
@@ -253,13 +256,13 @@ describe('finish against one recorded run', () => {
     const hooks = {
       before: (step, world) => {
         if (step.name === 'History, attempt 1, read the key back')
-          world.cache.delete(cacheKey(key(), 201, 1));
+          world.cache.delete(cacheKey(key(), EPOCH, 1));
       },
     };
     const f = finish(ctx, 201, plan, {}, hooks);
     assert.strictEqual(f.outcome, 'success', f.stdout);
     assert.match(f.stdout, /not readable yet.*tried again/);
-    assert.strictEqual(newest(ctx.world, key()).key, cacheKey(key(), 201, 1));
+    assert.strictEqual(newest(ctx.world, key()).key, cacheKey(key(), EPOCH, 1));
     assert.deepStrictEqual(parseHistory(newest(ctx.world, key()).text).runs, [201]);
   });
 
@@ -306,7 +309,7 @@ describe('finish against one recorded run', () => {
     );
   });
 
-  test('a fresh chain under the run id publishes on its first attempt past old higher keys', () => {
+  test('a fresh chain under the day of the finish publishes on its first attempt past old higher keys', () => {
     // An old chain survives with keys 1-2 to 1-4 while the cache returns nothing for the prefix.
     const ctx = fresh();
     for (const seq of [2, 3, 4]) seed(ctx.world, seq, [100 + seq]);
@@ -321,7 +324,7 @@ describe('finish against one recorded run', () => {
     const f = finish(ctx, 201, plan, {}, hooks);
     assert.strictEqual(f.outcome, 'success', f.stdout);
     assert.doesNotMatch(f.stdout, /belongs to another writer/);
-    assert.strictEqual(newest(ctx.world, key()).key, cacheKey(key(), 201, 1));
+    assert.strictEqual(newest(ctx.world, key()).key, cacheKey(key(), EPOCH, 1));
   });
 
   test('a fork pull request balances from the base history it can read', () => {

@@ -289,6 +289,8 @@ function runAction({ inputs = {}, env = {}, world, workspace, hooks = {} }) {
               GITHUB_REPOSITORY: 'owner/repo',
               GITHUB_EVENT_NAME: 'push',
               GITHUB_REF: 'refs/heads/main',
+              // A fixed day, so a chain the model starts has a known epoch.
+              PSP_TODAY: '2026-10-16',
               GITHUB_EVENT_PATH: pushEvent(temp),
               RUNNER_OS: 'Linux',
               RUNNER_ARCH: 'X64',

@@ -101,7 +101,7 @@ jobs:
       - id: prefix
         env:
           PLAN: ${{ steps.psp.outputs.plan }}
-        run: echo "prefix=psp-history-v1-$(jq -r .key <<< "$PLAN")-" >> "$GITHUB_OUTPUT"
+        run: echo "prefix=psp-history-v2-$(jq -r .key <<< "$PLAN")-" >> "$GITHUB_OUTPUT"
 
       - id: before
         uses: actions/cache/restore@v6

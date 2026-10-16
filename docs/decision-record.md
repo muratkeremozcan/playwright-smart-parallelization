@@ -54,7 +54,7 @@ Shape A (per-shard `--test-list` files) is rejected: `--test-list` is a lossy se
 - An unreadable key is retried on the next attempt. After three attempts finish fails and the history is unchanged.
 - Three attempts cover up to three writers racing for the same keys; a fourth simultaneous finish fails.
 - A damaged newest entry is reported, and this run's merge is published over it: the job fails once, and the next run reads a healthy history.
-- Keys are `<epoch>-<seq>`. A writer that saw no history starts a chain under its own run id as the epoch; every other writer continues the epoch of the entry it read. A new chain never collides with the keys of an old one, and the newest entry wins by creation time across epochs.
+- Keys are `psp-history-v2-<key>-<epoch>-<seq>`. A writer that saw no history starts a chain under the UTC date of its finish (YYYYMMDD); every other writer continues the epoch of the entry it read. Cold writers of one day meet on the first key and merge; a chain started on a later day never collides with old keys. Two cold writers on either side of midnight can drop one run's samples.
 
 ## Review cases (G2)
 
