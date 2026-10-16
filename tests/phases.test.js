@@ -64,7 +64,7 @@ function restore(j, plan, history) {
     path.join(dir, HISTORY_FILE),
     typeof history === 'string' ? history : serializeHistory(history)
   );
-  return { ...j.env, PSP_MATCHED_KEY: cacheKey(plan.key, 4) };
+  return { ...j.env, PSP_MATCHED_KEY: cacheKey(plan.key, 9, 4) };
 }
 
 const someHistory = (key) =>
@@ -150,6 +150,7 @@ describe('prepare decides the mode of the whole run', () => {
     assert.strictEqual(plan.mode, 'native');
     assert.strictEqual(plan.reason, 'no history yet');
     assert.strictEqual(plan.seq, null, 'no entry pinned, so finish may start a chain');
+    assert.strictEqual(plan.epoch, null);
     assert.strictEqual(plan.attempt, 1);
     assert.strictEqual(plan.fingerprint, fingerprint(plan.key, plan.playwright));
   });
@@ -161,7 +162,7 @@ describe('prepare decides the mode of the whole run', () => {
     const result = prepare.plan({ inputs: inputs(), env: restore(j, first, history) });
     const plan = planOf(result);
     assert.strictEqual(plan.mode, 'balanced');
-    assert.strictEqual(plan.seq, 4, 'the pinned entry');
+    assert.deepStrictEqual([plan.epoch, plan.seq], [9, 4], 'the pinned entry');
     assert.strictEqual(plan.sha, sha256(serializeHistory(history)));
     assert.strictEqual(
       fs.readFileSync(path.join(result.outputs['snapshot-dir'], HISTORY_FILE), 'utf8'),
@@ -448,72 +449,95 @@ describe('the compare-and-swap steps', () => {
     serializeHistory(
       applyRun(emptyHistory(key), { ...runOf(id), samples: new Map(runOf(id).samples) }).history
     );
+  const slot = (epoch, seq) => ({ epoch, seq });
 
-  test('a cold history saves key 1 and verifies it', () => {
+  test('a cold history starts a chain under the run id and verifies it', () => {
     const state = store.newState({ key, run: runOf(5) });
     const written = store.write(state, { matchedKey: '', text: null });
-    assert.strictEqual(written.key, cacheKey(key, 1));
+    assert.strictEqual(written.key, cacheKey(key, 5, 1));
     assert.deepStrictEqual(store.verify(state, { text: written.text }), { retry: false });
     assert.strictEqual(state.status, 'published');
   });
 
   test('a lost key joins the merge and the next attempt moves past every key seen', () => {
     const state = store.newState({ key, run: runOf(5) });
-    store.write(state, { matchedKey: cacheKey(key, 3), text: entry(1) });
-    assert.deepStrictEqual(state.attempted, [4]);
+    store.write(state, { matchedKey: cacheKey(key, 2, 3), text: entry(1) });
+    assert.deepStrictEqual(state.attempted, [slot(2, 4)]);
     assert.deepStrictEqual(store.verify(state, { text: entry(2) }), { retry: true });
-    const second = store.write(state, { matchedKey: cacheKey(key, 3), text: entry(1) });
-    assert.strictEqual(second.key, cacheKey(key, 5));
+    const second = store.write(state, { matchedKey: cacheKey(key, 2, 3), text: entry(1) });
+    assert.strictEqual(second.key, cacheKey(key, 2, 5));
     assert.deepStrictEqual(JSON.parse(second.text).runs, [1, 2, 5]);
   });
 
   test('a history that holds the run already saves nothing', () => {
     const state = store.newState({ key, run: runOf(1) });
     assert.strictEqual(
-      store.write(state, { matchedKey: cacheKey(key, 1), text: entry(1) }).save,
+      store.write(state, { matchedKey: cacheKey(key, 1, 1), text: entry(1) }).save,
       false
     );
     assert.strictEqual(state.status, 'already');
   });
 
   test('a damaged newest entry is an error, counts as seen, and this run is published over it', () => {
-    const state = store.newState({ key, run: runOf(7), pinned: 1 });
-    const written = store.write(state, { matchedKey: cacheKey(key, 1), text: '{' });
-    assert.strictEqual(written.key, cacheKey(key, 2));
+    const state = store.newState({ key, run: runOf(7), pinned: slot(3, 1) });
+    const written = store.write(state, { matchedKey: cacheKey(key, 3, 1), text: '{' });
+    assert.strictEqual(written.key, cacheKey(key, 3, 2));
     assert.deepStrictEqual(JSON.parse(written.text).runs, [7]);
     assert.match(state.errors[0], /not valid JSON/);
     store.verify(state, { text: written.text });
     assert.strictEqual(state.status, 'published');
     assert.throws(
-      () => store.write(state, { matchedKey: 'psp-history-v1-other-1', text: entry(1) }),
+      () => store.write(state, { matchedKey: 'psp-history-v1-other-1-1', text: entry(1) }),
+      /outside this history/
+    );
+    assert.throws(
+      () => store.write(state, { matchedKey: `psp-history-v1-${key}-1`, text: entry(1) }),
       /outside this history/
     );
   });
 
-  test('the next key is above the entry prepare pinned', () => {
-    const state = store.newState({ key, run: runOf(7), pinned: 6 });
+  test('the next key continues the epoch read and is above the entry prepare pinned', () => {
+    const state = store.newState({ key, run: runOf(7), pinned: slot(4, 6) });
     assert.strictEqual(
-      store.write(state, { matchedKey: cacheKey(key, 2), text: entry(1) }).key,
-      cacheKey(key, 7)
+      store.write(state, { matchedKey: cacheKey(key, 4, 2), text: entry(1) }).key,
+      cacheKey(key, 4, 7)
+    );
+  });
+
+  test('higher keys of an old epoch never block a fresh chain: it publishes on its first attempt', () => {
+    // An old chain 1-2..1-4 survives an eviction the cache hides; prepare and finish see nothing.
+    const old = new Map([2, 3, 4].map((seq) => [cacheKey(key, 1, seq), entry(seq)]));
+    const state = store.newState({ key, run: runOf(300) });
+    const written = store.write(state, { matchedKey: '', text: null });
+    assert.strictEqual(written.key, cacheKey(key, 300, 1));
+    assert.ok(!old.has(written.key));
+    assert.deepStrictEqual(store.verify(state, { text: written.text }), { retry: false });
+    assert.strictEqual(state.status, 'published');
+    assert.strictEqual(state.attempted.length, 1);
+    // The next writer reads the newest entry, the fresh one, and continues its chain.
+    const next = store.newState({ key, run: runOf(301), pinned: slot(300, 1) });
+    assert.strictEqual(
+      store.write(next, { matchedKey: written.key, text: written.text }).key,
+      cacheKey(key, 300, 2)
     );
   });
 
   test('a prefix read that misses after prepare pinned an entry publishes nothing', () => {
-    const state = store.newState({ key, run: runOf(7), pinned: 3 });
+    const state = store.newState({ key, run: runOf(7), pinned: slot(1, 3) });
     assert.strictEqual(store.write(state, { matchedKey: '', text: null }).save, false);
     assert.strictEqual(state.status, 'unavailable');
   });
 
   test('a key another writer is still uploading is tried again on the next attempt', () => {
-    const state = store.newState({ key, run: runOf(7), pinned: 1 });
-    const first = store.write(state, { matchedKey: cacheKey(key, 1), text: entry(1) });
+    const state = store.newState({ key, run: runOf(7), pinned: slot(1, 1) });
+    const first = store.write(state, { matchedKey: cacheKey(key, 1, 1), text: entry(1) });
     assert.deepStrictEqual(store.verify(state, { text: null }), { retry: true });
-    const second = store.write(state, { matchedKey: cacheKey(key, 1), text: entry(1) });
+    const second = store.write(state, { matchedKey: cacheKey(key, 1, 1), text: entry(1) });
     assert.strictEqual(second.key, first.key);
     // The other writer finished: its entry joins the merge and the next attempt moves on.
     assert.deepStrictEqual(store.verify(state, { text: entry(2) }), { retry: true });
-    const third = store.write(state, { matchedKey: cacheKey(key, 1), text: entry(1) });
-    assert.strictEqual(third.key, cacheKey(key, 3));
+    const third = store.write(state, { matchedKey: cacheKey(key, 1, 1), text: entry(1) });
+    assert.strictEqual(third.key, cacheKey(key, 1, 3));
     assert.deepStrictEqual(JSON.parse(third.text).runs, [1, 2, 7]);
   });
 
@@ -525,7 +549,11 @@ describe('the compare-and-swap steps', () => {
       assert.strictEqual(retry, i < store.ATTEMPTS);
     }
     assert.strictEqual(state.status, 'failed');
-    assert.deepStrictEqual(state.attempted, [1, 1, 1], 'the pending key is retried each time');
+    assert.deepStrictEqual(
+      state.attempted,
+      [slot(9, 1), slot(9, 1), slot(9, 1)],
+      'the pending key is retried'
+    );
   });
 });
 

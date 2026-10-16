@@ -6,7 +6,8 @@
  *
  *   node tests/e2e/history.js key              print the cache prefix prepare computes from the
  *                                              PSP_INPUT_* inputs, to seed a history before prepare
- *   node tests/e2e/history.js seed KEY RUN_ID   write a valid history of one synthetic run
+ *   node tests/e2e/history.js seed KEY RUN_ID   write a valid history of one synthetic run, to
+ *                                              save under <prefix><epoch>-<seq>
  *   node tests/e2e/history.js expect-runs ID... fail unless the restored history holds these runs
  */
 

@@ -3,11 +3,11 @@
 # scenario and what it expects: the mode prepare chooses, the outcome of finish and what happens
 # to the newest history entry.
 #
-# `seed` saves a history of a synthetic run 1 before prepare, so prepare balances and a publish
-# that should not happen, or one that should and does not, changes the newest entry. `race` seeds
-# after prepare so this run's finish loses its first key to another writer: an entry under key 2
-# created before an entry under key 1, so the newest entry by prefix is key 1 and the writer's
-# first choice, key 2, is taken.
+# Entries are `<prefix><epoch>-<seq>`; the seeds use epoch 1. `seed` saves a history of a synthetic
+# run 1 under 1-1 before prepare, so prepare balances and a publish that should not happen, or one
+# that should and does not, changes the newest entry. `race` seeds after prepare so this run's
+# finish loses its first key to another writer: an entry under 1-2 created before an entry under
+# 1-1, so the newest entry by prefix is 1-1 and the writer's first choice, 1-2, is taken.
 #
 # A re-run reuses the history key, which is keyed on the run id only, so a leg that expects to
 # publish accepts finding its run already in the history on a later attempt.
@@ -71,7 +71,7 @@ jobs:
       - uses: actions/cache/save@v6
         with:
           path: .psp/history
-          key: ${{ steps.key.outputs.prefix }}1
+          key: ${{ steps.key.outputs.prefix }}1-1
 
   prepare:
     needs: seed
@@ -139,7 +139,7 @@ jobs:
       - uses: actions/cache/save@v6
         with:
           path: .psp/history
-          key: ${{ needs.prepare.outputs.prefix }}2
+          key: ${{ needs.prepare.outputs.prefix }}1-2
 
   seed-newest:
     if: inputs.race && github.run_attempt == 1
@@ -157,7 +157,7 @@ jobs:
       - uses: actions/cache/save@v6
         with:
           path: .psp/history
-          key: ${{ needs.prepare.outputs.prefix }}1
+          key: ${{ needs.prepare.outputs.prefix }}1-1
       - id: newest
         uses: actions/cache/restore@v6
         with:
@@ -165,10 +165,10 @@ jobs:
           key: ${{ needs.prepare.outputs.prefix }}
           restore-keys: ${{ needs.prepare.outputs.prefix }}
           lookup-only: true
-      - name: Require key 1 to be the newest entry
+      - name: Require 1-1 to be the newest entry
         env:
           NEWEST: ${{ steps.newest.outputs.cache-matched-key }}
-          EXPECTED: ${{ needs.prepare.outputs.prefix }}1
+          EXPECTED: ${{ needs.prepare.outputs.prefix }}1-1
         run: |
           if [ "$NEWEST" != "$EXPECTED" ]; then
             echo "::error::the newest entry is $NEWEST, expected $EXPECTED"
@@ -262,7 +262,7 @@ jobs:
               node tests/e2e/history.js expect-runs $runs ;;
             race)
               if [ "$ATTEMPT" = 1 ]; then
-                [ "$AFTER" = "${PREFIX}3" ] || { echo "::error::expected ${PREFIX}3, got $AFTER"; exit 1; }
+                [ "$AFTER" = "${PREFIX}1-3" ] || { echo "::error::expected ${PREFIX}1-3, got $AFTER"; exit 1; }
                 node tests/e2e/history.js expect-runs 1 2 "$RUN_ID"
               else
                 node tests/e2e/history.js expect-runs "$RUN_ID"
