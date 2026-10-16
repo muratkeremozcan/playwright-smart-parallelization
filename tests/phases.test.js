@@ -504,7 +504,7 @@ describe('the compare-and-swap steps', () => {
     assert.strictEqual(state.status, 'unavailable');
   });
 
-  test('a key another writer is still uploading is tried again, never skipped', () => {
+  test('a key another writer is still uploading is tried again on the next attempt', () => {
     const state = store.newState({ key, run: runOf(7), pinned: 1 });
     const first = store.write(state, { matchedKey: cacheKey(key, 1), text: entry(1) });
     assert.deepStrictEqual(store.verify(state, { text: null }), { retry: true });

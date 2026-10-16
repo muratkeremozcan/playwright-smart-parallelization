@@ -51,7 +51,7 @@ Shape A (per-shard `--test-list` files) is rejected: `--test-list` is a lossy se
 - `true` also publishes from same-repository branches and pull requests, into their own cache scope. `false` never publishes.
 - Fork pull requests and `pull_request_target` never publish; they read the base history like any run.
 - A cache key is immutable, so a save onto an existing key changes nothing. Finish reads its key back: other bytes mean another writer won, and that entry joins the merge.
-- An unreadable key is retried, never skipped. After three attempts finish fails and the history is unchanged.
+- An unreadable key is retried on the next attempt. After three attempts finish fails and the history is unchanged.
 - Three attempts cover up to three writers racing for the same keys; a fourth simultaneous finish fails.
 - A damaged newest entry is reported, and this run's merge is published over it: the job fails once, and the next run reads a healthy history.
 - A new chain starts only when prepare saw no history. A chain started while higher keys exist (not reachable through the Action) still fails finish after three attempts.
