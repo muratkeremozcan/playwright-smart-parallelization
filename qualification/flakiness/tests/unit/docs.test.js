@@ -122,6 +122,18 @@ describe('the document', () => {
     }
   });
 
+  test('names every failing row in the section on the smallest remaining integration gap', () => {
+    const gap = DOC.slice(
+      DOC.indexOf('## Smallest remaining integration gap'),
+      DOC.indexOf('## Reproduce')
+    );
+    const failing = Object.entries(EXPECTED_ROWS)
+      .filter(([, status]) => status === 'fail')
+      .map(([id]) => id);
+    assert.ok(failing.length > 0);
+    for (const id of failing) assert.ok(gap.includes(`\`${id}\``), id);
+  });
+
   test('keeps no placeholder for work left undone', () => {
     assert.doesNotMatch(DOC, /known limitation|follow-up|out of scope|accepted gap|TODO|TBD/i);
   });
