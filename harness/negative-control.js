@@ -14,7 +14,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { dependencyProjects, groupBase, testId } = require('./leaves');
-const { listIntended, playwrightVersion, qualify } = require('./index');
+const { assertSupportedSelection, listIntended, playwrightVersion, qualify } = require('./index');
 const { nativePartition, testListPartition } = require('./partitions');
 
 const SHARD_COUNT = 2;
@@ -261,6 +261,7 @@ function withEnv(partition, env) {
  * `listIntended`, `qualify` and `playwrightVersion` (tests inject stubs).
  */
 function runNegativeControl(options, { log = () => {}, deps = {} } = {}) {
+  assertSupportedSelection(options.forward);
   const list = deps.listIntended || listIntended;
   const run = deps.qualify || qualify;
   const versionOf = deps.playwrightVersion || playwrightVersion;

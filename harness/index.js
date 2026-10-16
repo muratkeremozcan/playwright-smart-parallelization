@@ -79,20 +79,50 @@ function listWithReporter(cwd, args) {
 }
 
 /**
+ * Selection flags the harness cannot prove exactly-once: they make the selection depend on state
+ * outside the command line, or take over what the engine under test owns (sharding), or run
+ * nothing. They are rejected before any listing or run instead of qualifying a different suite.
+ */
+const UNSUPPORTED = [
+  ['--last-failed', 'it selects tests from the state of an earlier run'],
+  ['--only-changed', 'it selects tests from the state of the working tree'],
+  ['--shard', 'the engine under test owns sharding, and the harness partitions the run itself'],
+  ['--list', 'a list-only run executes nothing'],
+];
+
+/** Throws for a forwarded flag outside the contract (see `UNSUPPORTED`). */
+function assertSupportedSelection(forward = []) {
+  for (const arg of forward) {
+    for (const [flag, reason] of UNSUPPORTED) {
+      if (arg === flag || arg.startsWith(`${flag}=`)) {
+        throw new Error(`${arg} is not supported by the harness: ${reason}`);
+      }
+    }
+  }
+}
+
+function countByProject(leaves) {
+  const counts = {};
+  for (const leaf of leaves) counts[leaf.project] = (counts[leaf.project] || 0) + 1;
+  return counts;
+}
+
+/**
  * Lists the intended leaves and the project dependency map. The leaves come from a listing with
- * the user's selection. A second listing with the same selection and `--repeat-each=2` tells the
- * top-level projects apart: Playwright repeats the projects whose own tests the selection keeps and
- * runs the ones it only pulled in once, so the projects with a repeated leaf are top-level (see
- * `classify`). Playwright thus answers `--project`, filters and `--no-deps` for the harness, with no
- * argument read here.
+ * the user's selection. Two more listings with the same selection, at `--repeat-each=1` and
+ * `--repeat-each=2`, tell the top-level projects apart: Playwright applies the flag to the projects
+ * whose own tests the selection keeps and runs a project it only pulled in unchanged, so a project
+ * is top-level when its leaf count grows between the two (see `classify`). Comparing the two keeps
+ * a dependency project that repeats because its config says so a dependency. Playwright thus
+ * answers `--project`, filters and `--no-deps` for the harness, with no argument read here.
  */
 function listIntended({ cwd, config, repeatEach = 1, forward = [] }) {
+  assertSupportedSelection(forward);
   const selection = selectionArgs({ config, forward });
   const listed = listWithReporter(cwd, [`--repeat-each=${repeatEach}`, ...selection]);
-  const probe = listWithReporter(cwd, [...selection, '--repeat-each=2']);
-  const topLevel = new Set(
-    probe.leaves.filter((leaf) => leaf.repeatIndex > 0).map((leaf) => leaf.project)
-  );
+  const once = countByProject(listWithReporter(cwd, [...selection, '--repeat-each=1']).leaves);
+  const twice = countByProject(listWithReporter(cwd, [...selection, '--repeat-each=2']).leaves);
+  const topLevel = new Set(Object.keys(twice).filter((project) => twice[project] > once[project]));
   return {
     leaves: classify(listed.leaves.map(listedLeaf), topLevel),
     dependencies: dependencyMap(listed.projects),
@@ -106,6 +136,7 @@ function listIntended({ cwd, config, repeatEach = 1, forward = [] }) {
  * wrote no leaves file.
  */
 function runPartition({ cwd, config, repeatEach = 1, workers = 1, forward = [] }, partition) {
+  assertSupportedSelection(forward);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'psp-harness-'));
   try {
     return partition.map((shard, position) => {
@@ -162,6 +193,7 @@ function checkAll(intended, dependencies, shards) {
  * `playwrightVersion` (tests inject stubs). Returns the report.
  */
 function qualify(options, { log = () => {}, quiet = false, deps = {} } = {}) {
+  assertSupportedSelection(options.forward);
   const { cwd } = options;
   const list = deps.listIntended || listIntended;
   const run = deps.runPartition || runPartition;
@@ -209,6 +241,7 @@ function qualify(options, { log = () => {}, quiet = false, deps = {} } = {}) {
 }
 
 module.exports = {
+  assertSupportedSelection,
   checkAll,
   listIntended,
   playwrightVersion,

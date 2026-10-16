@@ -58,15 +58,24 @@ selected exactly once, that each selected leaf ran to a result (a leaf that skip
 a `not-executed` violation), that no serial group was split across shards, and that each shard ran
 the setup and teardown leaves its tests depend on exactly once.
 
-One rule classifies the leaves, and Playwright supplies its input. A second listing with the same
-selection and `--repeat-each=2` shows which projects are top-level: Playwright repeats the projects
-whose own tests `--project`, `--grep`, tag and file filters keep, and runs a project it only pulled
-in as a dependency once. A leaf of a project that repeats is primary. A leaf of a project that does
-not is a dependency, exempt from exactly-once coverage but required in every shard that runs a
-project needing it. So a setup or teardown project the filters left standing alone is primary, and
-`--no-deps`, whether it is a flag or the value of another option, needs no argument handling here.
-The harness writes a JSON report with the Playwright and Node versions, per-shard durations, the
-slowest shard and the imbalance.
+One rule classifies the leaves, and Playwright supplies its input. Two more listings with the
+selection, at `--repeat-each=1` and `--repeat-each=2`, show which projects are top-level: Playwright
+applies the flag to the projects whose own tests `--project`, `--grep`, tag and file filters keep,
+and leaves a project it only pulled in as a dependency unchanged. A project whose leaf count grows
+between the two is primary. Any other listed project is a dependency, exempt from exactly-once
+coverage but required in every shard that runs a project needing it. So a setup or teardown project
+the filters left standing alone is primary, a dependency project that repeats because its config
+says `repeatEach` is still a dependency, and `--no-deps`, whether it is a flag or the value of
+another option, needs no argument handling here. The harness writes a JSON report with the
+Playwright and Node versions, per-shard durations, the slowest shard and the imbalance.
+
+The harness supports and proves these selections, each against real Playwright: `--project`,
+`--grep`, `--grep-invert`, `--repeat-each`, `--no-deps`, `--config` or `-c`, file filters and
+project-level config. It rejects, before any listing or run, the flags that make the selection
+depend on state outside the command line or on sharding, which the engine under test owns, and the
+flag that runs nothing: `--last-failed`, `--only-changed`, `--shard` and `--list`. A selection that
+depends on external state cannot be proved exactly-once, so the harness fails closed instead of
+qualifying a different suite.
 
 ```sh
 (cd fixtures/consumer && npm ci)

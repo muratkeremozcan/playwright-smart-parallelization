@@ -95,6 +95,33 @@ const TABLE = [
     roles: { setup: 'dependency', teardown: 'dependency', chromium: 'primary' },
   },
   {
+    name: 'a dependency project configured to repeat stays a dependency',
+    config: 'repeat-setup.config.js',
+    forward: [],
+    roles: { setup: 'dependency', teardown: 'dependency', chromium: 'primary', firefox: 'primary' },
+    repeats: { setup: 2 },
+  },
+  {
+    name: 'a configured-to-repeat dependency project, with --repeat-each 2',
+    config: 'repeat-setup.config.js',
+    forward: [],
+    repeatEach: 2,
+    roles: { setup: 'dependency', teardown: 'dependency', chromium: 'primary', firefox: 'primary' },
+    repeats: { setup: 2 },
+  },
+  {
+    name: 'a configured-to-repeat setup project selected by name is under test',
+    config: 'repeat-setup.config.js',
+    forward: ['--project=setup'],
+    roles: { setup: 'primary', teardown: 'dependency' },
+  },
+  {
+    name: 'a forwarded --repeat-each 2 does not flatten the comparison',
+    forward: ['--repeat-each=2'],
+    roles: { setup: 'dependency', teardown: 'dependency', chromium: 'primary', firefox: 'primary' },
+    repeats: { chromium: 2, firefox: 2 },
+  },
+  {
     name: 'a forwarded --repeat-each 1 does not hide the top-level projects',
     forward: ['--repeat-each=1'],
     roles: { setup: 'dependency', teardown: 'dependency', chromium: 'primary', firefox: 'primary' },
@@ -200,9 +227,10 @@ describe('dependency classification over the selection, on real Playwright', () 
         }
         const expected = row.repeatEach || 1;
         for (const [project, role] of Object.entries(rolesOf(listed()))) {
+          const configured = (row.repeats || {})[project];
           assert.strictEqual(
             repeats[project],
-            role === 'primary' ? expected : 1,
+            configured || (role === 'primary' ? expected : 1),
             `${project} (${role}) repeats`
           );
         }
