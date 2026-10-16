@@ -30,7 +30,8 @@
     "qualify:flakiness:test": "node --test --test-concurrency=1 qualification/flakiness/tests/*.test.js",
     "research:install": "npm ci --prefix fixtures/consumer && npm ci --prefix qualification/flakiness --ignore-scripts && npm ci --prefix research/shard-balancer --ignore-scripts",
     "research:shard-balancer": "node research/shard-balancer/run.js",
-    "research:shard-balancer:test": "node --test --test-concurrency=1 research/shard-balancer/tests/*.test.js"
+    "research:shard-balancer:test": "node --test --test-concurrency=1 research/shard-balancer/tests/*.test.js",
+    "research:shard-balancer:report": "node research/shard-balancer/report.js --write"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

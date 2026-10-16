@@ -73,13 +73,11 @@ function lockProject(ctx, { locked = true } = {}) {
 }
 
 /** The fixture with the parallel-mode line of the checkout spec blanked, all lines kept. */
-function modelessProject(ctx) {
-  return ctx.once('variant-modeless', () => {
+function modelessProject(ctx, replacement = '// mode line removed', name = 'variant-modeless') {
+  return ctx.once(name, () => {
     const text = fs.readFileSync(path.join(ctx.cwd, 'tests', 'checkout.spec.js'), 'utf8');
     if (!text.includes(MODE_LINE)) throw new Error('checkout.spec.js has no parallel mode line');
-    return ctx.copy('variant-modeless', {
-      'tests/checkout.spec.js': text.replace(MODE_LINE, '// mode line removed'),
-    });
+    return ctx.copy(name, { 'tests/checkout.spec.js': text.replace(MODE_LINE, replacement) });
   });
 }
 
@@ -136,20 +134,29 @@ function fileMode(test) {
 function modeHidden(ctx) {
   const withMode = inFile(probe(ctx, ctx.cwd, 'fixture'), 'checkout.spec.js');
   const without = inFile(probe(ctx, modelessProject(ctx), 'modeless'), 'checkout.spec.js');
+  const defaulted = inFile(
+    probe(
+      ctx,
+      modelessProject(ctx, "test.describe.configure({ mode: 'default' });", 'variant-default-mode'),
+      'default-mode'
+    ),
+    'checkout.spec.js'
+  );
+  const view = (tests) => JSON.stringify(tests.map((t) => t.publicView));
   const facts = {
     tests: withMode.length,
-    samePublicView:
-      JSON.stringify(withMode.map((t) => t.publicView)) ===
-      JSON.stringify(without.map((t) => t.publicView)),
+    samePublicView: view(withMode) === view(without) && view(defaulted) === view(without),
     fileModeWith: fileMode(withMode[0]),
+    fileModeDefault: fileMode(defaulted[0]),
     fileModeWithout: fileMode(without[0]),
   };
   return row(
     'i.mode-hidden',
-    '`describe.configure({ mode })` leaves no trace in the public reporter API; only the internal `_parallelMode` differs.',
-    facts.samePublicView && facts.fileModeWith !== facts.fileModeWithout,
+    "`describe.configure({ mode: 'parallel' })` and `mode: 'default'` leave no trace in the public reporter API; only the internal `_parallelMode` differs.",
+    facts.samePublicView &&
+      new Set([facts.fileModeWith, facts.fileModeDefault, facts.fileModeWithout]).size === 3,
     facts,
-    `The ${facts.tests} checkout tests with and without \`mode: 'parallel'\` have the same public view (${facts.samePublicView}); the file suite's \`_parallelMode\` is \`${facts.fileModeWith}\` against \`${facts.fileModeWithout}\`.`
+    `The ${facts.tests} checkout tests with \`mode: 'parallel'\`, with \`mode: 'default'\` and with no mode have the same public view (${facts.samePublicView}); the file suite's \`_parallelMode\` is \`${facts.fileModeWith}\`, \`${facts.fileModeDefault}\` and \`${facts.fileModeWithout}\`.`
   );
 }
 
@@ -424,4 +431,4 @@ function internalsRows(ctx) {
   ];
 }
 
-module.exports = { flakinessRead, internalsRows, lockProject };
+module.exports = { flakinessRead, internalsRows, lockProject, onlySpecs };

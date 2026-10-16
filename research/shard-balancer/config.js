@@ -11,7 +11,7 @@
  *   PSP_PSB_WORKERS      `workers` option: the workers per shard the plan packs for
  *   PSP_PSB_GRANULARITY  `granularity` option (`auto` or `file`)
  *   PSP_PSB_PLAIN        `1` leaves the reporter out (Playwright's native sharding)
- *   PSP_PSB_REPORTER     reporter file to load instead of the installed one (a modified copy)
+ *   PSP_PSB_REPORTER     reporter file to load, such as a modified copy; unset loads the installed one
  *   PSP_PSB_EXTRA        comma-separated Playwright reporters to add (`json`), configured through
  *                        their own environment variables
  *

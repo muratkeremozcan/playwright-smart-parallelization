@@ -16,6 +16,7 @@ on:
       - 'qualification/lib/**'
       - 'qualification/flakiness/**'
       - 'measurements/**'
+      - 'docs/measurements/raw/**'
       - '.github/workflows/research.yml'
 
 permissions:

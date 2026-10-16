@@ -174,7 +174,7 @@ npm run qualify:flakiness:test
 `--group NAME` collects one group (`coverage`, `serial`, `assignment`, `history` and `privacy` for
 both engines, plus `balance` for Flakiness), and `--merge FILE...` joins the evidence of the groups.
 `qualify:ENGINE:test` asserts every result; with `PSP_NSX_EVIDENCE=FILE` or `PSP_FLK_EVIDENCE=FILE`
-it reads an earlier evidence file instead of collecting again. The `Qualification` workflow runs
+it reads an earlier evidence file and skips the collection. The `Qualification` workflow runs
 both engines on pull requests that touch `qualification/`, `harness/` or the fixture, with every
 group on its own runner.
 
@@ -224,7 +224,8 @@ npm run research:shard-balancer:test
 `research:shard-balancer` writes `research/shard-balancer/evidence.json` (`--out FILE` picks another
 path) and exits 2 with a pointer to `research:install` when nothing is installed.
 `research:shard-balancer:test` asserts every row and citation; with `PSP_PSB_EVIDENCE=FILE` it
-reads an earlier evidence file instead of collecting again. The `Research` workflow collects and
+reads an earlier evidence file and skips the collection. `research:shard-balancer:report` renders
+every generated table of the document from the committed evidence. The `Research` workflow collects and
 asserts on pull requests that touch the research code, the harness, the fixture or the code they
 reuse. `npm test` compares the document with the committed evidence and needs no install of the
 package.

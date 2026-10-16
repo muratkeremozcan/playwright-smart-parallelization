@@ -11,6 +11,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { greenProject, redProject } = require('../../../qualification/lib/variants');
 const drive = require('../drive');
+const { median } = require('../lib/median');
 const { row } = require('./row');
 
 const DATE_SHIFT = path.resolve(__dirname, '..', 'lib', 'date-shift.js');
@@ -29,24 +30,54 @@ const sha = (file) => crypto.createHash('sha256').update(fs.readFileSync(file)).
 const inputSha = (file) =>
   crypto.createHash('sha256').update(fs.readFileSync(file, 'utf8')).digest('hex').slice(0, 12);
 
-/** The median the package prices a test at: the middle sample, or the rounded mean of the two. */
-function median(values) {
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = sorted.length >> 1;
-  return sorted.length % 2 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
-}
+// A test that fails slowly on its first attempt and passes on the retry, with the key of the
+// volatile test, so its history is the history of the green variant.
+const FLAKY_SLOW = `'use strict';
+
+const { test } = require('@playwright/test');
+const { sleep } = require('./support');
+
+test('volatile step', async ({}, testInfo) => {
+  if (testInfo.retry === 0) {
+    await sleep(Number(process.env.PSP_FAIL_AFTER_MS || 3000));
+    throw new Error('the first attempt fails slowly');
+  }
+  await sleep(Number(process.env.PSP_VOLATILE_MS || 1000));
+});
+`;
 
 /** One unsharded run of the volatile test of `cwd`, with a record. */
-function volatileRun(ctx, { name, cwd, env = {} }) {
+function volatileRun(ctx, { name, cwd, env = {}, json = false }) {
   const dir = ctx.dir(name);
   return ctx.runPartition({
     name,
     cwd,
     workers: 1,
     forward: ['--grep=volatile'],
-    partition: [{ args: [], env: drive.shardEnv({ dir, index: 1, env }) }],
+    partition: [{ args: [], env: drive.shardEnv({ dir, index: 1, env, json }) }],
   });
 }
+
+/**
+ * A copy of the green history whose volatile entries hold a full window: the measured sample of
+ * each project five times, as five runs of the same duration would leave it.
+ */
+function fullWindow(ctx, name) {
+  const file = ctx.timingsCopy(name, greenHistory(ctx).timings);
+  const timings = drive.readTimings(file);
+  for (const project of PROJECTS) {
+    const entry = timings.tests[keyOf(project)];
+    if (!entry) throw new Error(`the green history has no ${keyOf(project)}`);
+    entry.samples = Array(5).fill(entry.samples[entry.samples.length - 1]);
+  }
+  fs.writeFileSync(file, `${JSON.stringify(timings, null, 1)}\n`);
+  return file;
+}
+
+/** Whether the volatile samples of both projects exist and did not change. */
+const unchanged = (before, after) =>
+  PROJECTS.every((p) => Array.isArray(before[p]) && before[p].length > 0) &&
+  JSON.stringify(before) === JSON.stringify(after);
 
 /** The green variant run natively over two shards and the history `update` built from it. */
 function greenHistory(ctx) {
@@ -88,7 +119,7 @@ function failedSlow(ctx) {
   return row(
     'h.failed-slow',
     'A failed run adds no sample, however long the failure took.',
-    facts.updateExit === 0 && JSON.stringify(facts.before) === JSON.stringify(facts.after),
+    facts.updateExit === 0 && unchanged(facts.before, facts.after),
     facts,
     `The volatile test failed after ${SLOW_FAILURE_MS} ms on each of its attempts (${facts.failedMs} ms in chromium, outcome \`${facts.outcome}\`). After \`update\` its samples are ${facts.after.chromium.join(', ')} ms in chromium and ${facts.after.firefox.join(', ')} ms in firefox, as before.`
   );
@@ -117,14 +148,15 @@ function cancelled(ctx) {
     facts.exitCode === SIGINT_EXIT &&
       facts.recordWritten &&
       facts.ran === false &&
-      JSON.stringify(facts.before) === JSON.stringify(facts.after),
+      merged !== null &&
+      unchanged(facts.before, facts.after),
     facts,
     `SIGINT ${CANCEL_AFTER_MS} ms into the test: exit ${facts.exitCode}, the record says \`${facts.status}\` and marks the test as not run, and \`update\` leaves its samples at ${facts.after ? facts.after.chromium.join(', ') : 'none'} ms in chromium.`
   );
 }
 
 function fasterTest(ctx) {
-  const timings = ctx.timingsCopy('faster', greenHistory(ctx).timings);
+  const timings = fullWindow(ctx, 'faster');
   const prices = [median(drive.samplesOf(timings, keyOf('chromium')))];
   for (let n = 1; n <= FASTER_RUNS; n += 1) {
     const run = volatileRun(ctx, {
@@ -142,10 +174,59 @@ function fasterTest(ctx) {
   const facts = { pricesMs: prices, samples: drive.samplesOf(timings, keyOf('chromium')) };
   return row(
     'h.faster-test',
-    'The price of a test that got faster follows it within a few runs.',
-    prices[prices.length - 1] < 2 * FASTER_MS + 50 && prices[0] > 5 * FASTER_MS,
+    'From a full window, the price of a test that got faster follows it in three runs.',
+    prices[prices.length - 1] < 2 * FASTER_MS + 50 &&
+      prices.slice(0, -1).every((price) => price > 5 * FASTER_MS),
     facts,
-    `The volatile test went from about one second to ${FASTER_MS} ms. Its chromium price after each of ${FASTER_RUNS} faster runs: ${prices.join(' then ')} ms (samples ${facts.samples.join(', ')}). The median of the last five drops once the fast samples are the majority.`
+    `The volatile test went from about one second to ${FASTER_MS} ms, starting from a window of five samples. Its chromium price before and after each of ${FASTER_RUNS} faster runs: ${prices.join(' then ')} ms (samples ${facts.samples.join(', ')}). The median of the last five drops once the fast samples are the majority.`
+  );
+}
+
+function flakySlow(ctx) {
+  const run = volatileRun(ctx, {
+    name: 'flaky-slow',
+    cwd: ctx.once('variant:flaky-slow', () =>
+      ctx.copy('variant-flaky-slow', { 'tests/volatile.spec.js': FLAKY_SLOW })
+    ),
+    env: { PSP_FAIL_AFTER_MS: String(SLOW_FAILURE_MS) },
+    json: true,
+  });
+  const record = run.records[0];
+  const test = record && record.data.tests.find((t) => t.key === keyOf('chromium'));
+  const report = JSON.parse(fs.readFileSync(path.join(run.dir, 'report-1.json'), 'utf8'));
+  const results = [];
+  const visit = (suite) => {
+    for (const spec of suite.specs || []) {
+      for (const t of spec.tests) if (t.projectName === 'chromium') results.push(...t.results);
+    }
+    (suite.suites || []).forEach(visit);
+  };
+  report.suites.forEach(visit);
+  const passing = results.find((r) => r.status === 'passed');
+  const short = updateCopy(ctx, 'flaky-short', run);
+  const fullFile = fullWindow(ctx, 'flaky-full');
+  const fullBefore = median(drive.samplesOf(fullFile, keyOf('chromium')));
+  const fullCall = drive.update(fullFile, [record.file]);
+  const facts = {
+    outcome: test ? test.outcome : null,
+    attempts: results.length,
+    sampleMs: test ? test.duration_ms : null,
+    passingAttemptMs: passing ? passing.duration : null,
+    shortWindowPriceMs: [median(short.before.chromium), median(short.after.chromium)],
+    fullWindowPriceMs: [fullBefore, median(drive.samplesOf(fullFile, keyOf('chromium')))],
+    updateExits: [short.call.status, fullCall.status],
+  };
+  const inflated = facts.sampleMs >= facts.passingAttemptMs + SLOW_FAILURE_MS * 0.9;
+  return row(
+    'h.flaky-slow',
+    'A flaky result adds one sample with every attempt summed, so a slow failed attempt inflates it, and the median of a full window absorbs one such sample.',
+    facts.outcome === 'flaky' &&
+      inflated &&
+      facts.updateExits.every((c) => c === 0) &&
+      facts.shortWindowPriceMs[1] > facts.shortWindowPriceMs[0] &&
+      facts.fullWindowPriceMs[0] === facts.fullWindowPriceMs[1],
+    facts,
+    `The first attempt failed after ${SLOW_FAILURE_MS} ms and the retry passed in ${facts.passingAttemptMs} ms; the record gives one sample of ${facts.sampleMs} ms. From the one-sample history the chromium price moves from ${facts.shortWindowPriceMs[0]} to ${facts.shortWindowPriceMs[1]} ms; from a full window it stays at ${facts.fullWindowPriceMs[1]} ms.`
   );
 }
 
@@ -251,13 +332,19 @@ function filtered(ctx) {
       (key) => JSON.stringify(before[key]) === JSON.stringify(after[key])
     ),
     cartSamples: after[keyOf('chromium', 'cart.spec.js › cart › adds an item')].samples.length,
+    perProjectEntries: PROJECTS.every((p) =>
+      Boolean(after[keyOf(p, 'cart.spec.js › cart › adds an item')])
+    ),
   };
   return row(
     'h.filtered-run',
     '`update` from a filtered run keeps the entries of the tests the run left out.',
-    facts.updateExit === 0 && facts.entriesAfter === facts.entriesBefore && facts.otherEntriesKept,
+    facts.updateExit === 0 &&
+      facts.entriesAfter === facts.entriesBefore &&
+      facts.otherEntriesKept &&
+      facts.perProjectEntries,
     facts,
-    `After a \`--grep=cart\` run the history has ${facts.entriesAfter} entries, as before (${facts.entriesBefore}). The ${facts.sampledByRun} entries the run sampled gained a sample (a cart test now has ${facts.cartSamples}) and every other entry kept its bytes.`
+    `After a \`--grep=cart\` run the history has ${facts.entriesAfter} entries, as before (${facts.entriesBefore}). The ${facts.sampledByRun} entries the run sampled gained a sample (a cart test now has ${facts.cartSamples}) and every other entry kept its bytes. The cart test has its own entry in each browser project (${facts.perProjectEntries}).`
   );
 }
 
@@ -469,6 +556,7 @@ function historyRows(ctx) {
     failedSlow(ctx),
     cancelled(ctx),
     fasterTest(ctx),
+    flakySlow(ctx),
     damagedHistory(ctx),
     duplicateInput(ctx),
     filtered(ctx),
@@ -481,4 +569,4 @@ function historyRows(ctx) {
   ];
 }
 
-module.exports = { cacheModel, historyRows, median };
+module.exports = { cacheModel, historyRows };

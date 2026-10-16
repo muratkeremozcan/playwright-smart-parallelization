@@ -8,8 +8,9 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { renamedProject } = require('../../../qualification/lib/variants');
+const { mixedProject, renamedProject } = require('../../../qualification/lib/variants');
 const drive = require('../drive');
+const { median } = require('../lib/median');
 const { harnessFacts, kindsText, row } = require('./row');
 
 const SLOW_CLOCK = path.resolve(
@@ -79,6 +80,16 @@ function balancedRow(ctx, shards) {
     nativeImbalance: Number(native.summary.imbalance.toFixed(3)),
   };
   facts.slowestVsNative = Number((facts.slowestMs / facts.nativeSlowestMs - 1).toFixed(3));
+  // The baseline is the same native split run again (reporter present, no timings): the gap
+  // between the two native runs is the run-to-run noise of this split on this machine.
+  const rerun =
+    shards === 2 ? ctx.baseline() : ctx.run({ name: 'builtin-3-w1', shards: 3, workers: 1 });
+  facts.nativeRerunSlowestMs = rerun.summary.slowestMs;
+  facts.nativeSpread = Number(
+    (Math.abs(facts.nativeRerunSlowestMs - facts.nativeSlowestMs) / facts.nativeSlowestMs).toFixed(
+      3
+    )
+  );
   const balancedOk =
     facts.harnessOk && facts.checkExit === 0 && facts.strategies.every((s) => s === 'balanced');
   // Two shards are already even under native sharding on the fixture, so only three must gain.
@@ -90,7 +101,7 @@ function balancedRow(ctx, shards) {
       : 'Three shards planned from the native records run every leaf once, `check` passes, and the slowest shard is faster than under native sharding.',
     balancedOk && gains,
     facts,
-    `One worker per shard, ${facts.known} of ${facts.listed} tests known. Shards took ${facts.shardMs.join(' / ')} ms against ${facts.nativeShardMs.join(' / ')} ms native, slowest ${facts.slowestMs} ms against ${facts.nativeSlowestMs} ms; harness violations ${kindsText(facts.violations)}, \`check\` exit ${facts.checkExit}.`
+    `One worker per shard, ${facts.known} of ${facts.listed} tests known. Shards took ${facts.shardMs.join(' / ')} ms against ${facts.nativeShardMs.join(' / ')} ms native, slowest ${facts.slowestMs} ms against ${facts.nativeSlowestMs} ms; harness violations ${kindsText(facts.violations)}, \`check\` exit ${facts.checkExit}. A second native run of the same split had its slowest shard at ${facts.nativeRerunSlowestMs} ms.`
   );
 }
 
@@ -106,11 +117,12 @@ function repeatEach(ctx) {
     ...harnessFacts(run),
     checkExit: checked.status,
     checkedTests: checked.json && checked.json.tests,
+    strategies: strategies(run),
   };
   return row(
     'a.repeat-each',
-    'Under `--repeat-each 2` every copy runs once and `check` counts each copy apart.',
-    facts.harnessOk && facts.checkExit === 0,
+    'Under `--repeat-each 2` every shard balances, every copy runs once and `check` counts each copy apart.',
+    facts.harnessOk && facts.checkExit === 0 && facts.strategies.every((s) => s === 'balanced'),
     facts,
     `Three shards, \`--repeat-each 2\`: harness violations ${kindsText(facts.violations)}; \`check\` counted ${facts.checkedTests} distinct tests and exited ${facts.checkExit}, because a repeat carries its own suffix in the record.`
   );
@@ -167,7 +179,7 @@ function granularityFile(ctx) {
   };
   return row(
     'a.granularity-file',
-    'With `granularity: file` every spec file stays on one shard, also under `fullyParallel`, using no internal field.',
+    'With `granularity: file` every spec file stays on one shard, also under `fullyParallel`; that grouping reads no `_parallelMode`, while the reporter still reads `_locks`.',
     facts.harnessOk && facts.splitFiles === 0 && facts.granularity.every((g) => g === 'file'),
     facts,
     `\`fullyParallel\` with \`granularity: file\`, three shards: ${facts.splitFiles} files split across shards, harness violations ${kindsText(facts.violations)}, slowest shard ${facts.slowestMs} ms.`
@@ -196,6 +208,65 @@ function renamed(ctx) {
     facts.harnessOk && facts.checkExit === 0 && facts.unknown === 6,
     facts,
     `One test renamed and a new file of two tests, in both browser projects: every leaf ran once, and the plan line says ${facts.known}/${facts.listed} tests known, so ${facts.unknown} are priced by estimate.`
+  );
+}
+
+/** The setup project's leaves a shard ran. */
+const ranSetup = (shard) => (shard.leaves || []).some((leaf) => leaf.project === 'setup');
+
+function setupAware(ctx) {
+  const cwd = mixedProject(ctx);
+  const baseline = ctx.baseline({ name: 'mixed-native', cwd });
+  const run = ctx.run({
+    name: 'mixed-balanced-3',
+    cwd,
+    shards: 3,
+    timings: baseline.timings,
+    workers: 1,
+  });
+  const list = drive.listReport({
+    cwd,
+    config: ctx.config(cwd),
+    file: path.join(ctx.dir('mixed-list'), 'list.json'),
+  });
+  const sim = drive.simulate({ timings: baseline.timings, list, shards: 3, workers: 1 });
+  if (!sim.json) throw new Error(`simulate failed: ${sim.stderr}`);
+  const setupMs = Object.values(sim.json.setup_ms).reduce((a, b) => a + b, 0);
+  const timings = drive.readTimings(baseline.timings).tests;
+  const price = (key) => median(timings[key].samples);
+  const shards = run.records.map((r, i) => {
+    const { predicted_ms: predicted, shard } = r.data;
+    const work = r.data.tests.filter((t) => !t.setup).reduce((sum, t) => sum + price(t.key), 0);
+    return {
+      shard: shard.current,
+      ranSetup: ranSetup(run.raw[i]),
+      hostsDependent: r.data.tests.some((t) => t.key.startsWith('[chromium]')),
+      predictedMs: predicted[shard.current - 1],
+      workMs: work,
+    };
+  });
+  const consistent = shards.every(
+    (s) =>
+      s.ranSetup === s.hostsDependent &&
+      s.predictedMs - s.workMs === (s.hostsDependent ? setupMs : 0)
+  );
+  const facts = {
+    ...harnessFacts(run),
+    setupMs,
+    shards,
+    consistent,
+    setupShards: shards.filter((s) => s.ranSetup).length,
+  };
+  const setupList = shards
+    .filter((x) => x.ranSetup)
+    .map((x) => x.shard)
+    .join(' and ');
+  return row(
+    'a.setup-aware',
+    'Only the shards that host a test needing setup run it, and the predicted time of exactly those shards includes the setup cost.',
+    facts.harnessOk && consistent && facts.setupShards > 0 && facts.setupShards < shards.length,
+    facts,
+    `Only \`chromium\` depends on setup, three shards: the shards that ran setup (${setupList}) are exactly the shards that host a \`chromium\` test. Each predicted time equals its work plus ${setupMs} ms of setup and teardown on those shards and its work alone on the others (${consistent}); harness violations ${kindsText(facts.violations)}.`
   );
 }
 
@@ -288,7 +359,7 @@ function slowClock(ctx) {
   const facts = { planShas: normal, slowClockPlanShas: slow };
   return row(
     'p.slow-clock',
-    'The search stops at a node count, so a slow machine computes the same plan as a fast one.',
+    'With a clock that jumps a second on every read, every shard computes the same plan as without it.',
     new Set([...normal, ...slow]).size === 1,
     facts,
     `With a clock that runs one second ahead on every read, the three shards logged plan ${[...new Set(slow)].map((s) => `\`${s}\``).join(', ')}, against ${[...new Set(normal)].map((s) => `\`${s}\``).join(', ')} without it.`
@@ -305,6 +376,7 @@ function assignmentRows(ctx) {
     granularityFile(ctx),
     renamed(ctx),
     logLine(ctx),
+    setupAware(ctx),
   ];
 }
 

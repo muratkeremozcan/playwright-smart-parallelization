@@ -13,7 +13,8 @@ const { analyzeRun } = require('../../../measurements/analyze');
 const { median: statsMedian } = require('../../../measurements/stats');
 const drive = require('../drive');
 const { ROOT } = require('../upstream');
-const { median } = require('./history');
+const { median } = require('../lib/median');
+const { onlySpecs } = require('./internals');
 const { row } = require('./row');
 
 const SEP = ' › ';
@@ -46,43 +47,83 @@ function ourEstimate(timings, { key, project, file }) {
   return { level: 'none', ms: 1 };
 }
 
+// A suite whose describe, file, project and suite medians all differ: two describes and a loose
+// test in one file, a fast second file, and every test a second slower in firefox.
+const extra = "test.info().project.name === 'firefox' ? 1000 : 0";
+const ESTIMATES = `'use strict';
+
+const { test } = require('@playwright/test');
+const { sleep } = require('./support');
+
+const extra = () => ${extra};
+
+test.describe('alpha', () => {
+  test('one', async () => {
+    await sleep(100 + extra());
+  });
+  test('two', async () => {
+    await sleep(140 + extra());
+  });
+});
+
+test.describe('beta', () => {
+  test('one', async () => {
+    await sleep(400 + extra());
+  });
+  test('two', async () => {
+    await sleep(440 + extra());
+  });
+});
+
+test('loose', async () => {
+  await sleep(900 + extra());
+});
+`;
+
+const QUICK = `'use strict';
+
+const { test } = require('@playwright/test');
+const { sleep } = require('./support');
+
+const extra = () => ${extra};
+
+test('quick one', async () => {
+  await sleep(30 + extra());
+});
+
+test('quick two', async () => {
+  await sleep(50 + extra());
+});
+`;
+
+function estimatesProject(ctx) {
+  return ctx.once('variant:estimates', () =>
+    ctx.copy(
+      'variant-estimates',
+      onlySpecs(ctx, { 'tests/estimates.spec.js': ESTIMATES, 'tests/quick.spec.js': QUICK })
+    )
+  );
+}
+
 async function hierarchy(ctx) {
   const { createEstimator } = await import(
     pathToFileURL(path.join(ROOT, 'dist', 'estimate.js')).href
   );
-  const timings = drive.readTimings(ctx.baseline().timings);
+  const baseline = ctx.baseline({ name: 'estimates-native', cwd: estimatesProject(ctx) });
+  const timings = drive.readTimings(baseline.timings);
   const estimator = createEstimator(timings);
+  const file = 'estimates.spec.js';
   const cases = [
-    {
-      name: 'known test',
-      project: 'chromium',
-      file: 'cart.spec.js',
-      titles: ['cart', 'adds an item'],
-    },
-    {
-      name: 'new test in a known describe',
-      project: 'chromium',
-      file: 'cart.spec.js',
-      titles: ['cart', 'a new test'],
-    },
-    {
-      name: 'new test outside the describes of a known file',
-      project: 'chromium',
-      file: 'cart.spec.js',
-      titles: ['a new test'],
-    },
+    { name: 'known test', project: 'chromium', file, titles: ['alpha', 'one'] },
+    { name: 'new test in a known describe', project: 'chromium', file, titles: ['alpha', 'new'] },
+    { name: 'new loose test in a known file', project: 'chromium', file, titles: ['new'] },
     {
       name: 'new file in a known project',
       project: 'chromium',
       file: 'new.spec.js',
-      titles: ['a new test'],
+      titles: ['new'],
     },
-    {
-      name: 'new project',
-      project: 'webkit',
-      file: 'cart.spec.js',
-      titles: ['cart', 'adds an item'],
-    },
+    { name: 'new project', project: 'webkit', file, titles: ['alpha', 'one'] },
   ].map((test) => {
     const key = [`[${test.project}]`, test.file, ...test.titles].join(SEP);
     const input = { key, project: test.project, file: test.file, staticSkip: false };
@@ -97,21 +138,25 @@ async function hierarchy(ctx) {
   const skipped = estimator.estimate({
     key: 'x',
     project: 'chromium',
-    file: 'cart.spec.js',
+    file,
     staticSkip: true,
   });
   const facts = {
     cases,
     levels: cases.map((c) => c.level),
     agree: cases.every((c) => c.packageMs === c.oursMs),
+    levelsDiffer: new Set(cases.slice(1).map((c) => c.packageMs)).size === 4,
     staticSkipMs: skipped,
   };
   return row(
     'e.hierarchy',
     'A new test is priced at the median of its describe, else its file, else its project, else the whole suite, and a test skipped before it runs costs nothing.',
-    facts.agree && skipped === 0 && facts.levels.join() === 'known,describe,file,project,suite',
+    facts.agree &&
+      facts.levelsDiffer &&
+      skipped === 0 &&
+      facts.levels.join() === 'known,describe,file,project,suite',
     facts,
-    `The package's estimator, run on the fixture history, gives ${cases.map((c) => `${c.packageMs} ms (${c.level})`).join(', ')}; our own medians give the same (${facts.agree}). A static skip costs ${skipped} ms.`
+    `On a suite with two describes and a loose test in one file, a second file and slower firefox tests, the four medians differ (${facts.levelsDiffer}). The package's estimator gives ${cases.map((c) => `${c.packageMs} ms (${c.level})`).join(', ')}; our own medians give the same (${facts.agree}). A static skip costs ${skipped} ms.`
   );
 }
 
@@ -185,20 +230,26 @@ function predictedVsActual(ctx) {
       balancedError: Number((Math.abs(r.balanced_ms - balancedMs) / balancedMs).toFixed(3)),
     };
   });
-  const facts = { rows, tolerance: PREDICTION_TOLERANCE };
+  const facts = {
+    rows,
+    tolerance: PREDICTION_TOLERANCE,
+    balancedNeverSlower: sim.rows.every((r) => r.balanced_ms <= r.builtin_ms),
+  };
   return row(
     'sim.predicted-vs-actual',
-    `\`simulate\` predicts the slowest shard of the fixture within ${PREDICTION_TOLERANCE * 100}%, with the built-in split and balanced.`,
-    rows.every(
-      (r) => r.builtinError <= PREDICTION_TOLERANCE && r.balancedError <= PREDICTION_TOLERANCE
-    ),
+    `\`simulate\` predicts the slowest shard of the fixture within ${PREDICTION_TOLERANCE * 100}%, with the built-in split and balanced, and never predicts the balanced plan above the built-in split.`,
+    facts.balancedNeverSlower &&
+      rows.every(
+        (r) => r.builtinError <= PREDICTION_TOLERANCE && r.balancedError <= PREDICTION_TOLERANCE
+      ),
     facts,
     rows
       .map(
         (r) =>
           `${r.shards} shards: built-in ${r.simulatedBuiltinMs} ms simulated against ${r.measuredBuiltinMs} ms measured, balanced ${r.simulatedBalancedMs} ms against ${r.measuredBalancedMs} ms.`
       )
-      .join(' ')
+      .join(' ') +
+      ` The balanced prediction is at or below the built-in one at every shard count (${facts.balancedNeverSlower}).`
   );
 }
 
@@ -394,13 +445,16 @@ function coutureCast(ctx) {
     tolerance: COUTURE_TOLERANCE,
     byTest: byTest.rows.map(pick),
     byFile: byFile.rows.map(pick),
+    balancedNeverSlower: [...byTest.rows, ...byFile.rows].every(
+      (r) => r.balanced_ms <= r.builtin_ms
+    ),
   };
   return row(
     'sim.couture-cast',
-    `\`simulate\` over a list and timings built from the S5 runs models couture-cast's measured two-shard split within ${COUTURE_TOLERANCE * 100}%.`,
-    builtinError <= COUTURE_TOLERANCE && facts.unknownTests === 0,
+    `\`simulate\` over a list and timings built from the S5 runs models couture-cast's measured two-shard split within ${COUTURE_TOLERANCE * 100}%, and at no shard count predicts the balanced plan above the built-in split.`,
+    builtinError <= COUTURE_TOLERANCE && facts.unknownTests === 0 && facts.balancedNeverSlower,
     facts,
-    `From ${facts.runs} runs of \`${COUTURE_LABEL}\` (${facts.tests} tests): the built-in split of two shards simulates at ${two.builtin_ms} ms against a measured median slowest shard of ${facts.measuredSlowestMs} ms in tests, and balancing at ${two.balanced_ms} ms against the S5 bound of ${facts.measuredBoundMs} ms. The per-shard overhead outside the Playwright run is ${seconds(overheadMs.median)} s median (${seconds(overheadMs.min)} to ${seconds(overheadMs.max)} s).`
+    `From ${facts.runs} runs of \`${COUTURE_LABEL}\` (${facts.tests} tests): the built-in split of two shards simulates at ${two.builtin_ms} ms against a measured median slowest shard of ${facts.measuredSlowestMs} ms in tests, and balancing at ${two.balanced_ms} ms against the S5 bound of ${facts.measuredBoundMs} ms. The per-shard overhead outside the Playwright run is ${seconds(overheadMs.median)} s median (${seconds(overheadMs.min)} to ${seconds(overheadMs.max)} s). No shard count predicts balancing above the built-in split (${facts.balancedNeverSlower}).`
   );
 }
 

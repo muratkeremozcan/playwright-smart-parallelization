@@ -72,6 +72,23 @@ describe('checkCitations', () => {
   });
 });
 
+describe('citationsOf', () => {
+  test('keeps the union of the sources of all entries, each once, in order of first use', () => {
+    const a = { file: 'a.ts', lines: '1', quote: 'x' };
+    const b = { source: 'flakiness', file: 'b.js', lines: '2', quote: 'y' };
+    const c = { file: 'a.ts', lines: '1', quote: 'other quote' };
+    const result = citationsOf([
+      { sources: [a, b] },
+      { sources: [{ ...a, source: 'upstream' }, c] },
+    ]);
+    assert.deepStrictEqual(result, [
+      { source: 'upstream', file: 'a.ts', lines: '1', quote: 'x' },
+      { source: 'flakiness', file: 'b.js', lines: '2', quote: 'y' },
+      { source: 'upstream', file: 'a.ts', lines: '1', quote: 'other quote' },
+    ]);
+  });
+});
+
 describe('the citations of the decisions', () => {
   test('are listed once each, with a source', () => {
     const citations = citationsOf(ALL);

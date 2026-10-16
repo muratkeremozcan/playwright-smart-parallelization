@@ -6,6 +6,8 @@
  * read executes once. The evidence holds no local path: the context scrubs every row.
  */
 
+const fs = require('node:fs');
+const path = require('node:path');
 const { playwrightVersion } = require('../../harness');
 const { checkCitations, citationsOf } = require('./citations');
 const { createContext } = require('./context');
@@ -18,6 +20,7 @@ const { planningRows } = require('./scenarios/planning');
 const { checkRows, safetyRows } = require('./scenarios/safety');
 const {
   FLAKINESS,
+  ROOT,
   assertInstalled,
   manifest,
   packageInfo,
@@ -45,17 +48,30 @@ function clearEnvironment() {
   }
 }
 
-async function collectEvidence({ log = () => {}, group = 'all' } = {}) {
+const DEPS = { assertInstalled, createContext, packageInfo, publishedCommit };
+
+/** The copyright line of the installed package's license, which the attribution quotes. */
+function copyrightLine() {
+  const text = fs.readFileSync(path.join(ROOT, 'LICENSE'), 'utf8');
+  return (text.split('\n').find((line) => line.startsWith('Copyright')) || '').trim();
+}
+
+/**
+ * Collects the evidence of every group, or of one. `deps` replaces the install check, the context,
+ * the package lookups (a test checks that nothing runs before the install check).
+ */
+async function collectEvidence({ log = () => {}, group = 'all', deps = {} } = {}) {
+  const use = { ...DEPS, ...deps };
   const names = group === 'all' ? GROUP_NAMES : [group];
   for (const name of names) {
     if (!GROUPS[name]) throw new Error(`unknown group ${name}; one of ${GROUP_NAMES.join(', ')}`);
   }
-  assertInstalled();
+  use.assertInstalled();
   clearEnvironment();
   const started = Date.now();
-  const info = packageInfo();
-  const commit = publishedCommit(info.version);
-  const ctx = createContext({ log });
+  const info = use.packageInfo();
+  const commit = use.publishedCommit(info.version);
+  const ctx = use.createContext({ log, commit });
   try {
     const rows = [];
     for (const name of names) {
@@ -73,6 +89,7 @@ async function collectEvidence({ log = () => {}, group = 'all' } = {}) {
         flakiness: `${manifest(FLAKINESS).name}@${manifest(FLAKINESS).version}`,
         node: process.version,
         platform: `${process.platform}-${process.arch}`,
+        license: copyrightLine(),
       },
       rows,
       citations,

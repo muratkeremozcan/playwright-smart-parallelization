@@ -6,8 +6,10 @@
  * line, runs it through the harness and then runs `check` over the records the shards wrote.
  */
 
+const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
+const YAML = require('yaml');
 const { scrub } = require('../../../qualification/flakiness/playwright');
 const drive = require('../drive');
 const { checkRun, strategies } = require('./assignment');
@@ -132,13 +134,20 @@ function strictEmpty(ctx) {
     emptyExitCodes: empty.raw.map((s) => s.exitCode),
     absentExitCodes: missing.raw.map((s) => s.exitCode),
     ranNothing: [...empty.raw, ...missing.raw].every(ranNothing),
+    emptyMessages: empty.raw.map((s) =>
+      Boolean(lineOf(s.output, /has no entries; strict mode stops the run/))
+    ),
+    absentMessages: missing.raw.map((s) =>
+      Boolean(lineOf(s.output, /no timings file at .*; strict mode stops the run/))
+    ),
     emptyMessage: scrub((lineOf(empty.raw[0].output, /strict mode/) || '').replace(/^Error: /, '')),
   };
   return row(
     's.strict-empty',
     'With strict on, an empty or absent timings file fails every shard before any test, so a first run must keep strict off.',
     [...facts.emptyExitCodes, ...facts.absentExitCodes].every((code) => code !== 0) &&
-      facts.ranNothing,
+      facts.ranNothing &&
+      [...facts.emptyMessages, ...facts.absentMessages].every(Boolean),
     facts,
     `Strict on with an empty timings file every shard exits ${facts.emptyExitCodes.join(' / ')}, and with no file ${facts.absentExitCodes.join(' / ')}, before any test, each with an error that says the file has no entries or is missing. The restore action turns strict on only when the pinned file has entries for this reason.`
   );
@@ -192,15 +201,33 @@ function reporterDropped(ctx) {
   );
 }
 
-/** What the finish action does with a records folder: it fails when the folder has no record. */
-function finishRecords(dir) {
-  const files = fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => f.endsWith('.json')) : [];
-  return files.length === 0
-    ? { status: 1, error: `no run records in ${path.basename(dir)}` }
-    : { status: 0 };
+/**
+ * Runs the shell lines of the `update` step of the finish action, as published at the commit, with
+ * bash the way a composite step runs them, against a records folder. Returns the exit code and the
+ * first line of output.
+ */
+async function finishUpdateStep(ctx, recordsDir) {
+  const action = YAML.parse(await ctx.upstreamText('actions/finish/action.yml'));
+  const step = action.runs.steps.find((s) => s.id === 'update');
+  if (!step || step.shell !== 'bash') throw new Error('the finish action has no bash update step');
+  const dir = ctx.dir('finish-update');
+  const script = path.join(dir, 'update.sh');
+  fs.writeFileSync(script, step.run);
+  const result = spawnSync('bash', ['--noprofile', '--norc', '-eo', 'pipefail', script], {
+    cwd: dir,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      RECORDS_DIR: recordsDir,
+      TIMINGS: path.join(dir, 'timings.json'),
+      VERSION: 'latest',
+    },
+  });
+  const output = `${result.stdout || ''}${result.stderr || ''}`.trim().split('\n')[0];
+  return { status: result.status === null ? 1 : result.status, output };
 }
 
-function reporterDroppedAll(ctx) {
+async function reporterDroppedAll(ctx) {
   const run = ctx.run({
     name: 'reporter-dropped-all-2',
     shards: 2,
@@ -208,25 +235,45 @@ function reporterDroppedAll(ctx) {
     shard: () => ({ args: ['--reporter=list'] }),
   });
   const checked = drive.check([]);
-  const finish = finishRecords(path.join(run.dir, 'records'));
+  const recordsDir = ctx.dir('reporter-dropped-all-records');
+  const finish = await finishUpdateStep(ctx, recordsDir);
   const facts = {
     ...harnessFacts(run),
     recordsWritten: run.records.map(Boolean),
     checkExit: checked.status,
+    checkUsage: /pass the run record of every shard/.test(checked.stderr),
     finishExit: finish.status,
+    finishOutput: finish.output.startsWith('::error::no run records in '),
   };
   return row(
     's.reporter-dropped-all',
     'When every shard runs without the reporter, the step after the shards cannot pass.',
-    facts.recordsWritten.every((w) => !w) && facts.checkExit !== 0 && facts.finishExit !== 0,
+    facts.recordsWritten.every((w) => !w) && facts.finishExit !== 0 && facts.finishOutput,
     facts,
-    `\`--reporter=list\` on both shards gave a native run with ${kindsText(facts.violations)} and no record. \`check\` with no record exits ${facts.checkExit}, and the finish action's own guard, which fails on an empty records folder, exits ${facts.finishExit}.`
+    `\`--reporter=list\` on both shards ran Playwright's own split (harness violations: ${kindsText(facts.violations)}) and wrote no record. The shell lines of the finish action's \`update\` step, run with bash against the empty records folder, exit ${facts.finishExit} with \`::error::no run records\`. \`check\` with no record exits ${facts.checkExit}, a usage error (${facts.checkUsage}).`
+  );
+}
+
+/** `check` output that is no JSON: a failed row with the error, in place of a crash. */
+function noJson(id, claim, checked) {
+  return row(
+    id,
+    claim,
+    false,
+    { checkExit: checked.status, stderr: scrub(checked.stderr.split('\n')[0] || '') },
+    `\`check\` printed no JSON and exited ${checked.status}.`
   );
 }
 
 function missingRecord(ctx) {
   const run = ctx.balanced(2);
   const checked = drive.check([run.records[0].file]);
+  if (!checked.json)
+    return noJson(
+      'c.missing-record',
+      '`check` fails when the record of a shard is missing.',
+      checked
+    );
   const facts = {
     checkExit: checked.status,
     problems: problemsOf(checked).map((p) => p.split(':')[0]),
@@ -244,6 +291,13 @@ function duplicateRecord(ctx) {
   const run = ctx.balanced(2);
   const [one, two] = run.records.map((r) => r.file);
   const checked = drive.check([one, one, two]);
+  if (!checked.json) {
+    return noJson(
+      'c.duplicate-record',
+      '`check` fails when a shard has two records, and counts the tests that ran twice.',
+      checked
+    );
+  }
   const facts = {
     checkExit: checked.status,
     namesRepeat: checked.json.problems.includes('more than one record for shard 1'),
@@ -332,14 +386,14 @@ function summary(ctx) {
   );
 }
 
-function safetyRows(ctx) {
+async function safetyRows(ctx) {
   return [
     failOpenDamaged(ctx),
     strictDamaged(ctx),
     strictEmpty(ctx),
     mismatched(ctx),
     reporterDropped(ctx),
-    reporterDroppedAll(ctx),
+    await reporterDroppedAll(ctx),
   ];
 }
 
@@ -347,4 +401,4 @@ function checkRows(ctx) {
   return [missingRecord(ctx), duplicateRecord(ctx), notRun(ctx), corpusMismatch(ctx), summary(ctx)];
 }
 
-module.exports = { STRICT, checkRows, damagedTimings, finishRecords, safetyRows };
+module.exports = { STRICT, checkRows, damagedTimings, finishUpdateStep, safetyRows };

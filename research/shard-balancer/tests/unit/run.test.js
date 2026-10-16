@@ -8,6 +8,7 @@ const assert = require('node:assert');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { collectEvidence } = require('../../collect');
 const { main, parseArgs } = require('../../run');
 const { assertInstalled } = require('../../upstream');
 
@@ -21,6 +22,10 @@ describe('parseArgs', () => {
     const options = parseArgs(['--out', 'x.json', '--group', 'history']);
     assert.strictEqual(options.out, path.resolve('x.json'));
     assert.strictEqual(options.group, 'history');
+  });
+
+  test('refuses --out without a value', () => {
+    assert.throws(() => parseArgs(['--out']), /--out needs a value/);
   });
 
   test('refuses an unknown flag or group', () => {
@@ -37,6 +42,37 @@ describe('a missing install', () => {
       (error) =>
         error.code === 'PSP_NOT_INSTALLED' && /npm run research:install/.test(error.message)
     );
+  });
+
+  test('names a missing fixture and a missing Flakiness install', () => {
+    const missing = path.join(os.tmpdir(), 'psp-psb-missing');
+    assert.throws(
+      () => assertInstalled({ fixture: missing }),
+      /the consumer fixture is not installed.*npm run research:install/
+    );
+    assert.throws(
+      () => assertInstalled({ flakiness: missing }),
+      /@flakiness\/playwright is not installed.*npm run research:install/
+    );
+  });
+
+  test('stops the collection before any other work', async () => {
+    const called = [];
+    const stub = (name) => () => called.push(name);
+    await assert.rejects(
+      collectEvidence({
+        deps: {
+          assertInstalled: () => {
+            throw Object.assign(new Error('not installed'), { code: 'PSP_NOT_INSTALLED' });
+          },
+          createContext: stub('createContext'),
+          packageInfo: stub('packageInfo'),
+          publishedCommit: stub('publishedCommit'),
+        },
+      }),
+      /not installed/
+    );
+    assert.deepStrictEqual(called, []);
   });
 
   test('makes the collector exit 2 with that message alone', async () => {
@@ -56,6 +92,30 @@ describe('a missing install', () => {
 });
 
 describe('collected evidence', () => {
+  test('passes --group to the collection', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'psp-psb-run-'));
+    try {
+      let group = null;
+      const evidence = {
+        versions: { package: 'p', commit: 'c', playwright: '1' },
+        rows: [],
+        citations: [],
+      };
+      const code = await main(['--group', 'history', '--out', path.join(dir, 'e.json')], {
+        stdout: sink(),
+        stderr: sink(),
+        collect: async (options) => {
+          group = options.group;
+          return evidence;
+        },
+      });
+      assert.strictEqual(code, 0);
+      assert.strictEqual(group, 'history');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test('is written to --out and summarized', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'psp-psb-run-'));
     try {

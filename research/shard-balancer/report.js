@@ -2,12 +2,38 @@
 
 /**
  * Markdown renderers for `docs/research/shard-balancer-harvest.md`. The document embeds the output
- * of these functions for the committed evidence and the decisions, and a test compares them, so no
- * result, status or figure in the document is typed by hand.
+ * of these functions for the committed evidence and the decisions between
+ * `<!-- generated:NAME -->` and `<!-- /generated:NAME -->` markers, and a test compares every block,
+ * so no result, status or figure in the document is typed by hand.
+ *
+ *   node research/shard-balancer/report.js --write
+ *
+ * renders every block from `docs/research/shard-balancer-evidence.json` and writes it into the
+ * document, formatted by the repository's Prettier config.
  */
 
+const fs = require('node:fs');
+const path = require('node:path');
 const { normalizeTable, table } = require('../../qualification/lib/tables');
 const { INTERNALS, LISTS } = require('./decisions');
+
+const REPO = path.resolve(__dirname, '..', '..');
+const DOC = path.join(REPO, 'docs', 'research', 'shard-balancer-harvest.md');
+const EVIDENCE = path.join(REPO, 'docs', 'research', 'shard-balancer-evidence.json');
+const WORDS = [
+  'zero',
+  'one',
+  'two',
+  'three',
+  'four',
+  'five',
+  'six',
+  'seven',
+  'eight',
+  'nine',
+  'ten',
+];
+const word = (n) => WORDS[n] || String(n);
 
 /** A table cell: pipes escaped, so code spans that hold a pipe stay in their cell. */
 const cell = (text) => String(text).replaceAll('|', '\\|');
@@ -76,6 +102,7 @@ function renderInternals(evidence) {
       'Engine',
       'What the read does',
       'Source',
+      'Decision',
       'Public replacement',
       'Loss without it',
       'Evidence',
@@ -85,6 +112,7 @@ function renderInternals(evidence) {
       entry.engine,
       cell(entry.mechanism),
       entry.sources.map(sourceRef).join(', '),
+      entry.decision,
       cell(entry.replacement),
       cell(entry.loss),
       evidenceCell(evidence, entry),
@@ -116,8 +144,15 @@ function renderInternalRuns(evidence) {
     `${facts.splitFiles} files split`,
     cell(log),
   ];
-  const psbWhere = '`src/reporter.ts:51-52,84`';
-  const flkWhere = `\`${flk.file}:${flk.line}\``;
+  const readAt = (engine, field) => {
+    const entry = INTERNALS.find((e) => e.engine === engine && e.field === field);
+    return sourceRef(entry.readAt).replace(/^`[a-z]+:/, '`');
+  };
+  const psbWhere = readAt('playwright-shard-balancer', 'Suite._parallelMode');
+  const flkWhere = readAt('@flakiness/playwright', 'Suite._parallelMode');
+  if (flkWhere !== `\`${flk.file}:${flk.line}\``) {
+    throw new Error(`the Flakiness read moved to ${flk.file}:${flk.line}; update its decision`);
+  }
   const psbLog = (facts) => (facts.logLines[0] ? `\`${facts.logLines[0]}\`` : 'none');
   const flkLog = (facts) => (facts.warns ? 'a warning' : 'no warning about the field');
   return table(
@@ -165,7 +200,7 @@ function renderInternalRuns(evidence) {
       [
         'playwright-shard-balancer',
         '`_locks`',
-        '`src/reporter.ts:105-107`',
+        readAt('playwright-shard-balancer', 'TestCase._locks'),
         'lock suite',
         codes(psbLocks.exitCodes),
         yesNo(psbLocks.strategies.every((s) => s === 'balanced')),
@@ -220,12 +255,12 @@ function renderCoutureCast(evidence) {
   );
 }
 
-/** Every take and adapt, with the acceptance test S8 must pass and the rows behind it. */
+/** Every entry with an acceptance test for S8 (every take and adapt, and some rejects). */
 function renderInputs(evidence) {
   const rows = [];
-  for (const name of ['gaps', 'workflow', 'mechanisms']) {
+  for (const name of ['gaps', 'workflow', 'mechanisms', 'internals']) {
     for (const entry of LISTS[name]) {
-      if (entry.decision === 'reject') continue;
+      if (!entry.s8) continue;
       rows.push([
         cell(entry.subject),
         entry.decision,
@@ -264,8 +299,108 @@ function renderCitations(evidence) {
   );
 }
 
+/** The sentence before the table of internal runs, with the shard counts of those runs. */
+function renderInternalRunsIntro(evidence) {
+  const mode = rowOf(evidence, 'i.psb-no-parallel-mode').facts.default.exitCodes.length;
+  const locks = rowOf(evidence, 'i.psb-no-locks').facts.exitCodes.length;
+  return (
+    'What each reporter does when a Playwright release drops the field, from a copy of the reporter whose read names a property that does not exist, run through the harness: ' +
+    `the \`_parallelMode\` rows on the fixture with ${word(mode)} shards and one worker per shard, the \`_locks\` row on a suite of two lock files and a filler with ${word(locks)} shards. ` +
+    "Balances means the shards ran other leaves than Playwright's own split; exactly once is the harness verdict, which includes serial integrity and dependencies."
+  );
+}
+
+/** The sentence before the couture-cast table, with its shard range and overhead. */
+function renderCoutureIntro(evidence) {
+  const facts = rowOf(evidence, 'sim.couture-cast').facts;
+  const shards = facts.byTest.map((r) => r.shards);
+  return (
+    `\`simulate\` over a list and timings built from the ${word(facts.runs)} S5 runs of couture-cast, ` +
+    `${word(Math.min(...shards))} to ${word(Math.max(...shards))} shards, one worker per shard, with the median per-shard overhead outside the Playwright run, ` +
+    `\`--overhead ${facts.overheadInput}\` (\`sim.couture-cast\`).`
+  );
+}
+
+/** The notice code copied from the package carries. */
+function renderCopyright(evidence) {
+  return `Code copied from the package carries its notice: ${evidence.versions.license}, MIT License.`;
+}
+
+/** Every generated block of the document, by name. */
+const BLOCKS = {
+  versions: renderVersions,
+  rows: renderRows,
+  gaps: (e) => renderDecisions(e, 'gaps'),
+  workflow: (e) => renderDecisions(e, 'workflow'),
+  mechanisms: (e) => renderDecisions(e, 'mechanisms'),
+  internals: renderInternals,
+  'internal-runs-intro': renderInternalRunsIntro,
+  'internal-runs': renderInternalRuns,
+  'couture-intro': renderCoutureIntro,
+  'couture-cast': renderCoutureCast,
+  inputs: renderInputs,
+  citations: renderCitations,
+  copyright: renderCopyright,
+};
+
+const BLOCK = /<!-- generated:([a-z-]+) -->([\s\S]*?)<!-- \/generated:\1 -->/g;
+
+/** The generated blocks of a document: `{ name: text }`. */
+function blocksOf(text) {
+  const found = {};
+  for (const match of text.matchAll(BLOCK)) {
+    if (match[1] in found) throw new Error(`the block ${match[1]} appears twice`);
+    found[match[1]] = match[2].trim();
+  }
+  return found;
+}
+
+/** The document with every generated block rendered from the evidence. */
+function renderDocument(text, evidence) {
+  const names = Object.keys(blocksOf(text));
+  const missing = Object.keys(BLOCKS).filter((name) => !names.includes(name));
+  if (missing.length > 0) throw new Error(`the document has no block ${missing.join(', ')}`);
+  return text.replace(BLOCK, (_, name) => {
+    if (!BLOCKS[name]) throw new Error(`no renderer for the block ${name}`);
+    return `<!-- generated:${name} -->\n\n${BLOCKS[name](evidence)}\n\n<!-- /generated:${name} -->`;
+  });
+}
+
+/** Renders every block into the document and formats it with the repository's Prettier config. */
+async function writeDocument({ doc = DOC, evidence = EVIDENCE } = {}) {
+  const prettier = require('prettier');
+  const rendered = renderDocument(
+    fs.readFileSync(doc, 'utf8'),
+    JSON.parse(fs.readFileSync(evidence, 'utf8'))
+  );
+  const options = { ...(await prettier.resolveConfig(doc)), filepath: doc };
+  fs.writeFileSync(doc, await prettier.format(rendered, options));
+}
+
+if (require.main === module) {
+  if (process.argv[2] !== '--write') {
+    process.stderr.write('usage: node research/shard-balancer/report.js --write\n');
+    process.exitCode = 2;
+  } else {
+    writeDocument().then(
+      () => process.stdout.write(`Tables written to ${path.relative(REPO, DOC)}\n`),
+      (error) => {
+        process.stderr.write(`error: ${error.message}\n`);
+        process.exitCode = 2;
+      }
+    );
+  }
+}
+
 module.exports = {
+  BLOCKS,
+  blocksOf,
   normalizeTable,
+  renderCopyright,
+  renderCoutureIntro,
+  renderDocument,
+  renderInternalRunsIntro,
+  writeDocument,
   renderCitations,
   renderCoutureCast,
   renderDecisions,

@@ -11,6 +11,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { listIntended } = require('../../harness');
 const { copyProject, tempDir } = require('../../qualification/lib/project');
+const { upstreamUrl } = require('./citations');
 const drive = require('./drive');
 const { FIXTURE, REPO_ROOT } = require('./upstream');
 
@@ -54,7 +55,11 @@ function scrubber(root) {
   return walk;
 }
 
-function createContext({ log = () => {}, source = FIXTURE } = {}) {
+/**
+ * `commit` is the upstream commit the installed version was published from; `upstreamText` reads
+ * a file of the upstream repository at it (memoized).
+ */
+function createContext({ log = () => {}, source = FIXTURE, commit = null } = {}) {
   const root = tempDir('psb');
   const memo = new Map();
   const listings = new Map();
@@ -66,6 +71,17 @@ function createContext({ log = () => {}, source = FIXTURE } = {}) {
     root,
     log,
     scrub: scrubber(root),
+
+    /** The text of a file of the upstream repository at the published commit. */
+    upstreamText(file) {
+      if (!commit) throw new Error('the context has no upstream commit');
+      return ctx.once(`upstream:${file}`, async () => {
+        const url = upstreamUrl(commit, file);
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`GET ${url}: ${response.status}`);
+        return response.text();
+      });
+    },
 
     /** Removes the scratch directory of the collection. */
     dispose() {

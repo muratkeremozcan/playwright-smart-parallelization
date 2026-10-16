@@ -13,8 +13,9 @@
  *             adapt names at least one row that must pass
  *   s8        the acceptance test the Action must pass, required for take and adapt
  *
- * Internals add `field`, `engine`, `replacement` and `loss`. The tables of
- * `docs/research/shard-balancer-harvest.md` are rendered from these lists and the evidence.
+ * Workflow entries add `item`, the text of `workflow-and-history.md` they answer. Internals add
+ * `field`, `engine`, `readAt` (the source of the read itself), `replacement` and `loss`. The tables
+ * of `docs/research/shard-balancer-harvest.md` are rendered from these lists and the evidence.
  */
 
 const src = (file, lines, quote, source = 'upstream') => ({ source, file, lines, quote });
@@ -81,16 +82,28 @@ const ADD_SAMPLES = src(
   '71-87',
   'entry.samples = entry.samples.slice(-MAX_SAMPLES);'
 );
+const MERGE_ORDER = src('src/timings.ts', '78-83', 'entry.samples.push(Math.round(durationMs));');
 const PRUNE = src(
   'src/timings.ts',
   '71-87',
   'if (daysBetween(entry.seen, today) <= PRUNE_AFTER_DAYS)'
+);
+const APPLIED_CAP = src('src/timings.ts', '8', 'export const MAX_APPLIED = 200;');
+const APPLIED_LOG = src(
+  'src/timings.ts',
+  '85',
+  'const log = [...(timings.applied ?? []), ...applied].slice(-MAX_APPLIED);'
 );
 const MEDIAN = src('src/timings.ts', '89-93', 'export function median(values: number[]): number {');
 const PASSING = src(
   'src/run.ts',
   '46-59',
   ".filter((t) => t.ran && !t.static_skip && (t.outcome === 'expected' || t.outcome === 'flaky'))"
+);
+const ATTEMPTS_SUMMED = src(
+  'src/reporter.ts',
+  '240',
+  'this.durations.set(test, (this.durations.get(test) ?? 0) + result.duration);'
 );
 const INTERRUPTED = src(
   'src/reporter.ts',
@@ -215,10 +228,20 @@ const MODE_TYPES = src(
   '30-31',
   'type InternalSuite = Suite & { _parallelMode?: ParallelMode };'
 );
+const HOOK_CHUNKS = src(
+  'src/reporter.ts',
+  '45',
+  'Playwright also chunks parallel tests under beforeAll/afterAll hooks; this splits them per test.'
+);
 const GROUP_OF = src(
   'src/reporter.ts',
   '43-59',
   "if (parent._parallelMode === 'serial' || parent._parallelMode === 'default') sequential = parent;"
+);
+const MODE_READ = src(
+  'src/reporter.ts',
+  '51-52,84',
+  "insideParallel ||= parent._parallelMode === 'parallel';"
 );
 const EXACT = src(
   'src/reporter.ts',
@@ -248,6 +271,12 @@ const LOCK_MERGE = src(
 const FLK_MODE = src(
   'lib/playwright-test.js',
   '18140-18147',
+  'function computeTestGroupSuite(testCase) {',
+  'flakiness'
+);
+const FLK_READ = src(
+  'lib/playwright-test.js',
+  '18147',
   'const parallelMode = suite._parallelMode;',
   'flakiness'
 );
@@ -259,10 +288,12 @@ const PW_SERIAL = src(
 );
 const PW_SHARD = src(
   'playwright/lib/runner/index.js',
-  '2462-2463',
+  '2462-2488',
   'function filterForShard(shard, weights, testGroups) {',
   'playwright'
 );
+
+const KEEP_LATEST = 'The aggregate job keeps only the latest attempt of each shard';
 
 /** Gaps the Flakiness and NSXBet qualifications named. */
 const GAPS = [
@@ -324,13 +355,18 @@ const GAPS = [
     subject:
       'Flakiness P8: the maximum rule keeps a slow failure and ignores a faster test (`8.failed-run-slow`, `8.faster-test`)',
     mechanism:
-      'A test costs the median of its last five passing samples, and a failed or interrupted result gives no sample.',
-    sources: [WINDOW, ADD_SAMPLES, PASSING],
-    decision: 'take',
+      'A test costs the median of its last five samples from passing and flaky results; a failed or interrupted result gives no sample, and a flaky result gives the sum of all its attempts.',
+    sources: [WINDOW, ADD_SAMPLES, PASSING, ATTEMPTS_SUMMED],
+    decision: 'adapt',
     reason:
-      'The window follows a faster test within two runs (`h.faster-test`) and a slow failure leaves no trace (`h.failed-slow`).',
-    evidence: { 'h.faster-test': 'pass', 'h.failed-slow': 'pass', 'h.cancelled': 'pass' },
-    s8: 'Make a test ten times faster for three runs: its price follows. Fail it slowly once: its price stays.',
+      'From a full window the price follows a faster test in three runs (`h.faster-test`) and a failed run adds no sample (`h.failed-slow`). A slow failed attempt before a passing retry inflates one sample, which the median of a full window absorbs (`h.flaky-slow`); our sample is the duration of the passing attempt alone.',
+    evidence: {
+      'h.faster-test': 'pass',
+      'h.failed-slow': 'pass',
+      'h.cancelled': 'pass',
+      'h.flaky-slow': 'pass',
+    },
+    s8: 'Make a test ten times faster for three runs on a full window: its price follows. Fail it slowly once: its price stays. Fail its first attempt slowly and pass the retry: its sample is the passing attempt.',
   },
   {
     subject: 'Flakiness X2: two runs racing to publish lose updates (`x2.racing-publish`)',
@@ -339,13 +375,13 @@ const GAPS = [
     sources: [FINISH_RESTORE, FINISH_SAVE, APPLIED],
     decision: 'adapt',
     reason:
-      'The most recently created entry wins, so a delayed older run discards the samples of a newer one (`h.racing-publish`); the `applied` list makes one serialized writer safe to replay (`h.remerge-union`), and our publish is that writer.',
+      'The most recently created entry wins, so a delayed older run discards the samples of a newer one (`h.racing-publish`). Our single writer lists the cache entries through the Actions cache REST API, restores the highest sequence key by its exact name, merges one complete run and saves under the next sequence number; a key that already exists means another writer won, so it reads that entry and retries. `h.remerge-union` shows the merge itself is idempotent.',
     evidence: {
       'h.racing-publish': 'fail',
       'h.remerge-union': 'pass',
       'h.duplicate-input': 'pass',
     },
-    s8: 'Two runs publish in the opposite order of their run numbers: the history holds the samples of both, and replaying one changes no byte.',
+    s8: 'Two writers race for the same sequence key: one save fails on the existing key, re-reads it and saves the next key, and the history holds the samples of both runs.',
   },
   {
     subject:
@@ -363,17 +399,17 @@ const GAPS = [
     subject: 'NSXBet P2: serial groups split across shards (`2.cold`, `2.history`)',
     mechanism:
       "The reporter groups tests the way Playwright's scheduler does by reading `_parallelMode`; without that field, or with `granularity: file`, it keeps whole files.",
-    sources: [GROUP_OF, EXACT, PW_SERIAL],
+    sources: [GROUP_OF, EXACT, HOOK_CHUNKS, PW_SERIAL],
     decision: 'adapt',
     reason:
-      'Whole files keep every group whole with no internal read (`a.granularity-file`, `i.psb-no-parallel-mode`). The public `serial` annotation (`i.serial-public`) supports test units under `fullyParallel`, but the mode of a describe has no public signal (`i.mode-hidden`), so whole files are our default and test units an opt-in.',
+      "Whole files keep every serial suite whole without a read of `_parallelMode` (`a.granularity-file`, `i.psb-no-parallel-mode`). Test units from public signals alone would split `mode: 'default'` groups (`i.mode-hidden`) and the hook chunks Playwright keeps together, so our units are whole files only; on couture-cast whole files simulate within a few milliseconds of single tests up to five shards and fall behind from six (`sim.couture-cast`).",
     evidence: {
-      'a.fully-parallel': 'pass',
       'a.granularity-file': 'pass',
-      'i.serial-public': 'pass',
+      'i.psb-no-parallel-mode': 'pass',
       'i.mode-hidden': 'pass',
+      'sim.couture-cast': 'pass',
     },
-    s8: 'Every serial suite of the fixture stays on one shard under the default config and under `fullyParallel`, and the Action reads no private field.',
+    s8: 'The Action reads no private Playwright field, and every serial suite of the fixture stays on one shard under the default config and under `fullyParallel`.',
   },
   {
     subject:
@@ -391,7 +427,7 @@ const GAPS = [
     subject:
       'NSXBet P8: failed and cancelled runs and a damaged history replace good history (`8.failed-run`, `8.cancelled-run`, `8.damaged-history`)',
     mechanism:
-      'Only passing results give samples, an interrupted test is marked as not run, `update` validates the history and every input before it writes, and it writes through a temporary file and a rename.',
+      'Only passing and flaky results give samples, an interrupted test is marked as not run, `update` validates the history and every input before it writes, and it writes through a temporary file and a rename.',
     sources: [PASSING, INTERRUPTED, VALIDATE, ATOMIC],
     decision: 'take',
     reason:
@@ -412,19 +448,21 @@ const GAPS = [
   },
   {
     subject: 'NSXBet X2: a delayed older run overwrites a newer one (`x2.racing-publish`)',
-    mechanism: 'Cache keys per run id, restored by prefix, newest created first.',
-    sources: [FINISH_RESTORE, FINISH_SAVE],
+    mechanism:
+      'Cache keys per run id, restored by prefix, newest created first; the window keeps the last five samples in merge order, and the `applied` list keeps the shas of the last 200 inputs.',
+    sources: [FINISH_RESTORE, FINISH_SAVE, MERGE_ORDER, APPLIED_CAP, APPLIED_LOG],
     decision: 'adapt',
     reason:
-      'The key order is creation time and the race loses samples (`h.racing-publish`), so our keys carry the run number and one writer merges into the newest history (`h.remerge-union`).',
+      'Creation order decides and the race loses samples (`h.racing-publish`), and a run merged late would displace newer samples from a window kept in merge order. Our samples carry their run number and the window keeps the five highest run numbers, and our dedupe is by run identity, since the capped `applied` list forgets old inputs; `h.remerge-union` covers the idempotent merge.',
     evidence: { 'h.racing-publish': 'fail', 'h.remerge-union': 'pass' },
-    s8: 'Publish an older run after a newer one: the reader restores the history of the higher run number.',
+    s8: 'Merge run 101 after run 102 into a full window: the samples of run 102 stay, the sample of run 101 enters only among the five newest runs, and merging run 101 again changes no byte.',
   },
 ];
 
 /** The items of `workflow-and-history.md`. */
 const WORKFLOW = [
   {
+    item: '**Inputs:**',
     subject:
       'Inputs: working directory, config, filters, shard count, workers, timing location, retention, switch',
     mechanism:
@@ -437,29 +475,31 @@ const WORKFLOW = [
     s8: 'The `workers` input reaches Playwright and the plan of every shard, and the plan sha is the same under `--workers=1` and `--workers=4`.',
   },
   {
+    item: '**Prepare:**',
     subject: 'Prepare: validate inputs and lock one history snapshot for the whole run',
     mechanism:
       'The restore action pins the newest timings to the run under a cache key per run id, waits a fixed 20 seconds when the pin it raced for is not readable yet, and fails on a cache miss.',
     sources: [PIN, PIN_RACE],
     decision: 'adapt',
     reason:
-      'Identical bytes give identical plans on any machine (`p.copies-same-plan`, `p.slow-clock`), so one snapshot is the right unit. The shards racing each other for the pin depend on a fixed sleep, so one prepare job uploads the snapshot as an artifact with its sha as a job output.',
+      'Identical bytes give identical plans (`p.copies-same-plan`), so one snapshot is the right unit. The shards racing each other for the pin depend on a fixed sleep, so one prepare job uploads the snapshot as an artifact with its sha as a job output.',
     evidence: { 'p.copies-same-plan': 'pass', 'p.slow-clock': 'pass' },
     s8: 'Every shard verifies the snapshot sha from the prepare job before Playwright starts, and a re-run of one shard logs the same plan sha.',
   },
   {
+    item: '**Execute:**',
     subject:
       'Execute: matrix over shards, uniquely named per-shard artifacts uploaded even when tests fail',
     mechanism:
       'Each shard writes its record in `onEnd`, also for a failed or stopped run, under a path with `{shard}`; the example uploads it unless the run was cancelled, with `overwrite: true` for a re-run.',
     sources: [RECORD_WRITE, UPLOAD],
     decision: 'adapt',
-    reason:
-      'A stopped shard still writes a record that names its tests that did not run (`c.not-run`). Artifact names carry the run attempt in our workflow, so a re-run never replaces the record of the attempt that failed.',
-    evidence: { 'c.not-run': 'pass' },
-    s8: 'A shard stopped by `--max-failures` still uploads its record, and the aggregate job names the tests that did not run.',
+    reason: `A stopped shard still writes a record that names its tests that did not run (\`c.not-run\`). Our artifact names carry the run attempt, so a re-run keeps the record of the attempt that failed. ${KEEP_LATEST}, because two records of one shard fail \`check\` (\`c.duplicate-record\`).`,
+    evidence: { 'c.not-run': 'pass', 'c.duplicate-record': 'pass' },
+    s8: `A shard stopped by \`--max-failures\` still uploads its record, and the aggregate job names the tests that did not run. After a re-run of one shard, the aggregate job reads one record per shard, the latest attempt.`,
   },
   {
+    item: '**Aggregate:**',
     subject: 'Aggregate: completeness, merge, timing update, slowest shard and imbalance summary',
     mechanism:
       '`check` proves exactly-once coverage from the records and writes predicted against measured time per shard to the job summary; `update` merges the records into the timings.',
@@ -478,6 +518,7 @@ const WORKFLOW = [
     s8: 'A complete run writes the summary table; a missing, repeated or filtered shard fails the aggregate job before any history write.',
   },
   {
+    item: '**Rollback:**',
     subject:
       'Rollback: one switch disables balancing for the entire run and keeps native reporting',
     mechanism:
@@ -490,6 +531,7 @@ const WORKFLOW = [
     s8: 'With the switch off, the leaves of every shard equal a run without the Action and no shard logs a plan.',
   },
   {
+    item: 'Reuse `gh-build-matrix`',
     subject: 'Reuse `gh-build-matrix` for matrix generation where it fits',
     mechanism:
       'The example workflow uses a fixed matrix and `strategy.job-total`; the package generates no matrix.',
@@ -500,6 +542,7 @@ const WORKFLOW = [
     evidence: {},
   },
   {
+    item: 'One trusted writer.',
     subject:
       'History: one trusted writer; each record carries commit, run, config fingerprint, schema version and time',
     mechanism:
@@ -507,26 +550,28 @@ const WORKFLOW = [
     sources: [RECORD_FIELDS, CORPUS_SHA, TIMINGS_TYPE],
     decision: 'adapt',
     reason:
-      'The corpus sha catches a shard that saw another selection (`c.corpus-mismatch`) and the input shas catch a replay (`h.duplicate-input`); the run number, commit and config fingerprint the policy asks for are ours to add next to the file.',
+      'The corpus sha catches a shard that saw another selection (`c.corpus-mismatch`) and the input shas catch a replay (`h.duplicate-input`); the run number, commit and config fingerprint the policy asks for are ours to add, and one writer saves through the compare-and-swap on immutable cache keys of the X2 decision.',
     evidence: { 'c.corpus-mismatch': 'pass', 'h.duplicate-input': 'pass' },
-    s8: 'The published history names the run number, commit and config fingerprint it came from, and a record with another fingerprint is refused.',
+    s8: 'The published history names the run number, commit and config fingerprint it came from, a record with another fingerprint is refused, and a second writer that loses the race for a key retries on the next one.',
   },
   {
+    item: 'A delayed older run never overwrites newer history.',
     subject: 'History: a delayed older run never overwrites newer history',
     mechanism:
-      'The finish action saves under a key per run id and attempt, and the next run restores the most recently created entry with that prefix.',
-    sources: [FINISH_RESTORE, FINISH_SAVE],
+      'The finish action saves under a key per run id and attempt, the next run restores the most recently created entry with that prefix, and the window keeps the last five samples in merge order.',
+    sources: [FINISH_RESTORE, FINISH_SAVE, MERGE_ORDER],
     decision: 'adapt',
     reason:
-      'Creation order decides, so a delayed older run wins (`h.racing-publish`); our reader picks the highest run number and our single writer merges (`h.remerge-union`).',
+      'Creation order decides, so a delayed older run wins (`h.racing-publish`). Our writer restores the highest sequence key and saves the next one, and the window keeps samples by run number, so a delayed run merges in without displacing newer samples; the merge is idempotent (`h.remerge-union`).',
     evidence: { 'h.racing-publish': 'fail', 'h.remerge-union': 'pass' },
-    s8: 'Publish run 101 after run 102: the next run restores the history that holds run 102.',
+    s8: 'Publish run 101 after run 102 into a full window: every sample of run 102 stays in the history.',
   },
   {
+    item: 'Observations for tests absent from a filtered run are preserved.',
     subject: 'History: observations for tests absent from a filtered run are preserved',
     mechanism:
       '`update` keeps every entry it did not sample and drops an entry no update has seen for 30 days.',
-    sources: [PRUNE, ADD_SAMPLES],
+    sources: [PRUNE],
     decision: 'adapt',
     reason:
       'A filtered run keeps the other entries (`h.filtered-run`), and the 30-day expiry drops a test a filter left out for a month (`h.expiry`), so only runs of the full selection update our history and the expiry only removes deleted tests.',
@@ -534,10 +579,11 @@ const WORKFLOW = [
     s8: 'A filtered run publishes nothing, and a test deleted from the suite leaves the history after 30 days.',
   },
   {
+    item: 'Failed, cancelled, or incomplete runs',
     subject:
       'History: failed, cancelled or incomplete runs and zero-valued data never replace good history',
     mechanism:
-      'Only passing results give samples, an interrupted test is not run, input is validated; any number of records is accepted, and a sample of zero is valid.',
+      'Only passing and flaky results give samples, an interrupted test is not run, input is validated; any number of records is accepted, and a sample of zero is valid.',
     sources: [PASSING, INTERRUPTED, VALIDATE],
     decision: 'adapt',
     reason:
@@ -551,40 +597,44 @@ const WORKFLOW = [
     s8: 'A failed, a cancelled and an incomplete run each leave the published history byte for byte.',
   },
   {
+    item: 'Bounded observation window',
     subject: 'History: a bounded observation window that adapts after tests get faster',
     mechanism:
       'The last five samples per test, priced at their median, and entries unseen for 30 days dropped.',
     sources: [WINDOW, ADD_SAMPLES, MEDIAN],
     decision: 'take',
     reason:
-      'The price of a faster test drops within two runs (`h.faster-test`) and stale entries expire (`h.expiry`).',
+      'From a full window the price of a faster test drops in three runs (`h.faster-test`) and stale entries expire (`h.expiry`).',
     evidence: { 'h.faster-test': 'pass', 'h.expiry': 'pass' },
-    s8: "Three faster runs bring a test's price to its new duration.",
+    s8: "Three faster runs on a full window bring a test's price to its new duration.",
   },
   {
+    item: 'Separate history per browser',
     subject: 'History: separate per browser, runner class and worker count',
     mechanism:
       'Keys carry the project name; the actions take a cache `prefix` per suite; the plan packs for the `workers` option.',
     sources: [KEY, PREFIX, WORKERS_OPTION],
     decision: 'adapt',
     reason:
-      'Per-project keys keep browsers apart (`a.balanced-2`); the runner class and the worker count go into our cache key, since the plan changes with the workers it packs for (`w.plan-workers`).',
-    evidence: { 'a.balanced-2': 'pass', 'w.plan-workers': 'pass' },
+      'Per-project keys keep chromium and firefox apart in one file (`h.filtered-run` holds a separate entry per project); the runner class and the worker count go into our cache key, since the plan changes with the workers it packs for (`w.plan-workers`).',
+    evidence: { 'h.filtered-run': 'pass', 'w.plan-workers': 'pass' },
     s8: 'Changing the runner label or the workers input starts a separate history.',
   },
   {
+    item: 'Reuse the engine',
     subject:
       'History: reuse the engine format and merger first; change policy only when measurements show a problem',
     mechanism:
-      "A five-sample median window over passing samples, in the package's own timings format.",
+      "A five-sample median window over passing and flaky samples, in the package's own timings format.",
     sources: [WINDOW, MEDIAN],
     decision: 'adapt',
     reason:
-      'Our Flakiness qualification measured the problem of its maximum merger (`8.failed-run-slow`, `8.faster-test` there), which justifies the change, and the median window is the measured replacement (`h.faster-test`, `h.failed-slow`).',
-    evidence: { 'h.faster-test': 'pass', 'h.failed-slow': 'pass' },
-    s8: 'The history the Action writes passes the same faster-test and slow-failure acceptance tests as the window.',
+      'Our Flakiness qualification measured the problem of its maximum merger (`8.failed-run-slow`, `8.faster-test` there), which justifies the change, and the median window is the measured replacement (`h.faster-test`, `h.failed-slow`, `h.flaky-slow`).',
+    evidence: { 'h.faster-test': 'pass', 'h.failed-slow': 'pass', 'h.flaky-slow': 'pass' },
+    s8: 'The history the Action writes passes the same faster-test, slow-failure and slow-retry acceptance tests as the window.',
   },
   {
+    item: 'Persist in the consuming repo',
     subject: "History: persist in the consuming repo's own Actions storage",
     mechanism:
       "Timings live in the repository's Actions cache and records in its artifacts; the reporter and the commands make no network call.",
@@ -595,6 +645,7 @@ const WORKFLOW = [
     s8: "The Action's fixture run under the network guard records zero connection attempts.",
   },
   {
+    item: 'Documentation of cold start',
     subject:
       'Deliverables: cold start, refresh, diagnostics (imbalance summary) and rollback documentation',
     mechanism:
@@ -650,13 +701,18 @@ const MECHANISMS = [
   {
     subject: 'Median of the last 5 passing samples',
     mechanism:
-      'Samples of passing and flaky results only, the last five kept, priced at their median.',
-    sources: [WINDOW, ADD_SAMPLES, MEDIAN, PASSING],
-    decision: 'take',
+      'Samples of passing and flaky results only, all attempts summed, the last five kept, priced at their median.',
+    sources: [WINDOW, ADD_SAMPLES, MEDIAN, PASSING, ATTEMPTS_SUMMED],
+    decision: 'adapt',
     reason:
-      'It adapts to a faster test (`h.faster-test`) and ignores failed and cancelled runs (`h.failed-slow`, `h.cancelled`).',
-    evidence: { 'h.faster-test': 'pass', 'h.failed-slow': 'pass', 'h.cancelled': 'pass' },
-    s8: 'The faster-test, slow-failure and cancelled-run cases of the fixture.',
+      'It adapts to a faster test (`h.faster-test`) and ignores failed and cancelled runs (`h.failed-slow`, `h.cancelled`). A flaky result sums its slow failed attempt into its sample, which a full window absorbs (`h.flaky-slow`); our sample is the passing attempt.',
+    evidence: {
+      'h.faster-test': 'pass',
+      'h.failed-slow': 'pass',
+      'h.cancelled': 'pass',
+      'h.flaky-slow': 'pass',
+    },
+    s8: 'The faster-test, slow-failure, cancelled-run and slow-retry cases of the fixture, with the passing attempt as the sample of a flaky test.',
   },
   {
     subject: 'New-test estimate from describe, then file, then project, then suite',
@@ -665,7 +721,7 @@ const MECHANISMS = [
     sources: [ESTIMATE],
     decision: 'take',
     reason:
-      'Our own medians reproduce the package at every level (`e.hierarchy`), and renamed and new tests run and are counted unknown (`a.renamed`).',
+      'On a suite where the four medians differ, our own medians reproduce the package at every level (`e.hierarchy`), and renamed and new tests run and are counted unknown (`a.renamed`).',
     evidence: { 'e.hierarchy': 'pass', 'a.renamed': 'pass' },
     s8: "A new test in a known describe is priced at that describe's median and the run covers it once.",
   },
@@ -728,9 +784,9 @@ const MECHANISMS = [
     sources: [SETUP_COST, SETUP_PLAN, SETUP_SAMPLE],
     decision: 'take',
     reason:
-      'The setup project ran on both shards and has one sample (`h.setup-once`), and the balanced runs with setup pass the harness dependency checks (`a.balanced-3`).',
-    evidence: { 'h.setup-once': 'pass', 'a.balanced-3': 'pass' },
-    s8: 'A setup project run by every shard gains one sample per published run.',
+      'On a config where one project needs setup, the predicted time of each shard is its work plus the setup cost exactly where it hosts that project (`a.setup-aware`), and the setup project ran on both shards and has one sample (`h.setup-once`).',
+    evidence: { 'a.setup-aware': 'pass', 'h.setup-once': 'pass' },
+    s8: 'A setup project run by every shard gains one sample per published run, and a shard that hosts no dependent test runs no setup.',
   },
   {
     subject:
@@ -740,18 +796,25 @@ const MECHANISMS = [
     sources: [NODE_BUDGET, NEVER_SLOWER],
     decision: 'take',
     reason:
-      'A clock that jumps a second per read gives the same plan (`p.slow-clock`), and every shard computes the same plan on its own (`p.copies-same-plan`).',
-    evidence: { 'p.slow-clock': 'pass', 'p.copies-same-plan': 'pass' },
-    s8: 'The plan sha is the same on a slow runner and a fast one.',
+      'Every simulated shard count predicts the balanced plan at or below the built-in split, on the fixture and on couture-cast (`sim.predicted-vs-actual`, `sim.couture-cast`); measured, the two-shard balanced run, which the model predicts level with the built-in split, finished a little slower than two native runs that agree with each other (`a.balanced-2`), so the rule bounds the prediction and an already even native split can still win a run. The node budget rests on the cited source; `p.slow-clock` checks determinism only.',
+    evidence: {
+      'sim.predicted-vs-actual': 'pass',
+      'sim.couture-cast': 'pass',
+      'a.balanced-2': 'pass',
+      'p.slow-clock': 'pass',
+    },
+    s8: 'The plan sha is the same on a slow runner and a fast one, and no simulated shard count predicts the balanced plan above the built-in split.',
   },
   {
     subject: 'Input dedupe by sha',
-    mechanism: '`update` records the sha of every input and skips one it already merged.',
-    sources: [APPLIED],
-    decision: 'take',
-    reason: 'A replayed record changes no byte (`h.duplicate-input`, `h.remerge-union`).',
+    mechanism:
+      '`update` records the sha of every input and skips one it already merged, keeping the last 200 shas.',
+    sources: [APPLIED, APPLIED_CAP],
+    decision: 'adapt',
+    reason:
+      'A replayed record changes no byte (`h.duplicate-input`, `h.remerge-union`); the list forgets inputs past its cap, so our writer dedupes by run identity.',
     evidence: { 'h.duplicate-input': 'pass', 'h.remerge-union': 'pass' },
-    s8: 'Re-running the publish job leaves the history byte for byte.',
+    s8: 'Re-running the publish job for any earlier run leaves the history byte for byte.',
   },
   {
     subject: 'Validation and atomic save of the history',
@@ -787,15 +850,15 @@ const MECHANISMS = [
     s8: 'A balanced fixture run excludes through the public preprocess API only.',
   },
   {
-    subject: 'Fork pull requests',
+    subject: 'Fork pull requests use the built-in split',
     mechanism:
-      'A fork gets a read-only cache, so the restore action skips the pin and writes empty timings: every shard of a fork run uses the built-in split.',
+      'The restore action treats the cache of a fork pull request as read-only (its comment, since upstream commit `8ed9ea3`), skips the pin and writes empty timings, so every shard of a fork run uses the built-in split.',
     sources: [FORKS, EMPTY_PIN],
-    decision: 'adapt',
+    decision: 'reject',
     reason:
-      'A fork run can read the cache and upload artifacts, so our prepare job snapshots the newest history for it like any run (`p.copies-same-plan`), and only the trusted publish job writes.',
-    evidence: { 'p.copies-same-plan': 'pass' },
-    s8: 'A fork pull request balances from the newest history and its publish step is skipped.',
+      "GitHub documents that a `pull_request` run from a fork can restore the caches of the base branch and saves only under the pull request's own ref, so a fork can balance from the base history; our prepare job snapshots it like any run and only the trusted publish job writes.",
+    evidence: {},
+    s8: 'On a real fork pull request the prepare job restores the base branch history, the shards balance from it, and nothing reaches the history of the base branch.',
   },
 ];
 
@@ -805,15 +868,16 @@ const INTERNALS = [
     subject: '`_parallelMode` in playwright-shard-balancer',
     engine: 'playwright-shard-balancer',
     field: 'Suite._parallelMode',
+    readAt: MODE_READ,
     mechanism:
       "Groups tests the way Playwright's scheduler does: a file outside parallel mode is one unit, and in parallel mode each test is, except inside a serial or default-mode describe.",
-    sources: [MODE_TYPES, GROUP_OF, EXACT],
+    sources: [MODE_TYPES, GROUP_OF, MODE_READ, EXACT],
     decision: 'reject',
     reason:
       'A release without the field turns the reporter to whole files, still balanced and exactly once (`i.psb-no-parallel-mode`).',
     replacement:
       'The public `serial` annotation of each test inside a serial describe (`i.serial-public`), and `FullConfig.fullyParallel` for the suite-wide mode.',
-    loss: '`describe.configure({ mode })` has no public signal (`i.mode-hidden`), so a file in parallel mode and a default-mode describe inside a parallel file are whole-file units.',
+    loss: "`mode: 'parallel'` and `mode: 'default'` have no public signal (`i.mode-hidden`), so whole files are the only safe unit.",
     evidence: {
       'i.psb-no-parallel-mode': 'pass',
       'i.serial-public': 'pass',
@@ -824,6 +888,7 @@ const INTERNALS = [
     subject: '`_locks` in playwright-shard-balancer',
     engine: 'playwright-shard-balancer',
     field: 'TestCase._locks',
+    readAt: LOCK_READ,
     mechanism:
       'Merges the units of tests that share a lock into one unit, so they go to one shard.',
     sources: [LOCK_TYPE, LOCK_READ, LOCK_KNOWN, LOCK_MERGE, PW_SHARD],
@@ -838,9 +903,10 @@ const INTERNALS = [
     subject: '`_parallelMode` in @flakiness/playwright',
     engine: '@flakiness/playwright',
     field: 'Suite._parallelMode',
+    readAt: FLK_READ,
     mechanism:
       '`computeTestGroupSuite` takes the outermost serial or default-mode suite as the unit inside parallel mode, and the file otherwise.',
-    sources: [FLK_MODE],
+    sources: [FLK_MODE, FLK_READ],
     decision: 'reject',
     reason:
       'A release without the field turns the reporter to whole files, still balanced and exactly once, with no warning (`i.flakiness-no-parallel-mode`); S7 records the dependency.',
@@ -856,4 +922,4 @@ const LISTS = { gaps: GAPS, workflow: WORKFLOW, mechanisms: MECHANISMS, internal
 /** Every entry of every list. */
 const ALL = [...GAPS, ...WORKFLOW, ...MECHANISMS, ...INTERNALS];
 
-module.exports = { ALL, GAPS, INTERNALS, LISTS, MECHANISMS, WORKFLOW };
+module.exports = { ALL, GAPS, INTERNALS, KEEP_LATEST, LISTS, MECHANISMS, WORKFLOW };
