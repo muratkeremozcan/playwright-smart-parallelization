@@ -6,7 +6,63 @@ Native `--shard` splits by test count, and keeps each file whole without `fullyP
 With 2 shards, one can take 10 minutes and the other 15, and the run waits for the 15.
 This Action splits by past durations, kept in your repo's own Actions storage.
 
-The Action is not ready yet: it exits with "not implemented yet".
+## Usage
+
+Pin a commit sha until v1 is released.
+
+```yaml
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.psp.outputs.matrix }}
+      plan: ${{ steps.psp.outputs.plan }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: psp
+        uses: muratkeremozcan/playwright-smart-parallelization@<sha>
+        with:
+          phase: prepare
+          shards: 4
+          command: npx playwright test
+
+  test:
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+      - run: npm ci && npx playwright install --with-deps chromium
+      - uses: muratkeremozcan/playwright-smart-parallelization@<sha>
+        with:
+          phase: run
+          plan: ${{ needs.prepare.outputs.plan }}
+          shard: ${{ matrix.shard }}
+
+  finish:
+    needs: [prepare, test]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: muratkeremozcan/playwright-smart-parallelization@<sha>
+        with:
+          phase: finish
+          plan: ${{ needs.prepare.outputs.plan }}
+```
+
+`finish` merges the shard reports, fails if any test ran twice or not at all, updates the history, and writes the shard times to the job summary.
+
+Needs Playwright 1.63 or later; older versions run native sharding.
+
+Pull requests from forks read the history and never write it.
+
+To turn balancing off, set `enabled: false` on `prepare`.
+The run goes back to native `--shard`.
+
+All inputs are in [`action.yml`](action.yml).
 
 ## What we know so far
 
