@@ -94,15 +94,16 @@ Project names are user strings, so no table keyed by them is a plain object: a p
 Playwright's `--test-list` is a lossy selector, so a suite it cannot pick out exactly is rejected
 wherever the harness builds a list, which is `testListPartition` and the negative control, before
 any run. The same check runs in `qualify` when a partition an engine supplies, or a forwarded
-argument, hands Playwright a `--test-list` or `--test-list-invert` file. Native sharding picks no
-test by title and still qualifies such a suite. The rejected shapes: a project name, file, spec
-file, suite title or test title with `›`, a control character, a newline, surrounding whitespace or
-an unpaired surrogate, since a list line cannot carry it; a test whose title path is a prefix of
-another's in the same project and file, since its line selects both; and two different tests with
-one project, call file and title path, such as the tests a helper registers for several specs, since
-no line tells them apart. Each error names the leaves. The load-only line that loads a helper's spec
-uses a title that no title path in the listing has. The limits and their reproductions, on
-Playwright 1.56.1, 1.60.0 and 1.64.1, are in
+argument, hands Playwright a `--test-list` or `--test-list-invert` file, read with the option arity
+of the installed Playwright from its `--help`, because a value can look like a flag. Native sharding
+picks no test by title and still qualifies such a suite. The rejected shapes: a project name, file,
+spec file, suite title or test title with `›`, a control character, a newline, surrounding
+whitespace or an unpaired surrogate, since a list line cannot carry it; a test whose title path is a
+prefix of another's in the same project and file, since its line selects both; and two different
+tests with one project, call file and title path, such as the tests a helper registers for several
+specs, since no line tells them apart. Each error names the leaves. The load-only line that loads a
+helper's spec uses a title that no title path in the listing has. The limits and their
+reproductions, on Playwright 1.56.1, 1.60.0 and 1.64.1, are in
 [docs/playwright-test-list-selection-limits.md](docs/playwright-test-list-selection-limits.md).
 
 A leaf is keyed by Playwright's own test id, which is unique per project, spec file, title path and

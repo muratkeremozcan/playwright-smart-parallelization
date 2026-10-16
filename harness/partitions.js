@@ -20,6 +20,9 @@ function nativePartition(count) {
   }));
 }
 
+/** The options that hand Playwright a file of tests to select. */
+const TEST_LIST_FLAGS = ['--test-list', '--test-list-invert'];
+
 const isControl = (char) => char.charCodeAt(0) < 0x20 || char.charCodeAt(0) === 0x7f;
 
 // The separator of a list line, control characters and newlines would corrupt a line.
@@ -34,11 +37,6 @@ function unsafeReason(value) {
   }
   if (value !== value.trim()) return 'has leading or trailing whitespace';
   return null;
-}
-
-/** Whether the arguments hand Playwright a `--test-list` or `--test-list-invert` file. */
-function usesTestList(args) {
-  return args.some((arg) => /^--test-list(-invert)?(=|$)/.test(arg));
 }
 
 /**
@@ -126,4 +124,4 @@ function testListPartition(assignment, leaves, dir) {
   });
 }
 
-module.exports = { assertSelectable, nativePartition, testListPartition, usesTestList };
+module.exports = { TEST_LIST_FLAGS, assertSelectable, nativePartition, testListPartition };

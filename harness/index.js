@@ -20,10 +20,16 @@ const {
   imbalance,
 } = require('./checks');
 const { classify, dependencyMap, listedLeaf } = require('./leaves');
-const { assertSelectable, nativePartition, usesTestList } = require('./partitions');
+const { passesOption, playwrightOptionArity } = require('./cli-options');
+const { TEST_LIST_FLAGS, assertSelectable, nativePartition } = require('./partitions');
 
 const REPORTER = path.join(__dirname, 'reporter.js');
 const MAX_BUFFER = 256 * 1024 * 1024;
+
+/** The option arity of the Playwright installed for the project at `cwd`. */
+function optionArityOf(cwd) {
+  return playwrightOptionArity(resolveFromCwd('@playwright/test/cli', cwd));
+}
 
 function resolveFromCwd(request, cwd) {
   return require.resolve(request, { paths: [cwd] });
@@ -217,8 +223,8 @@ function checkAll(intended, dependencies, shards) {
 /**
  * Qualifies a partition against the intended leaf set. `options.partition` is the partition to
  * run; it defaults to native sharding across `options.shards`. `options.listing` reuses the result
- * of an earlier `listIntended` call. `deps` replaces `listIntended`, `runPartition` and
- * `playwrightVersion` (tests inject stubs). Returns the report.
+ * of an earlier `listIntended` call. `deps` replaces `listIntended`, `runPartition`,
+ * `playwrightVersion` and `optionArity` (tests inject stubs). Returns the report.
  */
 function qualify(options, { log = () => {}, quiet = false, deps = {} } = {}) {
   assertSupportedSelection(options.forward);
@@ -235,9 +241,15 @@ function qualify(options, { log = () => {}, quiet = false, deps = {} } = {}) {
   for (const leaf of intended) log(`  ${leaf.dependency ? '[dependency] ' : ''}${leaf.key}`);
 
   const partition = options.partition || nativePartition(options.shards || 2);
-  // A list an engine supplies is held to the same contract as one the harness builds.
-  if (usesTestList([...(options.forward || []), ...partition.flatMap((shard) => shard.args)])) {
-    assertSelectable(intended);
+  // A list an engine supplies is held to the same contract as one the harness builds. Whether a
+  // run gets a list follows the option arity of the installed Playwright, since a value can look
+  // like a flag; the text test only saves the help run for the many runs that name no list.
+  const commandLines = partition.map((shard) => [...selectionArgs(options), ...(shard.args || [])]);
+  if (commandLines.some((args) => args.some((arg) => arg.includes('--test-list')))) {
+    const arity = (deps.optionArity || optionArityOf)(cwd);
+    if (commandLines.some((args) => passesOption(args, arity, TEST_LIST_FLAGS))) {
+      assertSelectable(intended);
+    }
   }
   const shards = run(options, partition);
   if (!quiet) {

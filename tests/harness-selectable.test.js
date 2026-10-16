@@ -288,6 +288,27 @@ describe('a list an engine supplies', () => {
     assert.deepStrictEqual(report.violations, []);
   });
 
+  test('is found after an option that takes a value', () => {
+    const [first, second] = shardsOf(SPLIT);
+    const after = (shard) => ({ args: ['--workers', '1', '-g', 'x|group', ...shard.args] });
+    assert.throws(
+      () => qualify({ ...prefix, partition: [after(first), after(second)] }, { quiet: true }),
+      /prefix of the other/
+    );
+  });
+
+  test('is not seen in the value of an option, in either spelling', () => {
+    // Playwright reads `--test-list` here as the grep-invert pattern, so no list is in play and
+    // the native partition of an unselectable suite still qualifies.
+    for (const forward of [['--grep-invert', '--test-list'], ['--grep-invert=--test-list']]) {
+      const report = qualify({ ...prefix, forward, shards: 2 }, { quiet: true });
+      assert.deepStrictEqual(report.violations, [], forward.join(' '));
+    }
+    const shard = (index) => ({ args: [`--shard=${index}/2`, '--grep-invert', '--test-list'] });
+    const report = qualify({ ...prefix, partition: [shard(1), shard(2)] }, { quiet: true });
+    assert.deepStrictEqual(report.violations, []);
+  });
+
   test('is not checked for a native partition, which selects no test by title', () => {
     const report = qualify({ ...prefix, shards: 2 }, { quiet: true });
     assert.deepStrictEqual(report.violations, []);
