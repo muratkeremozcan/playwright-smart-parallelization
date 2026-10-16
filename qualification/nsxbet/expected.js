@@ -16,6 +16,7 @@ const EXPECTED_ROWS = {
   '1.repeat-each': 'fail',
   '1.prefix-titles': 'fail',
   '1.grouped-repeat-each': 'pass',
+  '1.sibling-suites': 'pass',
   '2.cold': 'fail',
   '2.history': 'fail',
   '2.no-affinity': 'fail',
@@ -68,6 +69,7 @@ const EXPECTED_EXTRAS = { x1: 'fail', x2: 'fail' };
 /** Rows that do not decide a proof: glue code around the engine, and Playwright's own behavior. */
 const ROW_SUBJECTS = {
   '1.grouped-repeat-each': 'integration',
+  '1.sibling-suites': 'integration',
   '2.grouped-cold': 'integration',
   '2.grouped-history-2': 'integration',
   '2.grouped-history-3': 'integration',

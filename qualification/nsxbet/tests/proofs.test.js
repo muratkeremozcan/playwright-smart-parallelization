@@ -63,6 +63,28 @@ describe('results', () => {
   });
 });
 
+describe('execution outcomes', () => {
+  test('no row records a leaf that skipped or never ran', () => {
+    for (const found of evidence.rows) {
+      const kinds = found.evidence.kinds || {};
+      assert.strictEqual(kinds['not-executed'], undefined, found.id);
+      assert.strictEqual(
+        (found.evidence.coverageViolations || {})['not-executed'],
+        undefined,
+        found.id
+      );
+    }
+  });
+
+  test('no balance run records one either', () => {
+    for (const entry of evidence.balance) {
+      for (const strategy of [entry.native, entry.engine, entry.grouped]) {
+        assert.strictEqual(strategy.violations['not-executed'], undefined);
+      }
+    }
+  });
+});
+
 describe('proof 1: exactly once', () => {
   test('the Quick Start list for the whole config runs tests twice, project-blind', () => {
     assert.ok(row('1.combined').coverageViolations.duplicate > 0);
@@ -81,6 +103,14 @@ describe('proof 1: exactly once', () => {
   test('per-project jobs and per-project assignments cover everything once', () => {
     assert.deepStrictEqual(row('1.jobs').coverageViolations, {});
     assert.deepStrictEqual(row('1.merged').coverageViolations, {});
+  });
+
+  test('the shim keeps sibling suites of one function apart and runs all four tests', () => {
+    const evidenceRow = row('1.sibling-suites');
+    assert.deepStrictEqual(evidenceRow.coverageViolations, {});
+    assert.deepStrictEqual(evidenceRow.splitGroups, []);
+    assert.strictEqual(evidenceRow.leavesListed, 8);
+    assert.strictEqual(evidenceRow.leavesRun, 8);
   });
 
   test('the shim covers --repeat-each exactly once', () => {

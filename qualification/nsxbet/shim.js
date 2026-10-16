@@ -47,8 +47,13 @@ function playwrightLine(leaf) {
   return [`[${leaf.project}]`, leaf.file, ...leaf.titlePath].join(TITLE_SEPARATOR);
 }
 
-function specKey(project, file, line, column, title) {
-  return `${project}|${file}|${line}|${column}|${title}`;
+/**
+ * The identity of a test across repeats: its project, file and full title path. A function that
+ * registers sibling suites puts their tests at one location with one test title, so a location
+ * or a test title alone would join them; the describe titles tell them apart.
+ */
+function identity(project, file, titlePath) {
+  return JSON.stringify([project, file, titlePath]);
 }
 
 /**
@@ -105,25 +110,30 @@ function prepare(list, histories, leaves) {
   const groups = serialGroups(leaves);
   const strip = (file) =>
     prefix && file.startsWith(`${prefix}/`) ? file.slice(prefix.length + 1) : file;
-  const key = (leaf) =>
-    specKey(leaf.project, strip(leaf.file), leaf.line, leaf.column, leaf.titlePath.at(-1));
+  const key = (leaf) => identity(leaf.project, strip(leaf.file), leaf.titlePath);
   const dropped = new Set(groups.flatMap(({ members }) => members.slice(1).map(key)));
-  // A repeated test is listed once per repeat, so a member can share its location with the
+  // A repeated test is listed once per repeat, so a member can have the identity of the
   // stand-in, which must stay.
   for (const { representative } of groups) dropped.delete(key(representative));
 
+  // Each test is listed once, however many repeats the list holds.
   const seen = new Set();
-  function rewrite(suite) {
+  function rewrite(suite, titles = [], root = true) {
+    const own = root || !suite.title ? titles : [...titles, suite.title];
     const specs = [];
     for (const spec of suite.specs || []) {
       const project = spec.tests[0].projectName;
       const file = spec.file || suite.file;
-      const specId = specKey(project, file, spec.line, spec.column, spec.title);
-      if (dropped.has(specId) || seen.has(specId)) continue;
-      seen.add(specId);
+      const id = identity(project, file, [...own, spec.title]);
+      if (dropped.has(id) || seen.has(id)) continue;
+      seen.add(id);
       specs.push({ ...spec, file: `${project}/${file}` });
     }
-    return { ...suite, specs, suites: (suite.suites || []).map(rewrite) };
+    return {
+      ...suite,
+      specs,
+      suites: (suite.suites || []).map((child) => rewrite(child, own, false)),
+    };
   }
 
   const merged = mergeHistories(histories);
@@ -148,7 +158,7 @@ function prepare(list, histories, leaves) {
     projects: list.config.projects.filter((p) => projects.includes(p.name)),
   };
   return {
-    list: { ...list, config, suites: list.suites.map(rewrite) },
+    list: { ...list, config, suites: list.suites.map((suite) => rewrite(suite)) },
     timing,
     groups,
     leaves,

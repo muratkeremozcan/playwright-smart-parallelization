@@ -247,6 +247,69 @@ describe('test directory', () => {
   });
 });
 
+describe('sibling suites registered by one function', () => {
+  // Two serial suites, alpha and beta, from one function: their tests share a location and a
+  // test title and differ in the describe title.
+  const nestedSpec = (project, title) => spec(project, 'siblings.spec.js', title, 8);
+  const siblings = {
+    config,
+    suites: [
+      {
+        title: 'siblings.spec.js',
+        file: 'siblings.spec.js',
+        specs: [],
+        suites: ['alpha', 'beta'].map((name) => ({
+          title: name,
+          file: 'siblings.spec.js',
+          specs: [nestedSpec('chromium', 'first'), nestedSpec('chromium', 'second')],
+        })),
+      },
+    ],
+  };
+  const member = (suite, title) => ({
+    ...leaf('chromium', 'siblings.spec.js', title, 8),
+    titlePath: [suite, title],
+    serialGroup: `chromium|siblings.spec.js|${suite}|#0`,
+  });
+  const four = [
+    member('alpha', 'first'),
+    member('alpha', 'second'),
+    member('beta', 'first'),
+    member('beta', 'second'),
+  ];
+
+  test('are two groups, each kept whole', () => {
+    const prepared = shim.prepare(siblings, { chromium: null }, four);
+    assert.strictEqual(prepared.groups.length, 2);
+    assert.deepStrictEqual(engineIds(prepared.list), [
+      'chromium/siblings.spec.js::alpha::first',
+      'chromium/siblings.spec.js::beta::first',
+    ]);
+  });
+
+  test('expand to all four tests', () => {
+    const prepared = shim.prepare(siblings, { chromium: null }, four);
+    const result = shim.finish(
+      {
+        shards: {},
+        testListFiles: {
+          1: 'chromium/siblings.spec.js › alpha › first\n',
+          2: 'chromium/siblings.spec.js › beta › first\n',
+        },
+      },
+      prepared
+    );
+    assert.strictEqual(result.testListFiles[1].split('\n').filter(Boolean).length, 2);
+    assert.strictEqual(result.testListFiles[2].split('\n').filter(Boolean).length, 2);
+    assert.match(result.testListFiles[2], /beta › second/);
+  });
+
+  test('without serial groups, all four tests stay in the list', () => {
+    const plain = four.map((l) => ({ ...l, serialGroup: null }));
+    assert.strictEqual(engineIds(shim.prepare(siblings, { chromium: null }, plain).list).length, 4);
+  });
+});
+
 describe('names', () => {
   test('ids, lines and Playwright lines follow the conventions', () => {
     const [first] = leaves;

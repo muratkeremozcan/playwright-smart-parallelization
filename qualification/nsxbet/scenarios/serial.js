@@ -47,6 +47,26 @@ function serialRow(id, title, run, extra = {}) {
   };
 }
 
+/** Setup and teardown run once in every shard that needs them, in every run, and nothing skipped. */
+function dependencyRow(runs) {
+  const violations = runs.flatMap((run) =>
+    Object.keys(run.summary.kinds).filter(
+      (kind) => kind.startsWith('dependency-') || kind === 'not-executed'
+    )
+  );
+  return {
+    id: '2.dependencies',
+    proof: 2,
+    title: 'setup and teardown run once per shard that needs them',
+    status: violations.length === 0 ? 'pass' : 'fail',
+    evidence: {
+      runsChecked: runs.length,
+      dependencyViolations: violations,
+      dependencyExecutions: runs.map((run) => run.report.dependencyExecutions),
+    },
+  };
+}
+
 function serialGroups(ctx) {
   const timing = ctx.baseline().history.timing;
   const cold = ctx.engineRun({ name: 'merged-cold', flow: 'merged', shards: 2 });
@@ -69,26 +89,13 @@ function serialGroups(ctx) {
   });
   const combined = ctx.engineRun({ name: 'combined-cold', flow: 'combined', shards: 2 });
   const allRuns = [cold, history, noAffinity, huge, combined];
-  const dependencyKinds = allRuns.flatMap((run) =>
-    Object.keys(run.summary.kinds).filter((kind) => kind.startsWith('dependency-'))
-  );
   return [
     serialRow('2.cold', 'no history, default file affinity', cold),
     serialRow('2.history', 'with history, default file affinity', history),
     serialRow('2.no-affinity', 'with history, --no-file-affinity', noAffinity),
     serialRow('2.huge-penalty', 'with history, --file-affinity-penalty 100000000', huge),
     ...groupedRows(ctx),
-    {
-      id: '2.dependencies',
-      proof: 2,
-      title: 'setup and teardown run once per shard that needs them',
-      status: dependencyKinds.length === 0 ? 'pass' : 'fail',
-      evidence: {
-        runsChecked: allRuns.length,
-        dependencyViolations: dependencyKinds,
-        dependencyExecutions: allRuns.map((run) => run.report.dependencyExecutions),
-      },
-    },
+    dependencyRow(allRuns),
   ];
 }
 
@@ -113,4 +120,4 @@ function groupedRows(ctx) {
   ];
 }
 
-module.exports = { serialGroups, serialRow };
+module.exports = { dependencyRow, serialGroups, serialRow };

@@ -80,6 +80,26 @@ test.describe('group', () => {
 });
 `;
 
+const SIBLINGS = `'use strict';
+
+const { test } = require('@playwright/test');
+const { sleep } = require('./support');
+
+// One function registers two sibling suites, so their tests share a location and a test title.
+function register() {
+  test.describe.configure({ mode: 'serial' });
+  test('first', async () => {
+    await sleep(80);
+  });
+  test('second', async () => {
+    await sleep(80);
+  });
+}
+
+test.describe('alpha', register);
+test.describe('beta', register);
+`;
+
 const VOLATILE_ID = 'volatile.spec.js::volatile step';
 
 /** The fixture plus a passing test that sleeps for a second. */
@@ -97,16 +117,31 @@ function redProject(ctx) {
 }
 
 /**
+ * The fixture with its spec files replaced by one file in which a function registers two sibling
+ * serial suites: four tests, two groups, and tests of both suites share a location and a title.
+ */
+function siblingsProject(ctx) {
+  return ctx.once('variant:siblings', () =>
+    copyProject(ctx.cwd, ctx.dir('variant-siblings'), onlySpec(ctx, 'siblings.spec.js', SIBLINGS))
+  );
+}
+
+/** Edits that delete every spec file of the fixture and add one. */
+function onlySpec(ctx, name, content) {
+  const edits = { [`tests/${name}`]: content };
+  for (const file of fs.readdirSync(path.join(ctx.cwd, 'tests'))) {
+    if (file.endsWith('.spec.js') && file !== name) edits[`tests/${file}`] = null;
+  }
+  return edits;
+}
+
+/**
  * The fixture with its spec files replaced by one file in which a test and a describe block share
  * a title, so the test-list line of the test selects the tests of the block too.
  */
 function prefixProject(ctx) {
   return ctx.once('variant:prefix', () => {
-    const edits = { 'tests/prefix.spec.js': PREFIX };
-    for (const name of fs.readdirSync(path.join(ctx.cwd, 'tests'))) {
-      if (name.endsWith('.spec.js')) edits[`tests/${name}`] = null;
-    }
-    return copyProject(ctx.cwd, ctx.dir('variant-prefix'), edits);
+    return copyProject(ctx.cwd, ctx.dir('variant-prefix'), onlySpec(ctx, 'prefix.spec.js', PREFIX));
   });
 }
 
@@ -146,4 +181,5 @@ module.exports = {
   redProject,
   redRun,
   renamedProject,
+  siblingsProject,
 };

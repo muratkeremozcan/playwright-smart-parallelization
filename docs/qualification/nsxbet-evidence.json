@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-16T04:38:02.923Z",
+  "generatedAt": "2026-10-16T05:04:51.096Z",
   "group": "all",
   "versions": {
     "engine": "@nsxbet/playwright-orchestrator@2.0.1",
@@ -293,6 +293,20 @@
           "duplicate": 2
         },
         "harnessRefusal": "chromium|prefix.spec.js|group|#0 and chromium|prefix.spec.js|group › child|#0 cannot be selected exactly by --test-list: a title path that is a prefix of the other, so one line selects both"
+      }
+    },
+    {
+      "subject": "integration",
+      "id": "1.sibling-suites",
+      "proof": 1,
+      "title": "two sibling serial suites registered by one function, through the shim",
+      "status": "pass",
+      "evidence": {
+        "coverageViolations": {},
+        "kinds": {},
+        "leavesListed": 8,
+        "leavesRun": 8,
+        "splitGroups": []
       }
     },
     {
@@ -598,13 +612,13 @@
           "chromium|oversized.spec.js||#0",
           "chromium|serial-flow.spec.js||#0",
           "firefox|oversized.spec.js||#0",
-          "firefox|serial-retry.spec.js||#0"
+          "firefox|serial-flow.spec.js||#0"
         ],
-        "failedShards": [1, 2],
+        "failedShards": [2],
         "coverageViolations": {},
-        "failedTests": ["two depends on the state from one", "two uses the session from one"],
+        "failedTests": ["two uses the session from one"],
         "kinds": {
-          "shard-failed": 2,
+          "shard-failed": 1,
           "serial-split": 4
         }
       }
@@ -760,57 +774,57 @@
     {
       "shards": 2,
       "native": {
-        "durationsMs": [13884, 13822],
+        "durationsMs": [13852, 13877],
         "leaves": [26, 26],
-        "slowestMs": 13884,
-        "imbalance": 0.0022377824297985997,
+        "slowestMs": 13877,
+        "imbalance": 0.0009015831800641927,
         "violations": {}
       },
       "engine": {
-        "durationsMs": [14534, 13573],
+        "durationsMs": [14497, 13643],
         "leaves": [18, 34],
-        "slowestMs": 14534,
-        "imbalance": 0.03419077098231757,
+        "slowestMs": 14497,
+        "imbalance": 0.03034825870646766,
         "violations": {
           "serial-split": 2
         },
-        "slowestVsNative": 0.04681647940074907
+        "slowestVsNative": 0.044678244577358216
       },
       "grouped": {
-        "durationsMs": [14067, 14042],
-        "leaves": [26, 26],
-        "slowestMs": 14067,
-        "imbalance": 0.0008893948557401544,
+        "durationsMs": [14214, 13904],
+        "leaves": [25, 27],
+        "slowestMs": 14214,
+        "imbalance": 0.011024966213813216,
         "violations": {},
-        "slowestVsNative": 0.013180639585133967
+        "slowestVsNative": 0.024284787778338257
       }
     },
     {
       "shards": 3,
       "native": {
-        "durationsMs": [12321, 3814, 12417],
+        "durationsMs": [12335, 3792, 12411],
         "leaves": [18, 17, 17],
-        "slowestMs": 12417,
-        "imbalance": 0.3046721770804146,
+        "slowestMs": 12411,
+        "imbalance": 0.3046814773284744,
         "violations": {}
       },
       "engine": {
-        "durationsMs": [9143, 9845, 9951],
-        "leaves": [27, 11, 14],
-        "slowestMs": 9951,
-        "imbalance": 0.03158367600815502,
+        "durationsMs": [9416, 9847, 9638],
+        "leaves": [19, 12, 21],
+        "slowestMs": 9847,
+        "imbalance": 0.02214456247188685,
         "violations": {
           "serial-split": 2
         },
-        "slowestVsNative": -0.19859869533703794
+        "slowestVsNative": -0.20659092740311014
       },
       "grouped": {
-        "durationsMs": [9685, 9682, 9134],
+        "durationsMs": [9703, 9713, 9168],
         "leaves": [5, 5, 42],
-        "slowestMs": 9685,
-        "imbalance": 0.01943791445914172,
+        "slowestMs": 9713,
+        "imbalance": 0.019416456759026028,
         "violations": {},
-        "slowestVsNative": -0.22002093903519368
+        "slowestVsNative": -0.21738780114414633
       }
     }
   ],
@@ -843,12 +857,12 @@
       "playwrightJsonReport": 50738
     }
   },
-  "durationMs": 256914,
+  "durationMs": 257029,
   "legsMs": {
     "assignment": 47251,
-    "coverage": 190405,
+    "coverage": 193784,
     "history": 137359,
     "privacy": 42786,
-    "serial": 256914
+    "serial": 257029
   }
 }
