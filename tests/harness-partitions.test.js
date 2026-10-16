@@ -78,6 +78,36 @@ describe('testListPartition', () => {
     assert.strictEqual(lines[2], '[p] › b.spec.js:7:3 › u');
   });
 
+  test('writes a load-only title that no title path in the listing has', () => {
+    const base = {
+      project: 'p',
+      file: 'factory.js',
+      specFile: 'a.spec.js',
+      line: 1,
+      column: 1,
+      dependency: false,
+    };
+    const test1 = { ...base, key: 'k', label: 'l', testRef: 'p|a|t', titlePath: ['t'] };
+    // A dependency leaf is not checked for unsafe titles, so its title can be the default sentinel.
+    const taken = leaves.loadSentinel([]);
+    const odd = {
+      ...base,
+      key: 'd',
+      label: 'd',
+      testRef: 'p|a|x',
+      titlePath: [taken],
+      dependency: true,
+    };
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'psp-partition-test-'));
+    tempDirs.push(dir);
+    const [shard] = testListPartition([['k']], [test1, odd], dir);
+    const lines = fs.readFileSync(shard.args[1], 'utf8').trim().split('\n');
+    assert.strictEqual(lines.length, 2);
+    const title = lines[1].split(' › ').at(-1);
+    assert.notStrictEqual(title, taken);
+    assert.ok(title.startsWith(taken));
+  });
+
   test('leaves dependency leaves out, since Playwright adds them', () => {
     const setupKey = intended.find((leaf) => leaf.project === 'setup').key;
     const { shards } = build([[setupKey]]);

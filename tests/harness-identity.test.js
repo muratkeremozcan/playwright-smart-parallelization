@@ -150,19 +150,42 @@ describe("explicit test-list partitions of a helper's tests", () => {
   const bySpec = (leaves, specs) =>
     leaves.filter((leaf) => specs.includes(leaf.specFile)).map((leaf) => leaf.key);
 
-  test('execute every leaf exactly once when the specs that call the helper are split', () => {
+  const NOT_SHARED = ['nested.spec.js', 'siblings.spec.js'];
+
+  test('execute every leaf exactly once when the specs that build suites are split', () => {
+    // siblings.spec.js builds its suites in the helper, so its call location is the helper file.
     const { leaves, dependencies } = intended();
+    const selectable = leaves.filter((leaf) => NOT_SHARED.includes(leaf.specFile));
     const assignment = [
-      bySpec(leaves, ['shared-a.spec.js', 'nested.spec.js']),
-      bySpec(leaves, ['shared-b.spec.js', 'siblings.spec.js']),
+      bySpec(selectable, ['nested.spec.js']),
+      bySpec(selectable, ['siblings.spec.js']),
     ];
-    const partition = testListPartition(assignment, leaves, tempDir());
+    const partition = testListPartition(assignment, selectable, tempDir());
     const shards = runPartition({ cwd, config: 'identity.config.js' }, partition);
     assert.deepStrictEqual(
       shards.map((shard) => shard.leaves.length),
-      [12, 12]
+      [8, 8]
     );
-    assert.deepStrictEqual(checkAll(leaves, dependencies, shards), []);
+    assert.deepStrictEqual(checkAll(selectable, dependencies, shards), []);
+  });
+
+  test('split one helper-built spec by suite: each shard runs only its suite', () => {
+    const { leaves, dependencies } = intended();
+    const selectable = leaves.filter((leaf) => leaf.specFile === 'siblings.spec.js');
+    const left = selectable.filter((leaf) => leaf.titlePath[0] === 'left').map((l) => l.key);
+    const right = selectable.filter((leaf) => leaf.titlePath[0] === 'right').map((l) => l.key);
+    const partition = testListPartition([left, right], selectable, tempDir());
+    const shards = runPartition({ cwd, config: 'identity.config.js' }, partition);
+    assert.deepStrictEqual(checkAll(selectable, dependencies, shards), []);
+  });
+
+  test("refuse the helper's tests that two specs register, which no line tells apart", () => {
+    const { leaves } = intended();
+    assert.throws(
+      () => testListPartition([leaves.map((leaf) => leaf.key)], leaves, tempDir()),
+      /shared-a\.spec\.js.* and .*shared-b\.spec\.js.*no line tells them apart/s
+    );
+    assert.throws(() => runNegativeControl({ cwd, config: 'identity.config.js' }), /no line tells/);
   });
 
   test("run nothing of the helper's tests when only the helper is selected", () => {

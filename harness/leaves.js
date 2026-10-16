@@ -9,7 +9,7 @@
 const path = require('node:path');
 
 const TITLE_SEPARATOR = ' › ';
-// A title no test has, for list lines that only load a file.
+// The title of a list line that only loads a file, before `loadSentinel` makes it unique.
 const LOAD_ONLY_TITLE = '\u0000load only';
 
 function toPosix(file) {
@@ -153,12 +153,26 @@ function listLine(leaf) {
 }
 
 /**
- * A `--test-list` line that loads the spec file of a leaf and selects no test: its title path is
- * one no test has. Needed when the leaf's call location is a helper, which Playwright does not
- * load as a test file.
+ * A title no test, suite or file in `leaves` has. A `--test-list` line matches a test whose title
+ * path starts with the line's titles, so a load-only line selects nothing exactly when its title
+ * is absent from every title path. The base sentinel starts with a control character, which
+ * `assertSelectable` rejects in real titles; the loop still checks the listing and lengthens the
+ * sentinel until it is absent.
  */
-function loadLine(leaf) {
-  return `[${leaf.project}]${TITLE_SEPARATOR}${leaf.specFile}:1:1${TITLE_SEPARATOR}${LOAD_ONLY_TITLE}`;
+function loadSentinel(leaves) {
+  const taken = new Set(leaves.flatMap((leaf) => leaf.titlePath));
+  let sentinel = LOAD_ONLY_TITLE;
+  while (taken.has(sentinel)) sentinel += '\u0000';
+  return sentinel;
+}
+
+/**
+ * A `--test-list` line that loads the spec file of a leaf and selects no test: its title path is
+ * the `sentinel`, which no test has. Needed when the leaf's call location is a helper, which
+ * Playwright does not load as a test file.
+ */
+function loadLine(leaf, sentinel = LOAD_ONLY_TITLE) {
+  return `[${leaf.project}]${TITLE_SEPARATOR}${leaf.specFile}:1:1${TITLE_SEPARATOR}${sentinel}`;
 }
 
 module.exports = {
@@ -173,6 +187,7 @@ module.exports = {
   listLine,
   listedLeaf,
   loadLine,
+  loadSentinel,
   projectsOf,
   serialGroupId,
   toPosix,

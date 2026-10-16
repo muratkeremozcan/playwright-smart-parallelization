@@ -15,7 +15,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { dependencyProjects, groupBase } = require('./leaves');
 const { assertSupportedSelection, listIntended, playwrightVersion, qualify } = require('./index');
-const { nativePartition, testListPartition } = require('./partitions');
+const { assertSelectable, nativePartition, testListPartition } = require('./partitions');
 
 const SHARD_COUNT = 2;
 const CLEAN = 'none';
@@ -271,6 +271,7 @@ function runNegativeControl(options, { log = () => {}, deps = {} } = {}) {
   log(`Playwright ${playwrightVersionValue}, Node ${process.version}`);
 
   const listing = list(options);
+  assertSelectable(listing.leaves);
   const listingControls = buildControls(listing.leaves);
   const forward = options.forward || [];
   // The scenarios are built from the unfiltered suite: filters or `--no-deps` in the forwarded
