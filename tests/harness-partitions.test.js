@@ -5,20 +5,15 @@ const assert = require('node:assert');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const sample = require('./samples/list-repeat-each-2.json');
 const leaves = require('../harness/leaves.js');
 const checks = require('../harness/checks.js');
 const { nativePartition, testListPartition } = require('../harness/partitions.js');
-const { buildControls } = require('../harness/negative-control.js');
+const { buildControls, buildSelectionScenarios } = require('../harness/negative-control.js');
 const { parseArgs } = require('../harness/cli.js');
+const { listFixture } = require('./support/fixture.js');
 
-const dependencies = {
-  setup: ['teardown'],
-  teardown: [],
-  chromium: ['setup', 'teardown'],
-  firefox: ['setup', 'teardown'],
-};
-const intended = leaves.applyDependencies(leaves.parseList(sample), dependencies);
+// The real fixture, listed by the harness reporter with --repeat-each=2.
+const { leaves: intended, dependencies } = listFixture({ repeatEach: 2 });
 
 const tempDirs = [];
 after(() => {
@@ -61,6 +56,64 @@ describe('testListPartition', () => {
     ]);
   });
 
+  test('adds a load-only line for the spec of a leaf whose call sits in a helper', () => {
+    const helper = {
+      key: 'k',
+      project: 'p',
+      file: 'factory.js',
+      specFile: 'a.spec.js',
+      titlePath: ['t'],
+      line: 7,
+      column: 3,
+      dependency: false,
+    };
+    const own = {
+      ...helper,
+      key: 'o',
+      file: 'b.spec.js',
+      specFile: 'b.spec.js',
+      titlePath: ['u'],
+    };
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'psp-partition-test-'));
+    tempDirs.push(dir);
+    const [shard] = testListPartition([['k', 'o']], [helper, own], dir);
+    const lines = fs.readFileSync(shard.args[1], 'utf8').trim().split('\n');
+    assert.strictEqual(lines.length, 3);
+    assert.strictEqual(lines[0], '[p] › factory.js:7:3 › t');
+    assert.strictEqual(lines[1], '[p] › a.spec.js:1:1 › \u0000load only');
+    assert.strictEqual(lines[2], '[p] › b.spec.js:7:3 › u');
+  });
+
+  test('writes a load-only title that no title path in the listing has', () => {
+    const base = {
+      project: 'p',
+      file: 'factory.js',
+      specFile: 'a.spec.js',
+      line: 1,
+      column: 1,
+      dependency: false,
+    };
+    const test1 = { ...base, key: 'k', label: 'l', testRef: 'p|a|t', titlePath: ['t'] };
+    // A dependency leaf is not checked for unsafe titles, so its title can be the default sentinel.
+    const taken = leaves.loadSentinel([]);
+    const odd = {
+      ...base,
+      key: 'd',
+      label: 'd',
+      testRef: 'p|a|x',
+      titlePath: [taken],
+      dependency: true,
+    };
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'psp-partition-test-'));
+    tempDirs.push(dir);
+    const [shard] = testListPartition([['k']], [test1, odd], dir);
+    const lines = fs.readFileSync(shard.args[1], 'utf8').trim().split('\n');
+    assert.strictEqual(lines.length, 2);
+    const title = lines[1].split(' › ').at(-1);
+    assert.notStrictEqual(title, taken);
+    assert.ok(title.startsWith(taken));
+  });
+
   test('leaves dependency leaves out, since Playwright adds them', () => {
     const setupKey = intended.find((leaf) => leaf.project === 'setup').key;
     const { shards } = build([[setupKey]]);
@@ -89,10 +142,29 @@ describe('buildControls', () => {
     }));
   }
 
-  test('builds the clean control first, then the three broken ones with their kinds', () => {
+  test('builds the clean control first, then the four broken ones with their kinds', () => {
     assert.deepStrictEqual(
       controls.map((control) => control.expected),
-      ['none', 'missing', 'duplicate', 'serial-split']
+      ['none', 'missing', 'duplicate', 'serial-split', 'not-executed']
+    );
+  });
+
+  test('the skipped control assigns the clean partition and skips every test through the env', () => {
+    assert.deepStrictEqual(controls[4].assignment, controls[0].assignment);
+    assert.deepStrictEqual(controls[4].env, { PSP_FIXTURE_SKIP_ALL: '1' });
+    for (const control of controls.slice(0, 4)) assert.strictEqual(control.env, undefined);
+  });
+
+  test('the skipped control raises not-executed when every leaf it runs skipped', () => {
+    const shards = executed(controls[4].assignment).map((shard) => ({
+      ...shard,
+      leaves: shard.leaves.map((entry) => ({ ...entry, outcome: 'skipped' })),
+    }));
+    const found = checks.checkExecution(intended, shards);
+    assert.ok(found.length > 0);
+    assert.deepStrictEqual(
+      new Set(found.map((violation) => violation.kind)),
+      new Set(['not-executed'])
     );
   });
 
@@ -133,6 +205,125 @@ describe('buildControls', () => {
   test('refuses a suite without a serial group', () => {
     const plainOnly = intended.filter((leaf) => !leaf.serialGroup);
     assert.throws(() => buildControls(plainOnly), /serial group/);
+  });
+});
+
+describe('buildSelectionScenarios', () => {
+  const scenarios = buildSelectionScenarios(dependencies, intended);
+  const setupKey = intended.find((leaf) => leaf.project === 'setup').key;
+  const nativeShards = nativePartition(2);
+
+  // The listing a scenario's selection yields: setup (and teardown) and, when chromium is selected
+  // and keeps a test, chromium too.
+  const listingOf = (projects, topLevel) => ({
+    leaves: leaves.classify(
+      intended.filter((leaf) => projects.includes(leaf.project)),
+      new Set(topLevel)
+    ),
+  });
+
+  test('selects the dependency project that has a dependency of its own, five ways', () => {
+    assert.deepStrictEqual(
+      scenarios.map((scenario) => scenario.forward),
+      [
+        ['--project=setup'],
+        ['--project', 'setup', 'chromium', '--grep', 'prepare the environment'],
+        ['--grep', 'prepare the environment'],
+        ['--no-deps', '--project=setup', '--project=teardown'],
+        ['--grep-invert', '--no-deps', '--grep', 'loads the page'],
+      ]
+    );
+  });
+
+  test('pairs each scenario with a clean native run and a broken run that flags the setup leaf', () => {
+    const selected = listingOf(['setup', 'teardown'], ['setup']);
+    const filtered = listingOf(['setup', 'teardown'], ['setup']);
+    const flat = listingOf(['setup', 'teardown'], ['setup', 'teardown']);
+    const summary = (scenario, listing) =>
+      scenario
+        .controls(listing)
+        .map((control) => [
+          control.expected,
+          control.forward,
+          control.partition,
+          control.flagged || null,
+        ]);
+    assert.deepStrictEqual(summary(scenarios[0], selected), [
+      ['none', scenarios[0].forward, nativeShards, null],
+      ['missing', [], [{ args: ['--project=teardown'] }], [setupKey]],
+    ]);
+    assert.deepStrictEqual(summary(scenarios[1], filtered), [
+      ['none', scenarios[1].forward, nativeShards, null],
+      ['missing', [], [{ args: ['--project=teardown'] }], [setupKey]],
+    ]);
+    assert.deepStrictEqual(summary(scenarios[2], filtered), [
+      ['none', scenarios[2].forward, nativeShards, null],
+      ['missing', [], [{ args: ['--project=teardown'] }], [setupKey]],
+    ]);
+    assert.deepStrictEqual(summary(scenarios[3], flat), [
+      ['none', scenarios[3].forward, nativeShards, null],
+      [
+        'duplicate',
+        ['--no-deps'],
+        [{ args: ['--project=setup'] }, { args: ['--project=setup'] }],
+        [setupKey],
+      ],
+    ]);
+    const consumed = leaves.classify(
+      intended.filter((leaf) => ['setup', 'teardown', 'chromium'].includes(leaf.project)),
+      new Set(['chromium'])
+    );
+    const consumedListing = { leaves: consumed };
+    const dependencyKeys = consumed.filter((leaf) => leaf.dependency).map((leaf) => leaf.key);
+    assert.deepStrictEqual(summary(scenarios[4], consumedListing), [
+      ['none', scenarios[4].forward, nativeShards, null],
+      [
+        'dependency-missing',
+        scenarios[4].forward,
+        [
+          { args: ['--project=chromium', '--no-deps'] },
+          { args: ['--project=firefox', '--no-deps'] },
+        ],
+        dependencyKeys,
+      ],
+    ]);
+  });
+
+  test('the broken controls are caught only once the selected project has primary leaves', () => {
+    const missingKeys = (leavesOfRun, shards) =>
+      checks
+        .checkCoverage(leavesOfRun, shards)
+        .filter((violation) => violation.kind === 'missing')
+        .map((violation) => violation.key);
+    const teardownOnly = [
+      { index: 1, exitCode: 0, leaves: intended.filter((leaf) => leaf.project === 'teardown') },
+    ];
+    const selected = leaves.classify(
+      intended.filter((leaf) => ['setup', 'teardown'].includes(leaf.project)),
+      new Set(['setup'])
+    );
+    assert.ok(missingKeys(selected, teardownOnly).includes(setupKey));
+    assert.ok(!missingKeys(intended, teardownOnly).includes(setupKey));
+  });
+
+  test('refuses a filter that also selects the dependent project', () => {
+    assert.throws(
+      () =>
+        scenarios[1].controls(listingOf(['setup', 'chromium', 'teardown'], ['setup', 'chromium'])),
+      /also selects chromium/
+    );
+  });
+
+  test('refuses a suite without a dependency project that has a dependency', () => {
+    assert.throws(
+      () => buildSelectionScenarios({ setup: [], teardown: [], chromium: ['setup'] }, intended),
+      /dependency project/
+    );
+  });
+
+  test('refuses a suite without a test in the setup project', () => {
+    const withoutSetup = intended.filter((leaf) => leaf.project !== 'setup');
+    assert.throws(() => buildSelectionScenarios(dependencies, withoutSetup), /a setup test/);
   });
 });
 

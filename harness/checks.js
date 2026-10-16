@@ -11,8 +11,10 @@ function byKey(leaves) {
 }
 
 /**
- * Every intended primary leaf runs exactly once across all shards. Dependency leaves are checked
- * by `checkDependencies`. A leaf outside the intended set is `unexpected`.
+ * Every intended primary leaf is selected exactly once across all shards. A leaf marked
+ * `dependency` is an implicit dependency (a setup or teardown project nobody selected by name) and
+ * is checked by `checkDependencies`. A leaf outside the intended set is `unexpected`. Whether a
+ * selected leaf actually ran is `checkExecution`.
  */
 function checkCoverage(intended, shards) {
   const violations = [];
@@ -44,6 +46,34 @@ function checkCoverage(intended, shards) {
         kind: 'duplicate',
         key: leaf.key,
         detail: `ran ${where.length} times, in shards ${where.join(', ')}`,
+      });
+    }
+  }
+  return violations;
+}
+
+/** Outcomes of a test that ran to a result. `skipped` covers a runtime skip and a test that never ran. */
+const TERMINAL_OUTCOMES = new Set(['expected', 'unexpected', 'flaky']);
+
+/**
+ * Every intended leaf a shard selected ran to a terminal outcome. A leaf that skipped, never ran
+ * or carries no outcome is `not-executed`, so a selection that executes nothing cannot pass. There
+ * is no allowance for a leaf that is meant to skip. A failed leaf ran, and the shard exit code
+ * reports it. A leaf outside the intended set is `checkCoverage`'s `unexpected`.
+ */
+function checkExecution(intended, shards) {
+  const violations = [];
+  const intendedByKey = byKey(intended);
+  for (const shard of shards) {
+    for (const leaf of shard.leaves || []) {
+      if (!intendedByKey.has(leaf.key) || TERMINAL_OUTCOMES.has(leaf.outcome)) continue;
+      violations.push({
+        kind: 'not-executed',
+        shard: shard.index,
+        key: leaf.key,
+        detail: leaf.outcome
+          ? `shard ${shard.index} selected this leaf but it ended ${leaf.outcome}`
+          : `shard ${shard.index} reported this leaf with no outcome`,
       });
     }
   }
@@ -188,6 +218,7 @@ function imbalance(shards) {
 module.exports = {
   checkCoverage,
   checkDependencies,
+  checkExecution,
   checkSerialGroups,
   checkShardRuns,
   countDependencyExecutions,

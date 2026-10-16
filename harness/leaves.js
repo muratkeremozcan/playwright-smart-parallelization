@@ -2,26 +2,23 @@
 
 /**
  * Leaf model. A leaf is one test in one project at one repeat: the unit a partition must cover
- * exactly once. Both the list JSON of `playwright test --list` and the harness reporter produce
- * leaves through the helpers here, so a key built from a list and a key built from a run match.
+ * exactly once. The harness reporter builds every leaf, in a list run and in a shard run alike, so
+ * a key built from a listing and a key built from a run match by construction.
  */
 
 const path = require('node:path');
 
 const TITLE_SEPARATOR = ' › ';
+// The title of a list line that only loads a file, before `loadSentinel` makes it unique.
+const LOAD_ONLY_TITLE = '\u0000load only';
 
 function toPosix(file) {
   return String(file).split(path.sep).join('/').replace(/\\/g, '/');
 }
 
-/** Key shape: `project|file|titlePath joined by ' › '|#repeat`. */
-function leafKey({ project, file, titlePath, repeatIndex }) {
-  return `${project}|${file}|${titlePath.join(TITLE_SEPARATOR)}|#${repeatIndex}`;
-}
-
-/** The leaf key without the repeat suffix: one test across all of its repeats. */
-function testId(leaf) {
-  return leaf.key.replace(/\|#\d+$/, '');
+/** The human-readable name of a leaf: `project|file|titlePath joined by ' › '|#repeat`. */
+function leafLabel({ project, specFile, titlePath, repeatIndex }) {
+  return `${project}|${specFile}|${titlePath.join(TITLE_SEPARATOR)}|#${repeatIndex}`;
 }
 
 /** The serial group id without the repeat suffix. */
@@ -30,32 +27,44 @@ function groupBase(group) {
 }
 
 /**
- * Picks the serial annotation that identifies a group. Nested serial describes nest the groups, so
- * the outermost one (the earliest location) is the unit that must stay on a single shard.
+ * Serial group id: `project|spec file|suite titles|#repeat`. The suite is the outermost serial
+ * suite of the test, found by the reporter from the suite ancestry. Unlike a call site, its titles
+ * tell apart sibling suites that one helper builds.
  */
-function serialAnnotation(annotations, testDir) {
-  const serial = (annotations || []).filter((a) => a && a.type === 'serial' && a.location);
-  if (serial.length === 0) return null;
-  serial.sort((a, b) => a.location.line - b.location.line || a.location.column - b.location.column);
-  const { file, line, column } = serial[0].location;
-  return { file: toPosix(testDir ? path.relative(testDir, file) : file), line, column };
+function serialGroupId({ project, specFile, suiteTitles, repeatIndex }) {
+  return `${project}|${specFile}|${suiteTitles.join(TITLE_SEPARATOR)}|#${repeatIndex}`;
 }
 
-/** Serial group id: `project|annotation file|line:column|#repeat`, or null outside a serial suite. */
-function serialGroupId({ project, annotations, testDir, repeatIndex }) {
-  const found = serialAnnotation(annotations, testDir);
-  if (!found) return null;
-  return `${project}|${found.file}|${found.line}:${found.column}|#${repeatIndex}`;
-}
-
-function buildLeaf({ project, file, titlePath, repeatIndex, annotations, testDir, line, column }) {
+/**
+ * Builds a leaf. `id` is Playwright's own test id, unique per project, spec file, title path and
+ * repeat, and it is the leaf key: a key from the call location collides when a helper registers
+ * the same tests for several spec files, the id cannot. `label` is the readable
+ * name used in output, `testRef` names one test across its repeats, and `file` with `line` and
+ * `column` is the location of the test call for the `--test-list` form. `file`, like the spec
+ * file (the file suite's title), is relative to the config `rootDir`, which is what a list line is
+ * matched against.
+ */
+function buildLeaf({
+  id,
+  project,
+  specFile,
+  file,
+  titlePath,
+  repeatIndex,
+  serialGroup,
+  line,
+  column,
+}) {
   return {
-    key: leafKey({ project, file, titlePath, repeatIndex }),
+    key: id,
+    label: leafLabel({ project, specFile, titlePath, repeatIndex }),
+    testRef: `${project}|${specFile}|${titlePath.join(TITLE_SEPARATOR)}`,
     file,
+    specFile,
     project,
     titlePath,
     repeatIndex,
-    serialGroup: serialGroupId({ project, annotations, testDir, repeatIndex }),
+    serialGroup,
     dependency: false,
     line,
     column,
@@ -63,52 +72,24 @@ function buildLeaf({ project, file, titlePath, repeatIndex, annotations, testDir
 }
 
 /**
- * Parses the JSON of `playwright test --list --reporter=json` into leaves. The JSON carries no
- * repeat index, so the index is the occurrence order of a test within its project.
+ * Every project needs a unique non-empty name. Playwright accepts unnamed projects, but the
+ * harness keys its dependency map, its serial groups and its `--test-list` selections by name, and
+ * unnamed projects would overwrite each other in all three.
  */
-function parseList(json) {
-  const testDirs = {};
-  for (const project of (json.config && json.config.projects) || []) {
-    testDirs[project.name] = project.testDir;
-  }
-  const seen = new Map();
-  const leaves = [];
-
-  function visit(suite, describes, file) {
-    for (const spec of suite.specs || []) {
-      for (const test of spec.tests || []) {
-        const project = test.projectName;
-        const titlePath = [...describes, spec.title];
-        const specFile = toPosix(spec.file || file);
-        const identity = `${project}|${specFile}|${spec.line}:${spec.column}|${titlePath.join('\u0000')}`;
-        const repeatIndex = seen.get(identity) || 0;
-        seen.set(identity, repeatIndex + 1);
-        leaves.push(
-          buildLeaf({
-            project,
-            file: specFile,
-            titlePath,
-            repeatIndex,
-            annotations: test.annotations,
-            testDir: testDirs[project],
-            line: spec.line,
-            column: spec.column,
-          })
-        );
-      }
+function assertNamedProjects(projects) {
+  const seen = new Set();
+  projects.forEach((project, position) => {
+    if (!project.name) {
+      throw new Error(
+        `project #${position + 1} has no name: every project needs a unique non-empty name ` +
+          'for the harness'
+      );
     }
-    for (const child of suite.suites || []) visit(child, [...describes, child.title], file);
-  }
-
-  for (const fileSuite of json.suites || []) {
-    visit(fileSuite, [], toPosix(fileSuite.file || fileSuite.title));
-  }
-  return leaves;
-}
-
-/** Project names declared by the list JSON config, in declaration order. */
-function projectNames(json) {
-  return ((json.config && json.config.projects) || []).map((project) => project.name);
+    if (seen.has(project.name)) {
+      throw new Error(`project name "${project.name}" is used twice: names must be unique`);
+    }
+    seen.add(project.name);
+  });
 }
 
 /** Distinct project names that appear in a list of leaves. */
@@ -117,16 +98,30 @@ function projectsOf(leaves) {
 }
 
 /**
- * `listsByProject` maps a project to the leaves listed for `--project=P`. Playwright adds the
- * dependency and teardown projects of P to that listing, so the projects listed minus P are the
- * dependencies of P.
+ * For each project of the config, every project a run of it needs: its dependencies and their
+ * teardowns, transitively. `projects` is `[{ name, dependencies, teardown }]` from the reporter.
+ * The map has no prototype, because project names are user strings and `__proto__` is one.
  */
-function deriveDependencies(listsByProject) {
-  const dependencies = {};
-  for (const [project, leaves] of Object.entries(listsByProject)) {
-    dependencies[project] = projectsOf(leaves).filter((name) => name !== project);
-  }
-  return dependencies;
+function dependencyMap(projects) {
+  const byName = new Map(projects.map((project) => [project.name, project]));
+  const needs = (name) => {
+    const project = byName.get(name);
+    return project
+      ? [...project.dependencies, ...(project.teardown ? [project.teardown] : [])]
+      : [];
+  };
+  const closure = (name, seen = new Set()) => {
+    for (const next of needs(name)) {
+      if (!seen.has(next)) {
+        seen.add(next);
+        closure(next, seen);
+      }
+    }
+    return seen;
+  };
+  const map = Object.create(null);
+  for (const project of projects) map[project.name] = [...closure(project.name)];
+  return map;
 }
 
 /** Projects that some other project depends on (setup and teardown). */
@@ -134,10 +129,24 @@ function dependencyProjects(dependencies) {
   return new Set(Object.values(dependencies).flat());
 }
 
-/** Returns leaves with `dependency` set from the dependency map. */
-function applyDependencies(leaves, dependencies) {
-  const projects = dependencyProjects(dependencies);
-  return leaves.map((leaf) => ({ ...leaf, dependency: projects.has(leaf.project) }));
+/**
+ * Returns leaves with `dependency` set. This is the one classification rule. `topLevel` holds the
+ * projects whose own tests the selection keeps, as Playwright reports them: it applies
+ * `--repeat-each` to those projects only and runs every other listed project unchanged, as a
+ * dependency of a top-level one. A leaf is a dependency, exempt from exactly-once coverage, when its project is
+ * not top-level. Every other leaf is primary, which includes a setup or teardown project the
+ * filters or `--project` left standing on its own, and every project under `--no-deps`.
+ */
+function classify(leaves, topLevel) {
+  return leaves.map((leaf) => ({ ...leaf, dependency: !topLevel.has(leaf.project) }));
+}
+
+/** A leaf as a listing knows it: the reporter's run fields (outcome, attempts, duration) dropped. */
+function listedLeaf(leaf) {
+  const fields = ['key', 'label', 'testRef', 'file', 'specFile', 'project', 'titlePath'];
+  const listed = Object.fromEntries(fields.map((field) => [field, leaf[field]]));
+  const { repeatIndex, serialGroup, line, column } = leaf;
+  return { ...listed, repeatIndex, serialGroup, dependency: false, line, column };
 }
 
 /** The `--list` text form of a leaf, the line format `--test-list` accepts. */
@@ -145,19 +154,43 @@ function listLine(leaf) {
   return `[${leaf.project}]${TITLE_SEPARATOR}${leaf.file}:${leaf.line}:${leaf.column}${TITLE_SEPARATOR}${leaf.titlePath.join(TITLE_SEPARATOR)}`;
 }
 
+/**
+ * A title no test, suite or file in `leaves` has. A `--test-list` line matches a test whose title
+ * path starts with the line's titles, so a load-only line selects nothing exactly when its title
+ * is absent from every title path. The base sentinel starts with a control character, which
+ * `assertSelectable` rejects in real titles; the loop still checks the listing and lengthens the
+ * sentinel until it is absent.
+ */
+function loadSentinel(leaves) {
+  const taken = new Set(leaves.flatMap((leaf) => leaf.titlePath));
+  let sentinel = LOAD_ONLY_TITLE;
+  while (taken.has(sentinel)) sentinel += '\u0000';
+  return sentinel;
+}
+
+/**
+ * A `--test-list` line that loads the spec file of a leaf and selects no test: its title path is
+ * the `sentinel`, which no test has. Needed when the leaf's call location is a helper, which
+ * Playwright does not load as a test file.
+ */
+function loadLine(leaf, sentinel = LOAD_ONLY_TITLE) {
+  return `[${leaf.project}]${TITLE_SEPARATOR}${leaf.specFile}:1:1${TITLE_SEPARATOR}${sentinel}`;
+}
+
 module.exports = {
   TITLE_SEPARATOR,
-  applyDependencies,
+  assertNamedProjects,
   buildLeaf,
+  classify,
+  dependencyMap,
   dependencyProjects,
-  deriveDependencies,
   groupBase,
-  leafKey,
+  leafLabel,
   listLine,
-  parseList,
-  projectNames,
+  listedLeaf,
+  loadLine,
+  loadSentinel,
   projectsOf,
   serialGroupId,
-  testId,
   toPosix,
 };

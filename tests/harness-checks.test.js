@@ -89,6 +89,106 @@ describe('checkCoverage', () => {
   });
 });
 
+describe('checkExecution', () => {
+  const ran = (item, outcome = 'expected') => ({ ...item, outcome });
+  const executed = [
+    shard(1, [ran(setup), ran(a), ran(one, 'flaky'), ran(two), ran(teardown)]),
+    shard(2, [ran(setup), ran(b, 'unexpected'), ran(teardown)]),
+  ];
+
+  test('accepts every terminal outcome', () => {
+    assert.deepStrictEqual(checks.checkExecution(intended, executed), []);
+  });
+
+  test('reports a primary leaf that skipped as not-executed, with its key and shard', () => {
+    const shards = [
+      shard(1, [ran(setup), ran(a, 'skipped'), ran(one), ran(two), ran(teardown)]),
+      executed[1],
+    ];
+    const violations = checks.checkExecution(intended, shards);
+    assert.deepStrictEqual(
+      violations.map((violation) => [violation.kind, violation.shard, violation.key]),
+      [['not-executed', 1, a.key]]
+    );
+    assert.match(violations[0].detail, /skipped/);
+  });
+
+  test('reports a leaf that carries no outcome as never reported', () => {
+    const shards = [shard(1, [ran(setup), a, ran(one), ran(two), ran(teardown)]), executed[1]];
+    const violations = checks.checkExecution(intended, shards);
+    assert.deepStrictEqual(kinds(violations), ['not-executed']);
+    assert.match(violations[0].detail, /no outcome/);
+  });
+
+  test('reports a dependency leaf that skipped', () => {
+    const shards = [executed[0], shard(2, [ran(setup, 'skipped'), ran(b), ran(teardown)])];
+    const violations = checks.checkExecution(intended, shards);
+    assert.deepStrictEqual(
+      violations.map((violation) => [violation.kind, violation.shard, violation.key]),
+      [['not-executed', 2, setup.key]]
+    );
+  });
+
+  test('reports every leaf of a run where everything skipped', () => {
+    const skippedAll = clean.map((item) => ({
+      ...item,
+      leaves: item.leaves.map((entry) => ran(entry, 'skipped')),
+    }));
+    const violations = checks.checkExecution(intended, skippedAll);
+    assert.strictEqual(violations.length, 8);
+    assert.deepStrictEqual(new Set(kinds(violations)), new Set(['not-executed']));
+  });
+
+  test('leaves a leaf outside the intended set to checkCoverage', () => {
+    const stray = ran(leaf('chromium', 'stray'), 'skipped');
+    assert.deepStrictEqual(checks.checkExecution(intended, [shard(1, [stray])]), []);
+  });
+
+  test('treats a shard without leaves as running nothing', () => {
+    assert.deepStrictEqual(checks.checkExecution(intended, [shard(1, null)]), []);
+  });
+});
+
+describe('an explicitly selected dependency project', () => {
+  // `--project=setup`: the setup leaf is primary and the teardown leaf is its implicit dependency.
+  const selectedSetup = { ...setup, dependency: false };
+  const explicit = [selectedSetup, teardown];
+  const chain = { setup: ['teardown'], teardown: [] };
+
+  test('is missing when a partition runs only teardown', () => {
+    const shards = [shard(1, [teardown]), shard(2, [])];
+    assert.deepStrictEqual(
+      checks.checkCoverage(explicit, shards).map((violation) => [violation.kind, violation.key]),
+      [['missing', setup.key]]
+    );
+  });
+
+  test('is accepted when one shard runs it with its teardown', () => {
+    const shards = [shard(1, [selectedSetup, teardown]), shard(2, [])];
+    assert.deepStrictEqual(checks.checkCoverage(explicit, shards), []);
+    assert.deepStrictEqual(checks.checkDependencies(explicit, shards, chain), []);
+  });
+
+  test('is a duplicate when two shards run it', () => {
+    const shards = [shard(1, [selectedSetup, teardown]), shard(2, [selectedSetup, teardown])];
+    assert.deepStrictEqual(kinds(checks.checkCoverage(explicit, shards)), ['duplicate']);
+  });
+
+  test('needs its teardown in the shard that runs it', () => {
+    const shards = [shard(1, [selectedSetup]), shard(2, [])];
+    assert.deepStrictEqual(
+      checks.checkDependencies(explicit, shards, chain).map((violation) => violation.kind),
+      ['dependency-missing']
+    );
+  });
+
+  test('stays exempt from exactly-once coverage as an implicit dependency', () => {
+    const implicit = [setup, teardown, a];
+    const shards = [shard(1, [setup, a, teardown]), shard(2, [])];
+    assert.deepStrictEqual(checks.checkCoverage(implicit, shards), []);
+  });
+});
+
 describe('checkSerialGroups', () => {
   test('reports members of one group in two shards', () => {
     const shards = [shard(1, [setup, a, one, teardown]), shard(2, [setup, b, two, teardown])];
