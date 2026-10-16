@@ -81,6 +81,23 @@ describe('assertSelectable on synthetic leaves', () => {
     });
   }
 
+  test('rejects a spec file a load-only line would carry', () => {
+    assert.throws(
+      () => assertSelectable([leaf(['t'], { file: 'helper.js', specFile: 'a › b.spec.js' })]),
+      /its spec file "a › b\.spec\.js" contains "›"/
+    );
+  });
+
+  test('rejects a string that is not well-formed UTF-16, which a UTF-8 list file corrupts', () => {
+    assert.throws(
+      () => assertSelectable([leaf(['lone \ud800 half'])]),
+      /is not well-formed UTF-16/
+    );
+    assert.throws(() => assertSelectable([leaf(['t'], { project: 'p\udc00' })]), /its project/);
+    assert.throws(() => assertSelectable([leaf(['t'], { file: 'f\ud800.spec.js' })]), /its file/);
+    assert.doesNotThrow(() => assertSelectable([leaf(['paired \ud83d\ude00 emoji'])]));
+  });
+
   test('rejects a suite title with a separator by its depth', () => {
     assert.throws(() => assertSelectable([leaf(['a › b', 'child'])]), /its title 1/);
   });
@@ -158,6 +175,8 @@ describe('what Playwright accepts and a test-list selector cannot pick out', () 
     ['newline', /its title 1 "line\\nbreak" contains/],
     ['prefix', /prefix of the other/],
     ['project', /its project "p › q" contains "›"/],
+    ['specfile', /its spec file "a › b\.spec\.js" contains "›"/],
+    ['surrogate', /its title 1 .* is not well-formed UTF-16/],
   ];
 
   test('the clean config passes every check', () => {
@@ -202,4 +221,75 @@ describe('what Playwright accepts and a test-list selector cannot pick out', () 
       });
     });
   }
+});
+
+describe('a list an engine supplies', () => {
+  const cwd = requireFixture();
+  const dirs = [];
+  after(() => {
+    for (const dir of dirs) fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  /** Writes one list file per shard of lines and returns the shards that name them. */
+  function shardsOf(lists, flag = '--test-list') {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'psp-engine-'));
+    dirs.push(dir);
+    return lists.map((lines, index) => {
+      const file = path.join(dir, `shard-${index + 1}.txt`);
+      fs.writeFileSync(file, `${lines.join('\n')}\n`);
+      return { args: [flag, file] };
+    });
+  }
+
+  // `group` and `group › child`: a line for `group` also selects the child, so splitting them
+  // runs the child twice.
+  const SPLIT = [
+    ['[p] › prefix.spec.js:6:1 › group'],
+    ['[p] › prefix.spec.js:9:3 › group › child'],
+  ];
+  const prefix = { cwd, config: 'unselectable-prefix.config.js' };
+
+  test('is checked against the contract before any shard runs', () => {
+    assert.throws(
+      () => qualify({ ...prefix, partition: shardsOf(SPLIT) }, { quiet: true }),
+      /prefix of the other/
+    );
+  });
+
+  test('is checked in the --test-list=FILE and --test-list-invert forms', () => {
+    const [first, second] = shardsOf(SPLIT);
+    const attached = (shard) => ({ args: [`--test-list=${shard.args[1]}`] });
+    assert.throws(
+      () => qualify({ ...prefix, partition: [attached(first), attached(second)] }, { quiet: true }),
+      /prefix of the other/
+    );
+    assert.throws(
+      () =>
+        qualify({ ...prefix, partition: shardsOf(SPLIT, '--test-list-invert') }, { quiet: true }),
+      /prefix of the other/
+    );
+  });
+
+  test('is checked when the list is forwarded instead of supplied', () => {
+    const [first] = shardsOf(SPLIT);
+    assert.throws(
+      () =>
+        qualify({ ...prefix, forward: ['--test-list', first.args[1]], shards: 2 }, { quiet: true }),
+      /prefix of the other/
+    );
+  });
+
+  test('may name a selectable suite, which runs and qualifies', () => {
+    const lines = [['[p] › plain.spec.js:5:1 › an ordinary title'], []];
+    const report = qualify(
+      { cwd, config: 'unselectable-plain.config.js', partition: shardsOf(lines) },
+      { quiet: true }
+    );
+    assert.deepStrictEqual(report.violations, []);
+  });
+
+  test('is not checked for a native partition, which selects no test by title', () => {
+    const report = qualify({ ...prefix, shards: 2 }, { quiet: true });
+    assert.deepStrictEqual(report.violations, []);
+  });
 });

@@ -24,6 +24,11 @@ const isControl = (char) => char.charCodeAt(0) < 0x20 || char.charCodeAt(0) === 
 
 // The separator of a list line, control characters and newlines would corrupt a line.
 function unsafeReason(value) {
+  // A lone surrogate becomes a replacement character in a UTF-8 list file and the line then
+  // selects nothing.
+  if (!value.isWellFormed()) {
+    return 'is not well-formed UTF-16 (an unpaired surrogate), which a UTF-8 list file corrupts';
+  }
   if ([...value].some((char) => char === '›' || isControl(char))) {
     return 'contains "›", a control character or a newline';
   }
@@ -31,12 +36,17 @@ function unsafeReason(value) {
   return null;
 }
 
+/** Whether the arguments hand Playwright a `--test-list` or `--test-list-invert` file. */
+function usesTestList(args) {
+  return args.some((arg) => /^--test-list(-invert)?(=|$)/.test(arg));
+}
+
 /**
  * Playwright's `--test-list` is a lossy selector: a line is split on "›", trimmed, matched to a
  * test by project name, the file of the test call and a title-path prefix, and the line and column
  * are ignored. A suite that the selector cannot pick out exactly is rejected before any run, with
  * the leaves named:
- * - a project name, file, suite title or test title with "›", a control character, a newline or
+ * - a project name, file, spec file, suite title or test title with "›", a control character, a newline or
  *   surrounding whitespace, which the line cannot carry;
  * - two different tests with one project, call file and title path (a helper registers them for
  *   several specs), which no line tells apart;
@@ -49,6 +59,7 @@ function assertSelectable(leaves) {
     const fields = [
       ['project', leaf.project],
       ['file', leaf.file],
+      ['spec file', leaf.specFile],
     ];
     leaf.titlePath.forEach((title, depth) => fields.push([`title ${depth + 1}`, title]));
     for (const [field, value] of fields) {
@@ -115,4 +126,4 @@ function testListPartition(assignment, leaves, dir) {
   });
 }
 
-module.exports = { assertSelectable, nativePartition, testListPartition };
+module.exports = { assertSelectable, nativePartition, testListPartition, usesTestList };

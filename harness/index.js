@@ -20,7 +20,7 @@ const {
   imbalance,
 } = require('./checks');
 const { classify, dependencyMap, listedLeaf } = require('./leaves');
-const { nativePartition } = require('./partitions');
+const { assertSelectable, nativePartition, usesTestList } = require('./partitions');
 
 const REPORTER = path.join(__dirname, 'reporter.js');
 const MAX_BUFFER = 256 * 1024 * 1024;
@@ -235,6 +235,10 @@ function qualify(options, { log = () => {}, quiet = false, deps = {} } = {}) {
   for (const leaf of intended) log(`  ${leaf.dependency ? '[dependency] ' : ''}${leaf.key}`);
 
   const partition = options.partition || nativePartition(options.shards || 2);
+  // A list an engine supplies is held to the same contract as one the harness builds.
+  if (usesTestList([...(options.forward || []), ...partition.flatMap((shard) => shard.args)])) {
+    assertSelectable(intended);
+  }
   const shards = run(options, partition);
   if (!quiet) {
     for (const shard of shards) {

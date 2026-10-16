@@ -8,6 +8,7 @@ const path = require('node:path');
 const leaves = require('../harness/leaves.js');
 const checks = require('../harness/checks.js');
 const { nativePartition, testListPartition } = require('../harness/partitions.js');
+const { usesTestList } = require('../harness/partitions.js');
 const { buildControls, buildSelectionScenarios } = require('../harness/negative-control.js');
 const { parseArgs } = require('../harness/cli.js');
 const { listFixture } = require('./support/fixture.js');
@@ -205,6 +206,32 @@ describe('buildControls', () => {
   test('refuses a suite without a serial group', () => {
     const plainOnly = intended.filter((leaf) => !leaf.serialGroup);
     assert.throws(() => buildControls(plainOnly), /serial group/);
+  });
+});
+
+describe('usesTestList', () => {
+  test('sees a list file in every spelling', () => {
+    for (const args of [
+      ['--test-list', 'f.txt'],
+      ['--test-list=f.txt'],
+      ['--test-list-invert', 'f.txt'],
+      ['--test-list-invert=f.txt'],
+      ['--grep', 'x', '--test-list', 'f.txt'],
+    ]) {
+      assert.strictEqual(usesTestList(args), true, args.join(' '));
+    }
+  });
+
+  test('ignores shard args and other flags, including one that only starts alike', () => {
+    for (const args of [
+      [],
+      ['--shard=1/2'],
+      ['--grep', 'x'],
+      ['--test-listing'],
+      ['--project=a'],
+    ]) {
+      assert.strictEqual(usesTestList(args), false, args.join(' '));
+    }
   });
 });
 
