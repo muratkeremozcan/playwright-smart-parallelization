@@ -202,7 +202,10 @@ jobs:
       - name: Install the consumer fixture
         working-directory: fixtures/consumer
         run: npm ci
+      # Literal true: finish asserts the outcome of every leg, so a shard that fails in a leg
+      # that expects success still turns the job that asserts finish red.
       - uses: ./
+        continue-on-error: true
         with:
           phase: run
           plan: ${{ needs.prepare.outputs.plan }}
