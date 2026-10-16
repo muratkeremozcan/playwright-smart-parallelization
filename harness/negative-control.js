@@ -14,7 +14,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { dependencyProjects, groupBase, testId } = require('./leaves');
-const { configArgs, listIntended, playwrightVersion, qualify } = require('./index');
+const { listIntended, playwrightVersion, qualify } = require('./index');
 const { nativePartition, testListPartition } = require('./partitions');
 
 const SHARD_COUNT = 2;
@@ -126,10 +126,10 @@ function pickDependencySelection(dependencies) {
  * - The same filter with no project named at all, where every project is selected.
  * - P and T selected with `--no-deps`: both are top-level, so P in every shard is `duplicate`.
  *
- * `leaves` is the unfiltered intended set, used to find P's test title. `base` is the config
- * selection every scenario keeps. Other forwarded arguments are dropped.
+ * `leaves` is the unfiltered intended set, used to find P's test title. The scenarios build their
+ * own selection, so forwarded arguments do not reach them; the `config` option does.
  */
-function buildSelectionScenarios(dependencies, leaves, base) {
+function buildSelectionScenarios(dependencies, leaves) {
   const { project, implicit } = pickDependencySelection(dependencies);
   const needed = dependencyProjects(dependencies);
   const dependent = Object.keys(dependencies).find(
@@ -165,7 +165,7 @@ function buildSelectionScenarios(dependencies, leaves, base) {
         {
           name: `${label}, only ${implicit} runs`,
           expected: 'missing',
-          forward: base,
+          forward: [],
           partition: only(implicit),
           flagged: keysOf(listing),
         },
@@ -173,10 +173,10 @@ function buildSelectionScenarios(dependencies, leaves, base) {
     },
   });
 
-  const selected = [...base, `--project=${project}`];
-  const filtered = [...base, '--project', project, dependent, '--grep', grep];
-  const unnamed = [...base, '--grep', grep];
-  const flat = [...base, '--no-deps'];
+  const selected = [`--project=${project}`];
+  const filtered = ['--project', project, dependent, '--grep', grep];
+  const unnamed = ['--grep', grep];
+  const flat = ['--no-deps'];
   const topLevel = [...flat, `--project=${project}`, `--project=${implicit}`];
   return [
     {
@@ -191,7 +191,7 @@ function buildSelectionScenarios(dependencies, leaves, base) {
         {
           name: `selected ${project} project, only ${implicit} runs`,
           expected: 'missing',
-          forward: base,
+          forward: [],
           partition: only(implicit),
           flagged: keysOf(listing),
         },
@@ -241,19 +241,16 @@ function runNegativeControl(options, { log = () => {}, deps = {} } = {}) {
   const listing = list(options);
   const listingControls = buildControls(listing.leaves);
   const forward = options.forward || [];
-  const base = configArgs(forward);
   // The scenarios are built from the unfiltered suite: filters or `--no-deps` in the forwarded
   // args could hide the dependency map or the setup test they rely on.
-  const full = forward.length === base.length ? listing : list({ ...options, forward: base });
-  const scenarios = buildSelectionScenarios(full.dependencies, full.leaves, base).flatMap(
-    (scenario) => {
-      const scenarioListing = list({ ...options, forward: scenario.forward });
-      return scenario.controls(scenarioListing).map((control) => ({
-        ...control,
-        listing: scenarioListing,
-      }));
-    }
-  );
+  const full = forward.length === 0 ? listing : list({ ...options, forward: [] });
+  const scenarios = buildSelectionScenarios(full.dependencies, full.leaves).flatMap((scenario) => {
+    const scenarioListing = list({ ...options, forward: scenario.forward });
+    return scenario.controls(scenarioListing).map((control) => ({
+      ...control,
+      listing: scenarioListing,
+    }));
+  });
   const controls = [
     ...listingControls.map((control) => ({ ...control, forward, listing })),
     ...scenarios,

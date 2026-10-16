@@ -1,14 +1,15 @@
-/** Tests for leaf parsing, dependency derivation and key construction. */
+/** Tests for leaf keys, serial groups, the dependency map and the classification rule. */
 
 const { test, describe } = require('node:test');
 const assert = require('node:assert');
-const sample = require('./samples/list-repeat-each-2.json');
 const leaves = require('../harness/leaves.js');
+const { listFixture } = require('./support/fixture.js');
 
-const parsed = leaves.parseList(sample);
+// The leaves of the real fixture, listed with --repeat-each=2 by the harness reporter.
+const listed = () => listFixture({ repeatEach: 2 }).leaves;
 
 function find(project, file, title, repeatIndex) {
-  return parsed.find(
+  return listed().find(
     (leaf) =>
       leaf.project === project &&
       leaf.file === file &&
@@ -17,12 +18,13 @@ function find(project, file, title, repeatIndex) {
   );
 }
 
-describe('parseList against a recorded list JSON', () => {
-  test('yields one leaf per project and repeat', () => {
-    // setup, teardown, and 3 catalog + 1 flaky + 2 serial-flow tests in two projects, repeated 2x
-    // for the spec files, once for the dependency projects (repeat-each skips them).
-    assert.strictEqual(parsed.length, 2 + 2 * 2 * (3 + 1 + 2));
-    assert.strictEqual(new Set(parsed.map((leaf) => leaf.key)).size, parsed.length);
+describe('leaves listed by the reporter from the real fixture', () => {
+  test('yields one leaf per project and repeat with unique keys', () => {
+    const all = listed();
+    assert.strictEqual(new Set(all.map((leaf) => leaf.key)).size, all.length);
+    const primary = all.filter((leaf) => !leaf.dependency);
+    assert.strictEqual(primary.length, 2 * 52);
+    assert.strictEqual(all.length - primary.length, 2);
   });
 
   test('builds the key as project, file, title path and repeat', () => {
@@ -35,15 +37,15 @@ describe('parseList against a recorded list JSON', () => {
     assert.strictEqual(leaf.file, 'catalog.spec.js');
   });
 
-  test('derives the repeat index from occurrence order within a project', () => {
-    const repeats = parsed
+  test('numbers repeats from Playwright, adjacent and distinct per test', () => {
+    const repeats = listed()
       .filter((leaf) => leaf.project === 'firefox' && leaf.file === 'flaky.spec.js')
       .map((leaf) => leaf.repeatIndex);
     assert.deepStrictEqual(repeats, [0, 1]);
   });
 
   test('keeps dependency projects at repeat zero', () => {
-    const dependencyLeaves = parsed.filter((leaf) => ['setup', 'teardown'].includes(leaf.project));
+    const dependencyLeaves = listed().filter((leaf) => leaf.dependency);
     assert.deepStrictEqual(
       dependencyLeaves.map((leaf) => leaf.key),
       [
@@ -58,7 +60,7 @@ describe('parseList against a recorded list JSON', () => {
     const two = find('chromium', 'serial-flow.spec.js', 'two uses the session from one', 0);
     const otherRepeat = find('chromium', 'serial-flow.spec.js', 'one signs in', 1);
     const otherProject = find('firefox', 'serial-flow.spec.js', 'one signs in', 0);
-    assert.strictEqual(one.serialGroup, 'chromium|serial-flow.spec.js|0:0|#0');
+    assert.ok(one.serialGroup);
     assert.strictEqual(two.serialGroup, one.serialGroup);
     assert.notStrictEqual(otherRepeat.serialGroup, one.serialGroup);
     assert.notStrictEqual(otherProject.serialGroup, one.serialGroup);
@@ -79,35 +81,9 @@ describe('parseList against a recorded list JSON', () => {
       '[chromium] › catalog.spec.js:7:3 › catalog › loads the page'
     );
   });
+});
 
-  test('also parses repeats delivered as adjacent tests of one spec', () => {
-    const adjacent = {
-      config: { projects: [{ name: 'p', testDir: '/t' }] },
-      suites: [
-        {
-          title: 'a.spec.js',
-          file: 'a.spec.js',
-          specs: [
-            {
-              title: 'x',
-              file: 'a.spec.js',
-              line: 3,
-              column: 1,
-              tests: [
-                { projectName: 'p', annotations: [] },
-                { projectName: 'p', annotations: [] },
-              ],
-            },
-          ],
-        },
-      ],
-    };
-    assert.deepStrictEqual(
-      leaves.parseList(adjacent).map((leaf) => leaf.key),
-      ['p|a.spec.js|x|#0', 'p|a.spec.js|x|#1']
-    );
-  });
-
+describe('serialGroupId', () => {
   test('picks the outermost serial annotation of nested serial suites', () => {
     const group = leaves.serialGroupId({
       project: 'p',
@@ -122,164 +98,80 @@ describe('parseList against a recorded list JSON', () => {
   });
 });
 
-describe('dependency derivation', () => {
-  const lists = {
-    setup: [{ project: 'setup' }, { project: 'teardown' }],
-    teardown: [{ project: 'teardown' }],
-    chromium: [{ project: 'setup' }, { project: 'teardown' }, { project: 'chromium' }],
-    firefox: [{ project: 'firefox' }, { project: 'setup' }, { project: 'teardown' }],
-  };
+describe('dependencyMap', () => {
+  const project = (name, dependencies = [], teardown = null) => ({ name, dependencies, teardown });
 
-  test('lists the projects of a project listing minus the project itself', () => {
-    assert.deepStrictEqual(leaves.deriveDependencies(lists), {
+  test('lists dependencies and teardowns, transitively', () => {
+    const map = leaves.dependencyMap([
+      project('setup', [], 'teardown'),
+      project('teardown'),
+      project('chromium', ['setup']),
+      project('deep', ['chromium']),
+    ]);
+    assert.deepStrictEqual(map, {
       setup: ['teardown'],
       teardown: [],
       chromium: ['setup', 'teardown'],
-      firefox: ['setup', 'teardown'],
+      deep: ['chromium', 'setup', 'teardown'],
     });
   });
 
-  test('marks leaves of dependency projects', () => {
-    const dependencies = leaves.deriveDependencies(lists);
-    const marked = leaves.applyDependencies(
-      [{ project: 'setup' }, { project: 'chromium' }, { project: 'teardown' }],
-      dependencies
-    );
+  test('survives a cycle and an unknown dependency', () => {
+    const map = leaves.dependencyMap([project('a', ['b']), project('b', ['a', 'ghost'])]);
+    assert.deepStrictEqual(map.a.sort(), ['a', 'b', 'ghost']);
+  });
+
+  test('names the projects some other project needs', () => {
     assert.deepStrictEqual(
-      marked.map((leaf) => leaf.dependency),
-      [true, false, true]
-    );
-  });
-
-  describe('applyDependencies, the one classification rule', () => {
-    const dependencies = leaves.deriveDependencies(lists);
-    const roles = (present, selected) =>
-      leaves
-        .applyDependencies(
-          present.map((project) => ({ project })),
-          dependencies,
-          selected
-        )
-        .map((leaf) => [leaf.project, leaf.dependency ? 'dependency' : 'primary']);
-
-    test('selects every project by default', () => {
-      assert.deepStrictEqual(roles(['setup', 'chromium', 'teardown']), [
-        ['setup', 'dependency'],
-        ['chromium', 'primary'],
-        ['teardown', 'dependency'],
-      ]);
-    });
-
-    test('a project is a dependency only when a surviving selected project needs it', () => {
-      const all = ['setup', 'chromium', 'teardown'];
-      assert.deepStrictEqual(roles(['setup', 'teardown'], ['setup']), [
-        ['setup', 'primary'],
-        ['teardown', 'dependency'],
-      ]);
-      assert.deepStrictEqual(roles(['teardown'], ['teardown']), [['teardown', 'primary']]);
-      assert.deepStrictEqual(roles(all, ['chromium', 'setup']), [
-        ['setup', 'dependency'],
-        ['chromium', 'primary'],
-        ['teardown', 'dependency'],
-      ]);
-      assert.deepStrictEqual(roles(['setup', 'teardown'], ['setup', 'teardown']), [
-        ['setup', 'primary'],
-        ['teardown', 'dependency'],
-      ]);
-    });
-
-    test('a selected project with no leaf left needs nothing, so setup stays primary', () => {
-      assert.deepStrictEqual(roles(['setup', 'teardown'], ['setup', 'chromium']), [
-        ['setup', 'primary'],
-        ['teardown', 'dependency'],
-      ]);
-      assert.deepStrictEqual(roles(['setup', 'teardown', 'chromium'], ['setup', 'chromium']), [
-        ['setup', 'dependency'],
-        ['teardown', 'dependency'],
-        ['chromium', 'primary'],
-      ]);
-    });
-
-    test('a project outside the selection is primary unless a selected project needs it', () => {
-      assert.deepStrictEqual(roles(['setup', 'chromium'], ['setup']), [
-        ['setup', 'primary'],
-        ['chromium', 'primary'],
-      ]);
-    });
-  });
-
-  test('derives dependencies from the recorded sample projects', () => {
-    assert.deepStrictEqual(leaves.projectNames(sample), [
-      'setup',
-      'teardown',
-      'chromium',
-      'firefox',
-    ]);
-  });
-});
-
-describe('project selection', () => {
-  const names = ['setup', 'teardown', 'chromium', 'firefox'];
-
-  test('reads --project=name, --project name and repeated flags', () => {
-    assert.deepStrictEqual(leaves.selectedProjects(['--project=chromium'], names), ['chromium']);
-    assert.deepStrictEqual(
-      leaves.selectedProjects(['--project', 'firefox', 'setup', '--grep', 'x'], names),
-      ['setup', 'firefox']
-    );
-    assert.deepStrictEqual(
-      leaves.selectedProjects(['--project=teardown', '--project', 'chromium'], names),
-      ['teardown', 'chromium']
-    );
-  });
-
-  test('takes a positional after --project=name as a test filter, not a project', () => {
-    assert.deepStrictEqual(leaves.selectedProjects(['--project=chromium', 'setup'], names), [
-      'chromium',
-    ]);
-    assert.deepStrictEqual(
-      leaves.selectedProjects(['--project=chromium', 'firefox', '--project', 'setup'], names),
-      ['setup', 'chromium']
-    );
-  });
-
-  test('matches case-insensitively and with the * wildcard', () => {
-    assert.deepStrictEqual(leaves.selectedProjects(['--project=SETUP'], names), ['setup']);
-    assert.deepStrictEqual(leaves.selectedProjects(['--project=*down'], names), ['teardown']);
-    assert.deepStrictEqual(leaves.selectedProjects(['--project=*'], names), names);
-  });
-
-  test('selects nothing without --project, for an unknown name and for other flags', () => {
-    assert.deepStrictEqual(leaves.selectedProjects([], names), []);
-    assert.deepStrictEqual(leaves.selectedProjects(['--project=nope'], names), []);
-    assert.deepStrictEqual(
-      leaves.selectedProjects(['--grep=project', '-c', 'setup.config.js', 'setup'], names),
-      []
-    );
-  });
-
-  test('reads the selection from the recorded sample projects', () => {
-    assert.deepStrictEqual(
-      leaves.selectedProjects(['--project=setup'], leaves.projectNames(sample)),
-      ['setup']
+      [...leaves.dependencyProjects({ a: ['b'], b: [], c: ['b', 'a'] })].sort(),
+      ['a', 'b']
     );
   });
 });
 
-describe('effectiveProjects', () => {
-  const names = ['setup', 'teardown', 'chromium'];
+describe('classify, the one classification rule', () => {
+  const dependencies = {
+    setup: ['teardown'],
+    teardown: [],
+    chromium: ['setup', 'teardown'],
+  };
+  const roles = (present, map = dependencies) =>
+    leaves
+      .classify(
+        present.map((project) => ({ project })),
+        map
+      )
+      .map((leaf) => [leaf.project, leaf.dependency ? 'dependency' : 'primary']);
 
-  test('is every project when --project names none', () => {
-    assert.deepStrictEqual(leaves.effectiveProjects([], names), names);
-    assert.deepStrictEqual(leaves.effectiveProjects(['--grep', 'x', '--no-deps'], names), names);
+  test('a project is a dependency only when another listed project needs it', () => {
+    assert.deepStrictEqual(roles(['setup', 'chromium', 'teardown']), [
+      ['setup', 'dependency'],
+      ['chromium', 'primary'],
+      ['teardown', 'dependency'],
+    ]);
+    assert.deepStrictEqual(roles(['setup', 'teardown']), [
+      ['setup', 'primary'],
+      ['teardown', 'dependency'],
+    ]);
   });
 
-  test('is the matched projects when --project is given', () => {
-    assert.deepStrictEqual(leaves.effectiveProjects(['--project=setup'], names), ['setup']);
-    assert.deepStrictEqual(leaves.effectiveProjects(['--project', 'chromium', 'setup'], names), [
-      'setup',
-      'chromium',
+  test('a project the filters left standing alone is primary', () => {
+    assert.deepStrictEqual(roles(['teardown']), [['teardown', 'primary']]);
+    assert.deepStrictEqual(roles(['setup']), [['setup', 'primary']]);
+    assert.deepStrictEqual(roles(['chromium']), [['chromium', 'primary']]);
+  });
+
+  test('with no dependencies nothing is a dependency', () => {
+    const none = { setup: [], teardown: [], chromium: [] };
+    assert.deepStrictEqual(roles(['setup', 'teardown', 'chromium'], none), [
+      ['setup', 'primary'],
+      ['teardown', 'primary'],
+      ['chromium', 'primary'],
     ]);
+  });
+
+  test('a project does not need itself', () => {
+    assert.deepStrictEqual(roles(['a'], { a: ['a'] }), [['a', 'primary']]);
   });
 });
 

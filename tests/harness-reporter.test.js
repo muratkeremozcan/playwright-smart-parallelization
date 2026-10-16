@@ -58,13 +58,13 @@ afterEach(() => {
   delete process.env.PSP_HARNESS_RESULT;
 });
 
-function runReporter(tests, result) {
+function runReporter(tests, result, config = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'psp-reporter-test-'));
   tempDirs.push(dir);
   const target = path.join(dir, 'out.json');
   process.env.PSP_HARNESS_RESULT = target;
   const reporter = new Reporter();
-  reporter.onBegin({}, { allTests: () => tests });
+  reporter.onBegin(config, { allTests: () => tests });
   reporter.onEnd(result);
   return { target, read: () => JSON.parse(fs.readFileSync(target, 'utf8')) };
 }
@@ -124,6 +124,26 @@ describe('HarnessReporter', () => {
         ['firefox|cart.spec.js|cart › adds an item|#0', 'skipped', 0],
       ]
     );
+  });
+
+  test('records the config projects with their dependencies and teardown', () => {
+    const config = {
+      projects: [
+        { name: 'setup', dependencies: [], teardown: 'teardown', testDir },
+        { name: 'teardown', dependencies: [], testDir },
+        { name: 'chromium', dependencies: ['setup'], testDir },
+      ],
+    };
+    const { read } = runReporter([plain], { duration: 1 }, config);
+    assert.deepStrictEqual(read().projects, [
+      { name: 'setup', dependencies: [], teardown: 'teardown' },
+      { name: 'teardown', dependencies: [], teardown: null },
+      { name: 'chromium', dependencies: ['setup'], teardown: null },
+    ]);
+  });
+
+  test('records no projects when the config has none', () => {
+    assert.deepStrictEqual(runReporter([plain], { duration: 1 }).read().projects, []);
   });
 
   test('falls back to elapsed time when the result has no duration', () => {

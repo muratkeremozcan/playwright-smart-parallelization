@@ -3,8 +3,12 @@
 /**
  * Command line entry point.
  *
- *   node harness/cli.js [--cwd DIR] [--shards N] [--repeat-each N] [--workers N]
+ *   node harness/cli.js [--cwd DIR] [--config FILE] [--shards N] [--repeat-each N] [--workers N]
  *                       [--report FILE] [--negative-control] [-- playwright args]
+ *
+ * Arguments after `--` reach Playwright exactly as given, for the listing and for every shard run.
+ * `--config FILE` selects the config for all of them and for the selection scenarios of the negative
+ * control, which build their own selection and ignore the forwarded arguments.
  *
  * Exit code 0 means the partition selects every intended leaf once and runs each to a result, with
  * no violation (or, with `--negative-control`, that every clean partition was accepted and every
@@ -30,6 +34,7 @@ function positiveInteger(name, value) {
 function parseArgs(argv) {
   const options = {
     cwd: process.cwd(),
+    config: null,
     shards: 2,
     repeatEach: 1,
     workers: 1,
@@ -48,6 +53,7 @@ function parseArgs(argv) {
       return own[i];
     };
     if (flag === '--cwd') options.cwd = path.resolve(value());
+    else if (flag === '--config') options.config = value();
     else if (flag === '--shards') options.shards = positiveInteger(flag, value());
     else if (flag === '--repeat-each') options.repeatEach = positiveInteger(flag, value());
     else if (flag === '--workers') options.workers = positiveInteger(flag, value());

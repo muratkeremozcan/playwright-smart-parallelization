@@ -1,9 +1,11 @@
 'use strict';
 
 /**
- * Playwright reporter that records every leaf a shard selected, with its outcome. Playwright adds
- * it per shard run (`--add-reporter`) and it writes JSON to the path in `PSP_HARNESS_RESULT`:
- * `{ durationMs, leaves: [...] }`. It uses only the public Reporter API.
+ * Playwright reporter that records every leaf a run selected, with its outcome, and the projects of
+ * the config with their dependencies. Playwright adds it per shard run (`--add-reporter`) and runs
+ * it in list mode (`--list --reporter`), so the listing and the run build their leaves the same
+ * way. It writes JSON to the path in `PSP_HARNESS_RESULT`: `{ durationMs, projects, leaves }`. It
+ * uses only the public Reporter API.
  */
 
 const fs = require('node:fs');
@@ -36,11 +38,13 @@ function leafOf(test) {
 
 class HarnessReporter {
   constructor() {
+    this.config = null;
     this.suite = null;
     this.startedAt = 0;
   }
 
-  onBegin(_config, suite) {
+  onBegin(config, suite) {
+    this.config = config;
     this.suite = suite;
     this.startedAt = Date.now();
   }
@@ -51,7 +55,12 @@ class HarnessReporter {
     const durationMs =
       typeof result.duration === 'number' ? result.duration : Date.now() - this.startedAt;
     const leaves = this.suite.allTests().map(leafOf);
-    fs.writeFileSync(target, JSON.stringify({ durationMs, leaves }, null, 2));
+    const projects = ((this.config && this.config.projects) || []).map((project) => ({
+      name: project.name,
+      dependencies: project.dependencies || [],
+      teardown: project.teardown || null,
+    }));
+    fs.writeFileSync(target, JSON.stringify({ durationMs, projects, leaves }, null, 2));
   }
 
   printsToStdio() {

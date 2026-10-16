@@ -19,13 +19,7 @@ const {
   countDependencyExecutions,
   imbalance,
 } = require('./checks');
-const {
-  applyDependencies,
-  deriveDependencies,
-  effectiveProjects,
-  parseList,
-  projectNames,
-} = require('./leaves');
+const { classify, dependencyMap, listedLeaf } = require('./leaves');
 const { nativePartition } = require('./partitions');
 
 const REPORTER = path.join(__dirname, 'reporter.js');
@@ -50,58 +44,53 @@ function playwright(cwd, args, env = {}) {
   });
 }
 
-/** The config selection (`-c` or `--config`) in forwarded args. Projects are declared there. */
-function configArgs(args) {
-  const kept = [];
-  for (let i = 0; i < args.length; i += 1) {
-    const arg = args[i];
-    if (arg === '-c' || arg === '--config') {
-      kept.push(arg, args[i + 1]);
-      i += 1;
-    } else if (arg.startsWith('--config=') || arg.startsWith('-c=')) {
-      kept.push(arg);
+/**
+ * The args that select the config and the tests of a run: the `config` option, then the forwarded
+ * args exactly as the user gave them. The harness never reads these, so every form Playwright
+ * accepts (`-cfile`, `-c file`, `--config=file`, `-g x`, `--grep=x`, ...) reaches it unchanged.
+ */
+function selectionArgs({ config, forward = [] }) {
+  return [...(config ? [`--config=${config}`] : []), ...forward];
+}
+
+function runArgs({ repeatEach = 1, workers = 1, selection = [] }) {
+  return [`--repeat-each=${repeatEach}`, `--workers=${workers}`, ...selection];
+}
+
+/**
+ * Runs `playwright test --list` with the harness reporter and returns what it wrote:
+ * `{ projects, leaves }`. Playwright applies the selection and the filters, so the leaves are
+ * exactly the ones a run would select.
+ */
+function listWithReporter(cwd, args) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'psp-list-'));
+  const resultFile = path.join(dir, 'list.json');
+  try {
+    const result = playwright(cwd, ['--list', `--reporter=${REPORTER}`, ...args], {
+      PSP_HARNESS_RESULT: resultFile,
+    });
+    if (result.status !== 0 || !fs.existsSync(resultFile)) {
+      throw new Error(`playwright test --list failed (exit ${result.status}): ${result.stderr}`);
     }
+    return JSON.parse(fs.readFileSync(resultFile, 'utf8'));
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
   }
-  return kept;
 }
 
 /**
- * The args a per-project dependency probe carries: the config selection and `--no-deps`. Both
- * change which projects a listing contains, so they decide the dependency map.
+ * Lists the intended leaves and the project dependency map from one listing with the user's
+ * selection. Which leaves are dependencies follows `classify`. Under the user's own `--no-deps`
+ * Playwright runs no dependencies, so the map is empty and every leaf is primary.
  */
-function probeArgs(args) {
-  return [...configArgs(args), ...args.filter((arg) => arg === '--no-deps')];
-}
-
-function runArgs({ repeatEach = 1, workers = 1, forward = [] }) {
-  return [`--repeat-each=${repeatEach}`, `--workers=${workers}`, ...forward];
-}
-
-function listJson(cwd, args) {
-  const result = playwright(cwd, ['--list', '--reporter=json', ...args]);
-  if (result.status !== 0) {
-    throw new Error(`playwright test --list failed (exit ${result.status}): ${result.stderr}`);
-  }
-  return JSON.parse(result.stdout);
-}
-
-/**
- * Lists the intended leaves and the project dependency map. The listing honors the forwarded
- * selection args and repeat count. Dependencies come from one `--project=P` listing per project,
- * which carries the repeat count, config selection and `--no-deps` only. Which leaves are primary
- * and which are dependencies follows `applyDependencies`, over the effective project selection.
- */
-function listIntended({ cwd, repeatEach = 1, forward = [] }) {
-  const base = [`--repeat-each=${repeatEach}`];
-  const json = listJson(cwd, [...base, ...forward]);
-  const listsByProject = {};
-  for (const project of projectNames(json)) {
-    const probe = listJson(cwd, [...base, ...probeArgs(forward), `--project=${project}`]);
-    listsByProject[project] = parseList(probe);
-  }
-  const dependencies = deriveDependencies(listsByProject);
-  const selected = effectiveProjects(forward, projectNames(json));
-  return { leaves: applyDependencies(parseList(json), dependencies, selected), dependencies };
+function listIntended({ cwd, config, repeatEach = 1, forward = [] }) {
+  const args = [`--repeat-each=${repeatEach}`, ...selectionArgs({ config, forward })];
+  const listed = listWithReporter(cwd, args);
+  const declared = dependencyMap(listed.projects);
+  const dependencies = forward.includes('--no-deps')
+    ? Object.fromEntries(Object.keys(declared).map((name) => [name, []]))
+    : declared;
+  return { leaves: classify(listed.leaves.map(listedLeaf), dependencies), dependencies };
 }
 
 /**
@@ -110,7 +99,7 @@ function listIntended({ cwd, repeatEach = 1, forward = [] }) {
  * `{ index, args, exitCode, wallMs, durationMs, leaves, output }`. `leaves` is null when the shard
  * wrote no leaves file.
  */
-function runPartition({ cwd, repeatEach = 1, workers = 1, forward = [] }, partition) {
+function runPartition({ cwd, config, repeatEach = 1, workers = 1, forward = [] }, partition) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'psp-harness-'));
   try {
     return partition.map((shard, position) => {
@@ -118,7 +107,11 @@ function runPartition({ cwd, repeatEach = 1, workers = 1, forward = [] }, partit
       const started = Date.now();
       const result = playwright(
         cwd,
-        [...runArgs({ repeatEach, workers, forward }), `--add-reporter=${REPORTER}`, ...shard.args],
+        [
+          ...runArgs({ repeatEach, workers, selection: selectionArgs({ config, forward }) }),
+          `--add-reporter=${REPORTER}`,
+          ...shard.args,
+        ],
         { ...shard.env, PSP_HARNESS_RESULT: resultFile }
       );
       const wallMs = Date.now() - started;
@@ -211,10 +204,8 @@ function qualify(options, { log = () => {}, quiet = false, deps = {} } = {}) {
 
 module.exports = {
   checkAll,
-  configArgs,
   listIntended,
   playwrightVersion,
-  probeArgs,
   qualify,
   runPartition,
 };

@@ -49,17 +49,22 @@ to survive: setup and teardown projects, two browser projects, duplicate titles 
 parameterized tests, retries, serial suites (one of them oversized) and parallel suites. No test
 launches a browser, so the project needs no browser download.
 
-`harness/` is a plain Node library and CLI. It lists the leaves a run is meant to cover (one test
-in one project at one repeat), runs a partition shard by shard, and checks that every leaf was
+`harness/` is a plain Node library and CLI. Playwright answers every question about the selection:
+a reporter lists the leaves (one test in one project at one repeat) in list mode and in shard
+runs, so a listed key and a run key match by construction, and it records each project's
+dependencies from the config. Arguments after `--` reach Playwright exactly as given, in every
+spelling it accepts. The harness runs a partition shard by shard and checks that every leaf was
 selected exactly once, that each selected leaf ran to a result (a leaf that skipped or never ran is
 a `not-executed` violation), that no serial group was split across shards, and that each shard ran
-the setup and teardown leaves its tests depend on exactly once. One rule classifies the leaves: the
-run selects the projects `--project` names, or every project when none is named; a selected
-project survives when a test of it is left after `--grep`, tag, file filters and `--no-deps`; a
-leaf is a dependency, exempt from exactly-once coverage, only when a surviving selected project
-needs its project; every other leaf is primary, including a setup or teardown project the filters
-left standing alone. It writes a JSON report with the Playwright and Node
-versions, per-shard durations, the slowest shard and the imbalance.
+the setup and teardown leaves its tests depend on exactly once.
+
+One rule classifies the leaves. Playwright lists a project only when a test of it survives
+`--project`, `--grep`, tag and file filters, or when a listed project needs it. A leaf is a
+dependency, exempt from exactly-once coverage, only when another listed project needs its project.
+Every other leaf is primary, including a setup or teardown project the filters left standing alone.
+Under `--no-deps` there are no dependencies, so every leaf is primary. The harness writes a JSON
+report with the Playwright and Node versions, per-shard durations, the slowest shard and the
+imbalance.
 
 ```sh
 (cd fixtures/consumer && npm ci)
@@ -67,20 +72,22 @@ npm run harness -- --shards 3 --repeat-each 2
 npm run harness:negative
 ```
 
-`harness` accepts `--cwd`, `--shards`, `--repeat-each`, `--workers` (default 1), `--report` and
-`--negative-control`. Arguments after `--` go to both the list and the run commands. It exits 1 on
-any violation. `harness:negative` runs five clean partitions and eight deliberately broken ones and exits 0 only if
+`harness` accepts `--cwd`, `--config`, `--shards`, `--repeat-each`, `--workers` (default 1),
+`--report` and `--negative-control`. Arguments after `--` go to both the list and the run commands.
+It exits 1 on any violation.
+
+`harness:negative` runs five clean partitions and eight deliberately broken ones. It exits 0 only if
 each clean one is accepted and each broken one is rejected with the expected violation. The broken
 ones are a dropped leaf, a duplicated leaf, a split serial group, a run where every test skips at
 runtime, and four runs that execute only the teardown or run setup in every shard: with
 `--project=setup`, with setup and a browser project selected and then filtered down to the setup
 test, with the same filter and no project named, and with setup and teardown selected under
-`--no-deps`. The skip run sets
-`PSP_FIXTURE_SKIP_ALL=1`, which makes every fixture test skip, and must flag every primary leaf.
-The selection runs drop the other forwarded arguments except the config selection, and they need a
-suite whose setup project has a teardown project and a project that depends on it. A suite that
-skips tests by design fails the `not-executed` check: the harness has no allowance for a leaf that
-is meant to skip. Other engines plug in as `{ args, env }` shards through `harness/partitions.js`.
+`--no-deps`. The skip run sets `PSP_FIXTURE_SKIP_ALL=1`, which makes every fixture test skip, and
+must flag every primary leaf. The selection runs build their own selection and ignore the forwarded
+arguments, except that `--config` applies to them. They need a suite whose setup project has a
+teardown project and a project that depends on it. A suite that skips tests by design fails the
+`not-executed` check: the harness has no allowance for a leaf that is meant to skip. Other engines
+plug in as `{ args, env }` shards through `harness/partitions.js`.
 
 ## License
 
