@@ -22,8 +22,8 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { TITLE_SEPARATOR, dependencyProjects } = require('../../harness/leaves');
-const { listIntended, listJson, qualify } = require('../../harness');
-const { parseList } = require('../../harness/leaves');
+const { listIntended, qualify } = require('../../harness');
+const { listJson } = require('./playwright');
 const { assign, extractTiming, mergeTiming } = require('./engine');
 const shim = require('./shim');
 
@@ -165,19 +165,15 @@ function assignGrouped({ options, listing, json, dir, engine }) {
       shim.readHistory(options.timing && options.timing[project]),
     ])
   );
-  const prepared = shim.prepare(own, histories);
+  const leaves = listing.leaves.filter((leaf) => !leaf.dependency);
+  const prepared = shim.prepare(own, histories, leaves);
   const input = { testList: writeJson(path.join(dir, 'list-grouped.json'), prepared.list) };
   input.shards = options.shards;
   if (prepared.timing)
     input.timingFile = writeJson(path.join(dir, 'timing-grouped.json'), prepared.timing);
   const result = assign({ ...input, ...options.assign }, engine);
   if (result.assignment) {
-    result.assignment = shim.finish(
-      result.assignment,
-      prepared.groups,
-      parseList(own),
-      prepared.prefix
-    );
+    result.assignment = shim.finish(result.assignment, prepared);
   }
   return result;
 }

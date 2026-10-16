@@ -1,10 +1,10 @@
 {
-  "generatedAt": "2026-10-16T00:08:04.301Z",
+  "generatedAt": "2026-10-16T04:29:03.722Z",
   "group": "all",
   "versions": {
     "engine": "@nsxbet/playwright-orchestrator@2.0.1",
     "playwright": "1.64.1",
-    "node": "v26.5.0",
+    "node": "v22.20.0",
     "platform": "darwin-arm64"
   },
   "rows": [
@@ -198,8 +198,8 @@
             "estimated": 26,
             "isOptimal": true,
             "expectedDurations": {
-              "1": 5850,
-              "2": 5850
+              "1": 5902,
+              "2": 5902
             }
           }
         ]
@@ -282,6 +282,19 @@
       }
     },
     {
+      "subject": "engine",
+      "id": "1.prefix-titles",
+      "proof": 1,
+      "title": "a test and a describe block with one title",
+      "status": "fail",
+      "evidence": {
+        "coverageViolations": {
+          "duplicate": 2
+        },
+        "harnessRefusal": "chromium|prefix.spec.js|group|#0 and chromium|prefix.spec.js|group › child|#0 cannot be selected exactly by --test-list: a title path that is a prefix of the other, so one line selects both"
+      }
+    },
+    {
       "subject": "integration",
       "id": "1.grouped-repeat-each",
       "proof": 1,
@@ -359,7 +372,7 @@
         "stderr": [" ›   Warning: Failed to load timing artifact: damaged-shard-2.json"],
         "testsBefore": 28,
         "testsAfter": 28,
-        "testsUpdated": 19
+        "testsUpdated": 11
       }
     },
     {
@@ -373,7 +386,7 @@
         "stderr": [" ›   Warning: Failed to load timing artifact: absent-shard-2.json"],
         "testsBefore": 28,
         "testsAfter": 28,
-        "testsUpdated": 19
+        "testsUpdated": 11
       }
     },
     {
@@ -426,7 +439,7 @@
       "status": "fail",
       "evidence": {
         "exit": 0,
-        "mergedTotal": 25,
+        "mergedTotal": 26,
         "completeTotal": 58
       }
     },
@@ -440,7 +453,7 @@
         "exit": 0,
         "stderr": [],
         "testsBefore": 28,
-        "testsAfter": 19
+        "testsAfter": 11
       }
     },
     {
@@ -468,7 +481,7 @@
         "interrupted": [
           {
             "id": "volatile.spec.js::volatile step",
-            "recordedMs": 320,
+            "recordedMs": 321,
             "historyMs": 1050,
             "mergedMs": 831
           }
@@ -484,8 +497,8 @@
       "evidence": {
         "testsInHistory": 28,
         "updatesLost": 28,
-        "publishedUpdatedAt": "2026-10-16T00:07:18.947Z",
-        "newerRunUpdatedAt": "2026-10-16T00:07:18.872Z",
+        "publishedUpdatedAt": "2026-10-16T04:28:08.318Z",
+        "newerRunUpdatedAt": "2026-10-16T04:28:08.256Z",
         "publishedIsLaterThanNewerRun": true,
         "entryKeys": ["duration", "file", "lastRun", "runs"],
         "topLevelKeys": ["tests", "updatedAt", "version"]
@@ -548,7 +561,7 @@
       "title": "no history, default file affinity",
       "status": "fail",
       "evidence": {
-        "splitGroups": ["chromium|oversized.spec.js|0:0|#0", "firefox|oversized.spec.js|0:0|#0"],
+        "splitGroups": ["chromium|oversized.spec.js||#0", "firefox|oversized.spec.js||#0"],
         "failedShards": [],
         "coverageViolations": {},
         "failedTests": [],
@@ -564,7 +577,7 @@
       "title": "with history, default file affinity",
       "status": "fail",
       "evidence": {
-        "splitGroups": ["chromium|oversized.spec.js|0:0|#0", "firefox|oversized.spec.js|0:0|#0"],
+        "splitGroups": ["chromium|oversized.spec.js||#0", "firefox|oversized.spec.js||#0"],
         "failedShards": [],
         "coverageViolations": {},
         "failedTests": [],
@@ -581,10 +594,10 @@
       "status": "fail",
       "evidence": {
         "splitGroups": [
-          "chromium|oversized.spec.js|0:0|#0",
-          "chromium|serial-flow.spec.js|0:0|#0",
-          "firefox|oversized.spec.js|0:0|#0",
-          "firefox|serial-retry.spec.js|0:0|#0"
+          "chromium|oversized.spec.js||#0",
+          "chromium|serial-flow.spec.js||#0",
+          "firefox|oversized.spec.js||#0",
+          "firefox|serial-retry.spec.js||#0"
         ],
         "failedShards": [1, 2],
         "coverageViolations": {},
@@ -602,10 +615,7 @@
       "title": "with history, --file-affinity-penalty 100000000",
       "status": "fail",
       "evidence": {
-        "splitGroups": [
-          "chromium|serial-flow.spec.js|0:0|#0",
-          "firefox|serial-flow.spec.js|0:0|#0"
-        ],
+        "splitGroups": ["chromium|serial-flow.spec.js||#0", "firefox|serial-flow.spec.js||#0"],
         "failedShards": [2],
         "coverageViolations": {},
         "failedTests": ["two uses the session from one"],
@@ -668,24 +678,24 @@
         "dependencyViolations": [],
         "dependencyExecutions": [
           {
-            "setup|global.setup.js|prepare the environment|#0": 2,
-            "teardown|global.teardown.js|clean up the environment|#0": 2
+            "3ddbcaf8b47669ab14b8-5815013f92fccb03d515": 2,
+            "8b8e49cee66992a8d9d9-18733835b7e0731b602b": 2
           },
           {
-            "setup|global.setup.js|prepare the environment|#0": 2,
-            "teardown|global.teardown.js|clean up the environment|#0": 2
+            "3ddbcaf8b47669ab14b8-5815013f92fccb03d515": 2,
+            "8b8e49cee66992a8d9d9-18733835b7e0731b602b": 2
           },
           {
-            "setup|global.setup.js|prepare the environment|#0": 2,
-            "teardown|global.teardown.js|clean up the environment|#0": 2
+            "3ddbcaf8b47669ab14b8-5815013f92fccb03d515": 2,
+            "8b8e49cee66992a8d9d9-18733835b7e0731b602b": 2
           },
           {
-            "setup|global.setup.js|prepare the environment|#0": 2,
-            "teardown|global.teardown.js|clean up the environment|#0": 2
+            "3ddbcaf8b47669ab14b8-5815013f92fccb03d515": 2,
+            "8b8e49cee66992a8d9d9-18733835b7e0731b602b": 2
           },
           {
-            "setup|global.setup.js|prepare the environment|#0": 2,
-            "teardown|global.teardown.js|clean up the environment|#0": 2
+            "3ddbcaf8b47669ab14b8-5815013f92fccb03d515": 2,
+            "8b8e49cee66992a8d9d9-18733835b7e0731b602b": 2
           }
         ]
       }
@@ -749,57 +759,57 @@
     {
       "shards": 2,
       "native": {
-        "durationsMs": [13968, 14127],
+        "durationsMs": [13884, 13822],
         "leaves": [26, 26],
-        "slowestMs": 14127,
-        "imbalance": 0.005659369994660972,
+        "slowestMs": 13884,
+        "imbalance": 0.0022377824297985997,
         "violations": {}
       },
       "engine": {
-        "durationsMs": [14720, 13831],
+        "durationsMs": [14534, 13573],
         "leaves": [18, 34],
-        "slowestMs": 14720,
-        "imbalance": 0.03113726314314735,
+        "slowestMs": 14534,
+        "imbalance": 0.03419077098231757,
         "violations": {
           "serial-split": 2
         },
-        "slowestVsNative": 0.041976357329935585
+        "slowestVsNative": 0.04681647940074907
       },
       "grouped": {
-        "durationsMs": [14152, 14332],
+        "durationsMs": [14067, 14042],
         "leaves": [26, 26],
-        "slowestMs": 14332,
-        "imbalance": 0.006319337171745541,
+        "slowestMs": 14067,
+        "imbalance": 0.0008893948557401544,
         "violations": {},
-        "slowestVsNative": 0.014511219650315
+        "slowestVsNative": 0.013180639585133967
       }
     },
     {
       "shards": 3,
       "native": {
-        "durationsMs": [12536, 4026, 12648],
+        "durationsMs": [12321, 3814, 12417],
         "leaves": [18, 17, 17],
-        "slowestMs": 12648,
-        "imbalance": 0.29900718931872655,
+        "slowestMs": 12417,
+        "imbalance": 0.3046721770804146,
         "violations": {}
       },
       "engine": {
-        "durationsMs": [9685, 9981, 9897],
-        "leaves": [20, 11, 21],
-        "slowestMs": 9981,
-        "imbalance": 0.012853905219361979,
+        "durationsMs": [9143, 9845, 9951],
+        "leaves": [27, 11, 14],
+        "slowestMs": 9951,
+        "imbalance": 0.03158367600815502,
         "violations": {
           "serial-split": 2
         },
-        "slowestVsNative": -0.21086337760910817
+        "slowestVsNative": -0.19859869533703794
       },
       "grouped": {
-        "durationsMs": [9772, 9753, 9709],
+        "durationsMs": [9685, 9682, 9134],
         "leaves": [5, 5, 42],
-        "slowestMs": 9772,
-        "imbalance": 0.002804953136758631,
+        "slowestMs": 9685,
+        "imbalance": 0.01943791445914172,
         "violations": {},
-        "slowestVsNative": -0.2273877292852625
+        "slowestVsNative": -0.22002093903519368
       }
     }
   ],
@@ -810,34 +820,34 @@
       "enginePackageBytes": 161525
     },
     "runtimeMs": {
-      "version": 77,
-      "assignCold": 584,
-      "assignHistory": 156,
-      "extractTiming": 72,
-      "mergeTiming": 74
+      "version": 64,
+      "assignCold": 569,
+      "assignHistory": 154,
+      "extractTiming": 62,
+      "mergeTiming": 69
     },
     "peakRssKb": {
-      "bareNode": 43376,
-      "version": 64784,
-      "assignCold": 73776,
-      "assignHistory": 73952,
-      "extractTiming": 65264,
-      "mergeTiming": 65744
+      "bareNode": 38560,
+      "version": 60896,
+      "assignCold": 70032,
+      "assignHistory": 69952,
+      "extractTiming": 61072,
+      "mergeTiming": 61600
     },
     "artifactBytes": {
       "assignmentJson": 2562,
-      "testListPerShard": [241, 311, 655],
+      "testListPerShard": [210, 334, 663],
       "timingArtifact": 1583,
       "mergedHistory": 5039,
-      "playwrightJsonReport": 50730
+      "playwrightJsonReport": 50738
     }
   },
-  "durationMs": 262663,
+  "durationMs": 256914,
   "legsMs": {
-    "assignment": 48862,
-    "coverage": 192794,
-    "history": 141916,
-    "privacy": 44786,
-    "serial": 262663
+    "assignment": 47263,
+    "coverage": 190405,
+    "history": 137359,
+    "privacy": 42786,
+    "serial": 256914
   }
 }

@@ -72,6 +72,12 @@ describe('proof 1: exactly once', () => {
     assert.ok(row('1.repeat-each').coverageViolations.duplicate > 0);
   });
 
+  test('a test and a describe block with one title: the line of the test selects both', () => {
+    const evidenceRow = row('1.prefix-titles');
+    assert.ok(evidenceRow.coverageViolations.duplicate > 0);
+    assert.match(evidenceRow.harnessRefusal, /prefix/);
+  });
+
   test('per-project jobs and per-project assignments cover everything once', () => {
     assert.deepStrictEqual(row('1.jobs').coverageViolations, {});
     assert.deepStrictEqual(row('1.merged').coverageViolations, {});

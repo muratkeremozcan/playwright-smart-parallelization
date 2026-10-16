@@ -8,7 +8,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
-const { resolveFromCwd } = require('../../../harness');
+const { resolveFromCwd } = require('../playwright');
 const { buildHistory, filterProjects, reportFiles, writeJson } = require('../drive');
 const { extractTiming, mergeTiming } = require('../engine');
 const { VOLATILE_ID, greenProject, redRun } = require('../variants');

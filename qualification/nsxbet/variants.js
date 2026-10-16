@@ -6,6 +6,8 @@
  * one of them, and renamed or new tests.
  */
 
+const fs = require('node:fs');
+const path = require('node:path');
 const { copyProject } = require('./drive');
 
 const GREEN = `'use strict';
@@ -62,6 +64,22 @@ test.describe('wishlist', () => {
 });
 `;
 
+const PREFIX = `'use strict';
+
+const { test } = require('@playwright/test');
+const { sleep } = require('./support');
+
+test('group', async () => {
+  await sleep(100);
+});
+
+test.describe('group', () => {
+  test('child', async () => {
+    await sleep(100);
+  });
+});
+`;
+
 const VOLATILE_ID = 'volatile.spec.js::volatile step';
 
 /** The fixture plus a passing test that sleeps for a second. */
@@ -78,11 +96,23 @@ function redProject(ctx) {
   );
 }
 
+/**
+ * The fixture with its spec files replaced by one file in which a test and a describe block share
+ * a title, so the test-list line of the test selects the tests of the block too.
+ */
+function prefixProject(ctx) {
+  return ctx.once('variant:prefix', () => {
+    const edits = { 'tests/prefix.spec.js': PREFIX };
+    for (const name of fs.readdirSync(path.join(ctx.cwd, 'tests'))) {
+      if (name.endsWith('.spec.js')) edits[`tests/${name}`] = null;
+    }
+    return copyProject(ctx.cwd, ctx.dir('variant-prefix'), edits);
+  });
+}
+
 /** The fixture with one test renamed and a new file of two tests. */
 function renamedProject(ctx) {
   return ctx.once('variant:renamed', () => {
-    const fs = require('node:fs');
-    const path = require('node:path');
     const cart = fs.readFileSync(path.join(ctx.cwd, 'tests', 'cart.spec.js'), 'utf8');
     return copyProject(ctx.cwd, ctx.dir('variant-renamed'), {
       'tests/cart.spec.js': cart.replace("'adds an item'", "'adds one item'"),
@@ -109,4 +139,11 @@ function redRun(ctx) {
   return { cwd, green, red };
 }
 
-module.exports = { VOLATILE_ID, greenProject, redProject, redRun, renamedProject };
+module.exports = {
+  VOLATILE_ID,
+  greenProject,
+  prefixProject,
+  redProject,
+  redRun,
+  renamedProject,
+};

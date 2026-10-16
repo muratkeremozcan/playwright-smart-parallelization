@@ -8,17 +8,12 @@
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
-const { listJson } = require('../../../harness');
-const { parseList } = require('../../../harness/leaves');
+const { engineIds, listJson } = require('../playwright');
 const { execute, filterProjects, plan, writeJson } = require('../drive');
 const { assign } = require('../engine');
 const { coverageKinds } = require('./coverage');
 
 const SLOW_CLOCK = path.resolve(__dirname, '..', 'slow-clock.js');
-
-function idsOf(list) {
-  return parseList(list).map((leaf) => [leaf.file, ...leaf.titlePath].join('::'));
-}
 
 function digest(value) {
   return crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex').slice(0, 12);
@@ -41,7 +36,7 @@ function chromiumList(ctx) {
   return ctx.once('assignment:list', () => {
     const json = filterProjects(listJson(ctx.cwd, ['--project=chromium']), ['chromium']);
     const file = writeJson(path.join(ctx.dir('assignment'), 'list-chromium.json'), json);
-    return { file, ids: idsOf(json) };
+    return { file, ids: engineIds(json) };
   });
 }
 
@@ -253,7 +248,6 @@ module.exports = {
   chromiumList,
   completeness,
   damagedTiming,
-  idsOf,
   recomputePerShard,
   singleAssignment,
   syntheticTiming,

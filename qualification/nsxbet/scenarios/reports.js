@@ -8,7 +8,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
-const { resolveFromCwd } = require('../../../harness');
+const { resolveFromCwd } = require('../playwright');
 const { coverageKinds } = require('./coverage');
 const { redRun } = require('../variants');
 

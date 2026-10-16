@@ -13,36 +13,42 @@
  *
  * After `assign`, a stand-in is replaced by every member of its group and each line is turned
  * back into a Playwright test-list line with a `[project] ›` prefix.
+ *
+ * The shim reads the harness listing for what the engine cannot know: which leaves exist, their
+ * projects and their serial groups. A leaf's `file` is relative to the config directory, the engine
+ * sees files relative to the test directory, and `prefix` is the difference.
  */
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { TITLE_SEPARATOR, groupBase, parseList } = require('../../harness/leaves');
+const { TITLE_SEPARATOR, groupBase } = require('../../harness/leaves');
 
 const DEFAULT_MEMBER_MS = 30000;
 
-/** The file name the engine sees for a leaf. */
-function engineFile(leaf) {
-  return `${leaf.project}/${leaf.file}`;
+/** The file name the engine sees for a leaf: its project and the file relative to the tests. */
+function engineFile(leaf, prefix) {
+  const file =
+    prefix && leaf.file.startsWith(`${prefix}/`) ? leaf.file.slice(prefix.length + 1) : leaf.file;
+  return `${leaf.project}/${file}`;
 }
 
 /** The engine's id for a leaf. */
-function idOf(leaf) {
-  return [engineFile(leaf), ...leaf.titlePath].join('::');
+function idOf(leaf, prefix = '') {
+  return [engineFile(leaf, prefix), ...leaf.titlePath].join('::');
 }
 
-/** The test-list line the engine prints for a leaf. */
-function lineOf(leaf) {
-  return [engineFile(leaf), ...leaf.titlePath].join(TITLE_SEPARATOR);
+/** The test-list line the engine prints for a leaf, without the test directory prefix. */
+function lineOf(leaf, prefix = '') {
+  return [engineFile(leaf, prefix), ...leaf.titlePath].join(TITLE_SEPARATOR);
 }
 
-/**
- * The Playwright test-list line that selects a leaf in its own project only. `prefix` is the
- * directory of the tests relative to the config directory, which Playwright matches files against.
- */
-function playwrightLine(leaf, prefix = '') {
-  const file = prefix ? `${prefix}/${leaf.file}` : leaf.file;
-  return [`[${leaf.project}]`, file, ...leaf.titlePath].join(TITLE_SEPARATOR);
+/** The Playwright test-list line that selects a leaf in its own project only. */
+function playwrightLine(leaf) {
+  return [`[${leaf.project}]`, leaf.file, ...leaf.titlePath].join(TITLE_SEPARATOR);
+}
+
+function specKey(project, file, line, column, title) {
+  return `${project}|${file}|${line}|${column}|${title}`;
 }
 
 /**
@@ -57,10 +63,6 @@ function testDirPrefix(config, projects) {
   if (dirs.size !== 1) throw new Error('the projects do not share one testDir');
   const relative = path.relative(config.rootDir, [...dirs][0]);
   return relative.split(path.sep).join('/');
-}
-
-function specKey(project, file, line, column, title) {
-  return `${project}|${file}|${line}|${column}|${title}`;
 }
 
 /** Serial groups with two or more members, each `{ representative, members }`. */
@@ -91,18 +93,20 @@ function mergeHistories(histories) {
 }
 
 /**
- * Returns `{ list, timing, groups, prefix }` for one `assign` call. `list` is the Playwright list JSON of
- * the primary projects (no dependency projects), `histories` maps a project to its parsed timing
- * data or null. The returned list holds namespaced files and only the stand-in of each group; the
+ * Returns `{ list, timing, groups, leaves, prefix }` for one `assign` call. `list` is the
+ * Playwright list JSON of the primary projects (no dependency projects), `histories` maps a
+ * project to its parsed timing data or null, and `leaves` are the primary leaves of the harness
+ * listing. The returned list holds namespaced files and only the stand-in of each group; the
  * timing is null when no project has history.
  */
-function prepare(list, histories) {
-  const leaves = parseList(list);
+function prepare(list, histories, leaves) {
   const projects = [...new Set(leaves.map((leaf) => leaf.project))];
   const prefix = testDirPrefix(list.config, projects);
   const groups = serialGroups(leaves);
+  const strip = (file) =>
+    prefix && file.startsWith(`${prefix}/`) ? file.slice(prefix.length + 1) : file;
   const key = (leaf) =>
-    specKey(leaf.project, leaf.file, leaf.line, leaf.column, leaf.titlePath.at(-1));
+    specKey(leaf.project, strip(leaf.file), leaf.line, leaf.column, leaf.titlePath.at(-1));
   const dropped = new Set(groups.flatMap(({ members }) => members.slice(1).map(key)));
   // A repeated test is listed once per repeat, so a member can share its location with the
   // stand-in, which must stay.
@@ -114,9 +118,9 @@ function prepare(list, histories) {
     for (const spec of suite.specs || []) {
       const project = spec.tests[0].projectName;
       const file = spec.file || suite.file;
-      const key = specKey(project, file, spec.line, spec.column, spec.title);
-      if (dropped.has(key) || seen.has(key)) continue;
-      seen.add(key);
+      const specId = specKey(project, file, spec.line, spec.column, spec.title);
+      if (dropped.has(specId) || seen.has(specId)) continue;
+      seen.add(specId);
       specs.push({ ...spec, file: `${project}/${file}` });
     }
     return { ...suite, specs, suites: (suite.suites || []).map(rewrite) };
@@ -127,11 +131,11 @@ function prepare(list, histories) {
   if (Object.keys(merged.tests).length > 0) {
     timing = merged;
     for (const { representative, members } of groups) {
-      const known = (leaf) => (merged.tests[idOf(leaf)] || {}).duration;
+      const known = (leaf) => (merged.tests[idOf(leaf, prefix)] || {}).duration;
       const total = members.reduce((sum, leaf) => sum + (known(leaf) ?? DEFAULT_MEMBER_MS), 0);
-      timing.tests[idOf(representative)] = {
-        ...(merged.tests[idOf(representative)] || {
-          file: engineFile(representative),
+      timing.tests[idOf(representative, prefix)] = {
+        ...(merged.tests[idOf(representative, prefix)] || {
+          file: engineFile(representative, prefix),
           runs: 1,
           lastRun: new Date().toISOString(),
         }),
@@ -143,16 +147,24 @@ function prepare(list, histories) {
     ...list.config,
     projects: list.config.projects.filter((p) => projects.includes(p.name)),
   };
-  return { list: { ...list, config, suites: list.suites.map(rewrite) }, timing, groups, prefix };
+  return {
+    list: { ...list, config, suites: list.suites.map(rewrite) },
+    timing,
+    groups,
+    leaves,
+    prefix,
+  };
 }
 
 /**
  * Turns an `assign` result into Playwright test-list lines: a stand-in is replaced by every
- * member of its group, and each line selects its test in its own project only.
+ * member of its group, and each line selects its test in its own project only. `prepared` is the
+ * result of `prepare`.
  */
-function finish(assignment, groups, leaves, prefix = '') {
-  const byLine = new Map(leaves.map((leaf) => [lineOf(leaf), leaf]));
-  const members = new Map(groups.map((g) => [lineOf(g.representative), g.members]));
+function finish(assignment, prepared) {
+  const { groups, leaves, prefix } = prepared;
+  const byLine = new Map(leaves.map((leaf) => [lineOf(leaf, prefix), leaf]));
+  const members = new Map(groups.map((g) => [lineOf(g.representative, prefix), g.members]));
   const testListFiles = {};
   for (const [shard, content] of Object.entries(assignment.testListFiles)) {
     const lines = content
@@ -167,7 +179,7 @@ function finish(assignment, groups, leaves, prefix = '') {
           const group = members.get(line);
           const found = group || [byLine.get(line)];
           if (found.some((leaf) => !leaf)) throw new Error(`unknown line in assignment: ${line}`);
-          return found.map((leaf) => playwrightLine(leaf, prefix));
+          return found.map(playwrightLine);
         })
       ),
     ];

@@ -14,6 +14,7 @@ const EXPECTED_ROWS = {
   '1.jobs': 'pass',
   '1.merged': 'pass',
   '1.repeat-each': 'fail',
+  '1.prefix-titles': 'fail',
   '1.grouped-repeat-each': 'pass',
   '2.cold': 'fail',
   '2.history': 'fail',
