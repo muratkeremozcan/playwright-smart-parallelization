@@ -65,6 +65,7 @@ function createContext({ log = () => {}, source = FIXTURE, commit = null } = {})
   const listings = new Map();
   const configs = new Map();
   const signatures = new Map();
+  const baselines = new Map();
 
   const ctx = {
     cwd: source,
@@ -225,6 +226,11 @@ function createContext({ log = () => {}, source = FIXTURE, commit = null } = {})
      * and `env` is added to the environment of every shard.
      */
     baseline({ name = 'native-2', shards = 2, cwd = source, fullyParallel = false, env } = {}) {
+      const asked = JSON.stringify({ shards, cwd, fullyParallel, env });
+      if (baselines.has(name) && baselines.get(name) !== asked) {
+        throw new Error(`baseline ${name} was asked for again with other options`);
+      }
+      baselines.set(name, asked);
       return ctx.once(`baseline:${name}`, () => {
         const run = ctx.run({ name, shards, cwd, workers: 1, fullyParallel, env });
         const files = run.records.filter(Boolean).map((r) => r.file);

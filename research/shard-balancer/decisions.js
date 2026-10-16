@@ -293,6 +293,17 @@ const PW_SHARD = src(
   'playwright'
 );
 
+const REPEAT_SUFFIX = src(
+  'src/atoms.ts',
+  '21',
+  "export const repeatSuffix = (r: number) => (r > 0 ? ` (repeat ${r})` : '');"
+);
+const TEST_ID = src(
+  'src/run.ts',
+  '76',
+  'const testId = (t: { key: string; repeat: number }) => t.key + repeatSuffix(t.repeat);'
+);
+const ZERO_OK = src('src/timings.ts', '35', 'Number.isInteger(s) && s >= 0');
 const KEEP_LATEST = 'The aggregate job keeps only the latest attempt of each shard';
 
 /** Gaps the Flakiness and NSXBet qualifications named. */
@@ -388,12 +399,17 @@ const GAPS = [
       'NSXBet P1: one id for a test in two projects, a repeat selected twice (`1.combined`, `1.repeat-each`)',
     mechanism:
       "A test key is `[project] › spec file › titles`, a repeat carries its index, and the reporter removes the tests of other shards with Playwright's own `testRun.exclude`.",
-    sources: [KEY, REPEAT, EXCLUDE],
-    decision: 'take',
+    sources: [KEY, REPEAT, EXCLUDE, REPEAT_SUFFIX, TEST_ID],
+    decision: 'adapt',
     reason:
-      'Keys with the project and the repeat index keep every copy apart (`a.repeat-each`, `a.balanced-3`), and exclusion inside Playwright needs no `--test-list` line.',
-    evidence: { 'a.balanced-2': 'pass', 'a.balanced-3': 'pass', 'a.repeat-each': 'pass' },
-    s8: 'Two browser projects under `--repeat-each 2` on three shards: every leaf runs once.',
+      'Keys with the project and the repeat index keep every copy apart (`a.repeat-each`, `a.balanced-3`), and exclusion inside Playwright needs no `--test-list` line. A repeat id is the key plus a ` (repeat N)` suffix, so a test titled `target (repeat 1)` collides with the first repeat of `target` and `check` miscounts (`a.repeat-collision`); our identity keeps the key and the repeat index as separate fields.',
+    evidence: {
+      'a.balanced-2': 'pass',
+      'a.balanced-3': 'pass',
+      'a.repeat-each': 'pass',
+      'a.repeat-collision': 'fail',
+    },
+    s8: 'Two browser projects under `--repeat-each 2` on three shards: every leaf runs once, and tests titled `target` and `target (repeat 1)` under `--repeat-each=2` pass the aggregate check with every copy counted once.',
   },
   {
     subject: 'NSXBet P2: serial groups split across shards (`2.cold`, `2.history`)',
@@ -428,12 +444,17 @@ const GAPS = [
       'NSXBet P8: failed and cancelled runs and a damaged history replace good history (`8.failed-run`, `8.cancelled-run`, `8.damaged-history`)',
     mechanism:
       'Only passing and flaky results give samples, an interrupted test is marked as not run, `update` validates the history and every input before it writes, and it writes through a temporary file and a rename.',
-    sources: [PASSING, INTERRUPTED, VALIDATE, ATOMIC],
-    decision: 'take',
+    sources: [PASSING, INTERRUPTED, VALIDATE, ATOMIC, CHECK],
+    decision: 'adapt',
     reason:
-      'Failed and cancelled runs add nothing (`h.failed-slow`, `h.cancelled`), and damaged input fails `update` with the history left byte for byte (`h.damaged-history`).',
-    evidence: { 'h.failed-slow': 'pass', 'h.cancelled': 'pass', 'h.damaged-history': 'pass' },
-    s8: 'Feed the history step a truncated history, a truncated record, a failed run and a cancelled run: each leaves the published bytes as they were.',
+      'A failed or interrupted test adds no sample of its own (`h.failed-slow`, `h.cancelled`) and damaged input fails `update` with the history left byte for byte (`h.damaged-history`). A complete run in which one test failed still passes `check` and merges the samples of its passing tests (`h.mixed-outcome`), and a cancelled run merges the tests that passed before the signal (`h.cancelled`), so we publish only from runs whose every shard record says `passed` and whose check passed.',
+    evidence: {
+      'h.failed-slow': 'pass',
+      'h.cancelled': 'pass',
+      'h.damaged-history': 'pass',
+      'h.mixed-outcome': 'fail',
+    },
+    s8: 'Feed the history step a truncated history, a truncated record, a complete run in which one test failed and a cancelled run: each leaves the published bytes as they were.',
   },
   {
     subject: 'NSXBet X1: one shard plans from a damaged timing file (`x1.recompute-per-shard`)',
@@ -470,8 +491,8 @@ const WORKFLOW = [
     sources: [OPTIONS, PREFIX],
     decision: 'adapt',
     reason:
-      "The plan workers must be a fixed input of the run: the plan never reads Playwright's `--workers` (`p.workers-independent`), and packing for the real worker count predicts better (`w.plan-workers`).",
-    evidence: { 'p.workers-independent': 'pass', 'w.plan-workers': 'pass' },
+      "The plan workers must be a fixed input of the run, because the plan never reads Playwright's `--workers` (`p.workers-independent`); whether packing for the CI worker count shortens the slowest shard is left to the S6 measurement.",
+    evidence: { 'p.workers-independent': 'pass' },
     s8: 'The `workers` input reaches Playwright and the plan of every shard, and the plan sha is the same under `--workers=1` and `--workers=4`.',
   },
   {
@@ -584,17 +605,19 @@ const WORKFLOW = [
       'History: failed, cancelled or incomplete runs and zero-valued data never replace good history',
     mechanism:
       'Only passing and flaky results give samples, an interrupted test is not run, input is validated; any number of records is accepted, and a sample of zero is valid.',
-    sources: [PASSING, INTERRUPTED, VALIDATE],
+    sources: [PASSING, INTERRUPTED, VALIDATE, ZERO_OK],
     decision: 'adapt',
     reason:
-      'Failed and cancelled results add nothing (`h.failed-slow`, `h.cancelled`) and damaged input is refused (`h.damaged-history`); an incomplete run still merges (`h.missing-shard-update`), so completeness gates our update.',
+      'A failed or interrupted test adds no sample (`h.failed-slow`, `h.cancelled`) and damaged input is refused (`h.damaged-history`). An incomplete run (`h.missing-shard-update`), a complete run with a failed test (`h.mixed-outcome`) and a cancelled run (`h.cancelled`) still merge their passing tests, so we publish only from complete runs whose every shard passed and whose check passed. Samples of 0 ms are valid input and three of them price a full window at 0 ms (`h.zero-samples`), so our writer records no passing sample of 0 ms: a measured duration of zero carries no information about the next run.',
     evidence: {
       'h.failed-slow': 'pass',
       'h.cancelled': 'pass',
       'h.damaged-history': 'pass',
       'h.missing-shard-update': 'fail',
+      'h.mixed-outcome': 'fail',
+      'h.zero-samples': 'fail',
     },
-    s8: 'A failed, a cancelled and an incomplete run each leave the published history byte for byte.',
+    s8: 'A complete run with one failed test, a cancelled run and an incomplete run each leave the published history byte for byte, and three passing samples of 0 ms leave the price of a test as it was.',
   },
   {
     item: 'Bounded observation window',
@@ -616,7 +639,7 @@ const WORKFLOW = [
     sources: [KEY, PREFIX, WORKERS_OPTION],
     decision: 'adapt',
     reason:
-      'Per-project keys keep chromium and firefox apart in one file (`h.filtered-run` holds a separate entry per project); the runner class and the worker count go into our cache key, since the plan changes with the workers it packs for (`w.plan-workers`).',
+      'Per-project keys keep chromium and firefox apart in one file (`h.filtered-run` holds a separate entry per project); the runner class and the worker count go into our cache key, since the predicted shard times change with the workers the plan packs for (`w.plan-workers`).',
     evidence: { 'h.filtered-run': 'pass', 'w.plan-workers': 'pass' },
     s8: 'Changing the runner label or the workers input starts a separate history.',
   },
@@ -761,11 +784,11 @@ const MECHANISMS = [
     subject: 'Workers-per-shard planning',
     mechanism: "The plan packs each shard onto a fixed `workers` count in Playwright's load order.",
     sources: [WORKERS_OPTION, WORKERS_USED, WALL],
-    decision: 'take',
+    decision: 'adapt',
     reason:
-      "Packing for two workers predicts a two-worker shard better (`w.plan-workers`), and the plan ignores Playwright's own `--workers` (`p.workers-independent`).",
-    evidence: { 'w.plan-workers': 'pass', 'p.workers-independent': 'pass' },
-    s8: 'Under `--workers=2` the predicted shard times of the summary are within the tolerance of the measured ones.',
+      "The workers count is a fixed input of the plan, which ignores Playwright's own `--workers` (`p.workers-independent`). Packing for one worker and for two gives different predictions that both predict a two-worker shard within the tolerance, and which one is closer changed between macOS and Linux (`w.plan-workers`), so the wall-time benefit of packing for the workers is unproven on the fixture and goes to the S6 measurement.",
+    evidence: { 'p.workers-independent': 'pass', 'w.plan-workers': 'pass' },
+    s8: 'The Action passes one workers input to Playwright and to the plan of every shard, and S6 measures the slowest shard with the plan packed for the CI worker count against the plan packed for one worker.',
   },
   {
     subject: 'Lock groups on one shard',

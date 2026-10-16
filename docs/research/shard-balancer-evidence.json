@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-16T12:10:13.390Z",
+  "generatedAt": "2026-10-16T13:05:03.339Z",
   "group": "all",
   "versions": {
     "package": "playwright-shard-balancer@0.1.2",
@@ -40,17 +40,17 @@
         "strategies": ["balanced", "balanced"],
         "known": 52,
         "listed": 52,
-        "shardMs": [14068, 14041],
-        "slowestMs": 14068,
-        "nativeShardMs": [13879, 13888],
-        "nativeSlowestMs": 13888,
-        "imbalance": 0.001,
-        "nativeImbalance": 0,
-        "slowestVsNative": 0.013,
-        "nativeRerunSlowestMs": 13902,
-        "nativeSpread": 0.001
+        "shardMs": [14193, 14180],
+        "slowestMs": 14193,
+        "nativeShardMs": [14007, 14026],
+        "nativeSlowestMs": 14026,
+        "imbalance": 0,
+        "nativeImbalance": 0.001,
+        "slowestVsNative": 0.012,
+        "nativeRerunSlowestMs": 13989,
+        "nativeSpread": 0.003
       },
-      "finding": "One worker per shard, 52 of 52 tests known. Shards took 14068 / 14041 ms against 13879 / 13888 ms native, slowest 14068 ms against 13888 ms; harness violations none, `check` exit 0. A second native run of the same split had its slowest shard at 13902 ms."
+      "finding": "One worker per shard, 52 of 52 tests known. Shards took 14193 / 14180 ms against 14007 / 14026 ms native, slowest 14193 ms against 14026 ms; harness violations none, `check` exit 0. A second native run of the same split had its slowest shard at 13989 ms."
     },
     {
       "id": "a.balanced-3",
@@ -65,17 +65,17 @@
         "strategies": ["balanced", "balanced", "balanced"],
         "known": 52,
         "listed": 52,
-        "shardMs": [9717, 9720, 9156],
-        "slowestMs": 9720,
-        "nativeShardMs": [12340, 3837, 12408],
-        "nativeSlowestMs": 12408,
-        "imbalance": 0.02,
+        "shardMs": [9764, 9775, 9332],
+        "slowestMs": 9775,
+        "nativeShardMs": [12412, 3897, 12511],
+        "nativeSlowestMs": 12511,
+        "imbalance": 0.016,
         "nativeImbalance": 0.302,
-        "slowestVsNative": -0.217,
-        "nativeRerunSlowestMs": 12474,
-        "nativeSpread": 0.005
+        "slowestVsNative": -0.219,
+        "nativeRerunSlowestMs": 12511,
+        "nativeSpread": 0
       },
-      "finding": "One worker per shard, 52 of 52 tests known. Shards took 9717 / 9720 / 9156 ms against 12340 / 3837 / 12408 ms native, slowest 9720 ms against 12408 ms; harness violations none, `check` exit 0. A second native run of the same split had its slowest shard at 12474 ms."
+      "finding": "One worker per shard, 52 of 52 tests known. Shards took 9764 / 9775 / 9332 ms against 12412 / 3897 / 12511 ms native, slowest 9775 ms against 12511 ms; harness violations none, `check` exit 0. A second native run of the same split had its slowest shard at 12511 ms."
     },
     {
       "id": "a.repeat-each",
@@ -103,10 +103,10 @@
         "exitCodes": [0, 0, 0],
         "checkExit": 0,
         "granularity": ["auto", "auto", "auto"],
-        "slowestMs": 9733,
-        "nativeSlowestMs": 12430
+        "slowestMs": 9744,
+        "nativeSlowestMs": 12480
       },
-      "finding": "`fullyParallel`, three shards, one worker: harness violations none, records say granularity `auto`, slowest shard 9733 ms against 12430 ms native."
+      "finding": "`fullyParallel`, three shards, one worker: harness violations none, records say granularity `auto`, slowest shard 9744 ms against 12480 ms native."
     },
     {
       "id": "a.granularity-file",
@@ -119,9 +119,9 @@
         "exitCodes": [0, 0, 0],
         "splitFiles": 0,
         "granularity": ["file", "file", "file"],
-        "slowestMs": 9706
+        "slowestMs": 9775
       },
-      "finding": "`fullyParallel` with `granularity: file`, three shards: 0 files split across shards, harness violations none, slowest shard 9706 ms."
+      "finding": "`fullyParallel` with `granularity: file`, three shards: 0 files split across shards, harness violations none, slowest shard 9775 ms."
     },
     {
       "id": "a.renamed",
@@ -148,11 +148,11 @@
         "linesPerShard": [1, 1, 1],
         "samePlanSha": true,
         "sameTimingsSha": true,
-        "planSha": "628fd58db1c4",
-        "timingsSha": "5bbcf34ab8bf",
-        "example": "shard 1/3: 1 files, 5 tests, ~9.1s (all shards 7.3s-9.1s, largest group 9.0s), timings 5bbcf34ab8bf, 52/52 tests known, 1 worker(s), plan 628fd58db1c4"
+        "planSha": "0a1cdfe846e3",
+        "timingsSha": "f1975ccd6896",
+        "example": "shard 1/3: 1 files, 5 tests, ~9.1s (all shards 7.4s-9.1s, largest group 9.0s), timings f1975ccd6896, 52/52 tests known, 1 worker(s), plan 0a1cdfe846e3"
       },
-      "finding": "Every shard printed 1 line, all with timings `5bbcf34ab8bf` and plan `628fd58db1c4`, for example: `shard 1/3: 1 files, 5 tests, ~9.1s (all shards 7.3s-9.1s, largest group 9.0s), timings 5bbcf34ab8bf, 52/52 tests known, 1 worker(s), plan 628fd58db1c4`."
+      "finding": "Every shard printed 1 line, all with timings `f1975ccd6896` and plan `0a1cdfe846e3`, for example: `shard 1/3: 1 files, 5 tests, ~9.1s (all shards 7.4s-9.1s, largest group 9.0s), timings f1975ccd6896, 52/52 tests known, 1 worker(s), plan 0a1cdfe846e3`."
     },
     {
       "id": "a.setup-aware",
@@ -163,34 +163,50 @@
         "harnessOk": true,
         "violations": {},
         "exitCodes": [0, 0, 0],
-        "setupMs": 104,
+        "setupMs": 106,
         "shards": [
           {
             "shard": 1,
             "ranSetup": true,
             "hostsDependent": true,
-            "predictedMs": 1423,
-            "workMs": 1319
+            "predictedMs": 1438,
+            "workMs": 1332
           },
           {
             "shard": 2,
             "ranSetup": false,
             "hostsDependent": false,
-            "predictedMs": 9015,
-            "workMs": 9015
+            "predictedMs": 9024,
+            "workMs": 9024
           },
           {
             "shard": 3,
             "ranSetup": false,
             "hostsDependent": false,
-            "predictedMs": 2284,
-            "workMs": 2284
+            "predictedMs": 2305,
+            "workMs": 2305
           }
         ],
         "consistent": true,
         "setupShards": 1
       },
-      "finding": "Only `chromium` depends on setup, three shards: the shards that ran setup (1) are exactly the shards that host a `chromium` test. Each predicted time equals its work plus 104 ms of setup and teardown on those shards and its work alone on the others (true); harness violations none."
+      "finding": "Only `chromium` depends on setup, three shards: the shards that ran setup (1) are exactly the shards that host a `chromium` test. Each predicted time equals its work plus 106 ms of setup and teardown on those shards and its work alone on the others (true); harness violations none."
+    },
+    {
+      "id": "a.repeat-collision",
+      "group": "assignment",
+      "claim": "Under `--repeat-each` a test whose title reads like a repeat of another keeps its own identity in the records.",
+      "status": "fail",
+      "facts": {
+        "harnessOk": true,
+        "violations": {},
+        "exitCodes": [0, 0],
+        "leaves": 8,
+        "checkExit": 1,
+        "checkedTests": 6,
+        "collides": true
+      },
+      "finding": "Tests `target` and `target (repeat 1)` under `--repeat-each=2`: the harness counts 8 leaves run once (violations none), while `check` exits 1, counts 6 distinct tests and reports `target (repeat 1)` as run twice (true), because a repeat is the key plus a ` (repeat N)` suffix."
     },
     {
       "id": "p.copies-same-plan",
@@ -202,10 +218,10 @@
         "violations": {},
         "exitCodes": [0, 0, 0],
         "identicalBytes": true,
-        "planShas": ["628fd58db1c4", "628fd58db1c4", "628fd58db1c4"],
-        "referencePlanSha": "628fd58db1c4"
+        "planShas": ["0a1cdfe846e3", "0a1cdfe846e3", "0a1cdfe846e3"],
+        "referencePlanSha": "0a1cdfe846e3"
       },
-      "finding": "Three shards, each reading its own copy of the same bytes, logged plan `628fd58db1c4`, the plan of the run that shared one file; harness violations none."
+      "finding": "Three shards, each reading its own copy of the same bytes, logged plan `0a1cdfe846e3`, the plan of the run that shared one file; harness violations none."
     },
     {
       "id": "p.workers-independent",
@@ -213,10 +229,10 @@
       "claim": "The plan does not depend on Playwright's `--workers`: the reporter packs for its own `workers` option.",
       "status": "pass",
       "facts": {
-        "planShasWorkers1": ["628fd58db1c4", "628fd58db1c4", "628fd58db1c4"],
-        "planShasWorkers4": ["628fd58db1c4", "628fd58db1c4", "628fd58db1c4"]
+        "planShasWorkers1": ["0a1cdfe846e3", "0a1cdfe846e3", "0a1cdfe846e3"],
+        "planShasWorkers4": ["0a1cdfe846e3", "0a1cdfe846e3", "0a1cdfe846e3"]
       },
-      "finding": "`--list` of the three shards with `--workers=1` and with `--workers=4` logged plan `628fd58db1c4`."
+      "finding": "`--list` of the three shards with `--workers=1` and with `--workers=4` logged plan `0a1cdfe846e3`."
     },
     {
       "id": "p.slow-clock",
@@ -224,10 +240,10 @@
       "claim": "With a clock that jumps a second on every read, every shard computes the same plan as without it.",
       "status": "pass",
       "facts": {
-        "planShas": ["628fd58db1c4", "628fd58db1c4", "628fd58db1c4"],
-        "slowClockPlanShas": ["628fd58db1c4", "628fd58db1c4", "628fd58db1c4"]
+        "planShas": ["0a1cdfe846e3", "0a1cdfe846e3", "0a1cdfe846e3"],
+        "slowClockPlanShas": ["0a1cdfe846e3", "0a1cdfe846e3", "0a1cdfe846e3"]
       },
-      "finding": "With a clock that runs one second ahead on every read, the three shards logged plan `628fd58db1c4`, against `628fd58db1c4` without it."
+      "finding": "With a clock that runs one second ahead on every read, the three shards logged plan `0a1cdfe846e3`, against `0a1cdfe846e3` without it."
     },
     {
       "id": "s.failopen-damaged",
@@ -237,8 +253,8 @@
       "facts": {
         "harnessOk": false,
         "violations": {
-          "duplicate": 17,
           "missing": 5,
+          "duplicate": 17,
           "serial-split": 2
         },
         "exitCodes": [0, 0, 0],
@@ -247,7 +263,7 @@
         "checkExit": 1,
         "checkNamesMixed": true
       },
-      "finding": "Shard 2 read a truncated copy and fell back to the built-in split while shards 1 and 3 balanced (balanced, builtin, balanced). Every shard exited 0 and the harness found duplicate 17, missing 5, serial-split 2. `check` exits 1 and names the mixed split, after the tests ran."
+      "finding": "Shard 2 read a truncated copy and fell back to the built-in split while shards 1 and 3 balanced (balanced, builtin, balanced). Every shard exited 0 and the harness found missing 5, duplicate 17, serial-split 2. `check` exits 1 and names the mixed split, after the tests ran."
     },
     {
       "id": "s.strict-damaged",
@@ -309,8 +325,8 @@
       "facts": {
         "harnessOk": false,
         "violations": {
-          "duplicate": 17,
           "missing": 5,
+          "duplicate": 17,
           "serial-split": 2
         },
         "exitCodes": [0, 0, 0],
@@ -318,7 +334,7 @@
         "checkExit": 1,
         "namesMissing": true
       },
-      "finding": "`--reporter=list` on shard 2 replaced the config's reporters, so that shard split natively and wrote no record. The shards exited 0 / 0 / 0 with duplicate 17, missing 5, serial-split 2; `check` exits 1 with `missing records for shard 2`."
+      "finding": "`--reporter=list` on shard 2 replaced the config's reporters, so that shard split natively and wrote no record. The shards exited 0 / 0 / 0 with missing 5, duplicate 17, serial-split 2; `check` exits 1 with `missing records for shard 2`."
     },
     {
       "id": "s.reporter-dropped-all",
@@ -354,14 +370,16 @@
     {
       "id": "c.duplicate-record",
       "group": "check",
-      "claim": "`check` fails when a shard has two records, and counts the tests that ran twice.",
+      "claim": "`check` fails when a shard has two records, and counts every test of that shard as run twice.",
       "status": "pass",
       "facts": {
         "checkExit": 1,
         "namesRepeat": true,
-        "duplicates": 26
+        "duplicates": 26,
+        "shardOneTests": 26,
+        "duplicatesAreShardOne": true
       },
-      "finding": "Shard 1's record given twice: exit 1, `more than one record for shard 1`, 26 tests counted twice."
+      "finding": "Shard 1's record given twice: exit 1, `more than one record for shard 1`, 26 tests counted twice, the 26 tests of that shard."
     },
     {
       "id": "c.not-run",
@@ -372,9 +390,9 @@
         "exitCodes": [1, 1],
         "recordsWritten": [true, true],
         "checkExit": 1,
-        "notRun": 46
+        "notRun": 34
       },
-      "finding": "A test that fails first and `--max-failures=1`: the shards exited 1 / 1 and both wrote a record; `check` exits 1 with 46 tests that did not run."
+      "finding": "A test that fails first and `--max-failures=1`: the shards exited 1 / 1 and both wrote a record; `check` exits 1 with 34 tests that did not run."
     },
     {
       "id": "c.corpus-mismatch",
@@ -384,14 +402,15 @@
       "facts": {
         "harnessOk": false,
         "violations": {
-          "missing": 23
+          "missing": 26,
+          "duplicate": 3
         },
         "exitCodes": [0, 0],
         "checkExit": 1,
         "namesCorpus": true,
         "corpora": [52, 6]
       },
-      "finding": "`--grep=cart` on shard 2 only: the records hold corpora of 52 and 6 tests, the harness found missing 23, and `check` exits 1 naming the different test sets."
+      "finding": "`--grep=cart` on shard 2 only: the records hold corpora of 52 and 6 tests, the harness found missing 26, duplicate 3, and `check` exits 1 naming the different test sets."
     },
     {
       "id": "c.summary",
@@ -413,19 +432,19 @@
       "status": "pass",
       "facts": {
         "exitCode": 1,
-        "failedMs": 9118,
+        "failedMs": 9099,
         "outcome": "unexpected",
         "updateExit": 0,
         "before": {
-          "chromium": [1040],
-          "firefox": [1035]
+          "chromium": [1038],
+          "firefox": [1046]
         },
         "after": {
-          "chromium": [1040],
-          "firefox": [1035]
+          "chromium": [1038],
+          "firefox": [1046]
         }
       },
-      "finding": "The volatile test failed after 3000 ms on each of its attempts (9118 ms in chromium, outcome `unexpected`). After `update` its samples are 1040 ms in chromium and 1035 ms in firefox, as before."
+      "finding": "The volatile test failed after 3000 ms on each of its attempts (9099 ms in chromium, outcome `unexpected`). After `update` its samples are 1038 ms in chromium and 1046 ms in firefox, as before."
     },
     {
       "id": "h.cancelled",
@@ -438,15 +457,16 @@
         "status": "interrupted",
         "ran": false,
         "before": {
-          "chromium": [1040],
-          "firefox": [1035]
+          "chromium": [1038],
+          "firefox": [1046]
         },
         "after": {
-          "chromium": [1040],
-          "firefox": [1035]
-        }
+          "chromium": [1038],
+          "firefox": [1046]
+        },
+        "changedEntries": 1
       },
-      "finding": "SIGINT 300 ms into the test: exit 130, the record says `interrupted` and marks the test as not run, and `update` leaves its samples at 1040 ms in chromium."
+      "finding": "SIGINT 300 ms into the test: exit 130, the record says `interrupted` and marks the test as not run, and `update` leaves its samples at 1038 ms in chromium. Across the whole history `update` changed 1 entry, from the tests that passed before the signal."
     },
     {
       "id": "h.faster-test",
@@ -454,10 +474,10 @@
       "claim": "From a full window, the price of a test that got faster follows it in three runs.",
       "status": "pass",
       "facts": {
-        "pricesMs": [1040, 1040, 1040, 127],
-        "samples": [1040, 1040, 127, 123, 125]
+        "pricesMs": [1038, 1038, 1038, 127],
+        "samples": [1038, 1038, 126, 127, 126]
       },
-      "finding": "The volatile test went from about one second to 100 ms, starting from a window of five samples. Its chromium price before and after each of 3 faster runs: 1040 then 1040 then 1040 then 127 ms (samples 1040, 1040, 127, 123, 125). The median of the last five drops once the fast samples are the majority."
+      "finding": "The volatile test went from about one second to 100 ms, starting from a window of five samples. Its chromium price before and after each of 3 faster runs: 1038 then 1038 then 1038 then 127 ms (samples 1038, 1038, 126, 127, 126). The median of the last five drops once the fast samples are the majority."
     },
     {
       "id": "h.flaky-slow",
@@ -467,13 +487,40 @@
       "facts": {
         "outcome": "flaky",
         "attempts": 2,
-        "sampleMs": 4007,
-        "passingAttemptMs": 1002,
-        "shortWindowPriceMs": [1040, 2524],
-        "fullWindowPriceMs": [1040, 1040],
+        "sampleMs": 4008,
+        "passingAttemptMs": 1003,
+        "shortWindowPriceMs": [1038, 2523],
+        "fullWindowPriceMs": [1038, 1038],
         "updateExits": [0, 0]
       },
-      "finding": "The first attempt failed after 3000 ms and the retry passed in 1002 ms; the record gives one sample of 4007 ms. From the one-sample history the chromium price moves from 1040 to 2524 ms; from a full window it stays at 1040 ms."
+      "finding": "The first attempt failed after 3000 ms and the retry passed in 1003 ms; the record gives one sample of 4008 ms. From the one-sample history the chromium price moves from 1038 to 2523 ms; from a full window it stays at 1038 ms."
+    },
+    {
+      "id": "h.mixed-outcome",
+      "group": "history",
+      "claim": "A complete run in which one test failed leaves the history as it was.",
+      "status": "fail",
+      "facts": {
+        "recordStatuses": ["failed", "failed"],
+        "checkExit": 0,
+        "updateExit": 0,
+        "changedEntries": 54,
+        "volatileUnchanged": true
+      },
+      "finding": "The volatile test failed in a complete two-shard run (records failed, failed). `check` exits 0, since no test is missing, repeated or stopped, and `update` exits 0 and changes 54 entries of the history with the samples of the tests that passed; the failed test keeps its samples (true)."
+    },
+    {
+      "id": "h.zero-samples",
+      "group": "history",
+      "claim": "Passing samples of zero milliseconds never move the price of a full window to zero.",
+      "status": "fail",
+      "facts": {
+        "updateExits": [0, 0, 0],
+        "priceBeforeMs": 1038,
+        "priceAfterMs": 0,
+        "samples": [1038, 1038, 0, 0, 0]
+      },
+      "finding": "Three records in which the test passed in 0 ms, merged into a full window priced at 1038 ms: `update` accepts each (exit 0 / 0 / 0), the window holds 1038, 1038, 0, 0, 0 ms and the price is 0 ms."
     },
     {
       "id": "h.damaged-history",
@@ -487,9 +534,9 @@
         "badInputUnchanged": true,
         "stringSamplesExit": 1,
         "stringSamplesUnchanged": true,
-        "stringSamplesMessage": "timings.json has an invalid entry for \"[chromium] › account.spec.js › account › loads the page\""
+        "stringSamplesMessage": "timings.json has an invalid entry for \"[chromium] \u203a account.spec.js \u203a account \u203a loads the page\""
       },
-      "finding": "A truncated history exits 1, a truncated record exits 1, and samples stored as text exit 1 (`timings.json has an invalid entry for \"[chromium] › account.spec.js › account › loads the page\"`); each history file keeps its bytes."
+      "finding": "A truncated history exits 1, a truncated record exits 1, and samples stored as text exit 1 (`timings.json has an invalid entry for \"[chromium] \u203a account.spec.js \u203a account \u203a loads the page\"`); each history file keeps its bytes."
     },
     {
       "id": "h.duplicate-input",
@@ -565,13 +612,13 @@
       "claim": "The same inputs in the same order give the same bytes and sha with sorted keys; another order changes only the order of the `applied` list.",
       "status": "pass",
       "facts": {
-        "shas": ["590434caa09c", "590434caa09c", "2f9fa242441f"],
+        "shas": ["825ad83aad1d", "825ad83aad1d", "b58c2fddb90f"],
         "sameOrderSameBytes": true,
         "otherOrderSameBytes": false,
         "otherOrderSameEntries": true,
         "keysSorted": true
       },
-      "finding": "Two copies updated with the shard records in one order give `590434caa09c` and `590434caa09c`; the opposite order gives `2f9fa242441f`, with the same entries (true) and the input shas listed in the other order. A writer that sorts its inputs gets the same bytes every time."
+      "finding": "Two copies updated with the shard records in one order give `825ad83aad1d` and `825ad83aad1d`; the opposite order gives `b58c2fddb90f`, with the same entries (true) and the input shas listed in the other order. A writer that sorts its inputs gets the same bytes every time."
     },
     {
       "id": "h.racing-publish",
@@ -608,20 +655,20 @@
           {
             "name": "known test",
             "level": "known",
-            "packageMs": 102,
-            "oursMs": 102
+            "packageMs": 103,
+            "oursMs": 103
           },
           {
             "name": "new test in a known describe",
             "level": "describe",
-            "packageMs": 122,
-            "oursMs": 122
+            "packageMs": 123,
+            "oursMs": 123
           },
           {
             "name": "new loose test in a known file",
             "level": "file",
-            "packageMs": 401,
-            "oursMs": 401
+            "packageMs": 402,
+            "oursMs": 402
           },
           {
             "name": "new file in a known project",
@@ -641,58 +688,60 @@
         "levelsDiffer": true,
         "staticSkipMs": 0
       },
-      "finding": "On a suite with two describes and a loose test in one file, a second file and slower firefox tests, the four medians differ (true). The package's estimator gives 102 ms (known), 122 ms (describe), 401 ms (file), 142 ms (project), 673 ms (suite); our own medians give the same (true). A static skip costs 0 ms."
+      "finding": "On a suite with two describes and a loose test in one file, a second file and slower firefox tests, the four medians differ (true). The package's estimator gives 103 ms (known), 123 ms (describe), 402 ms (file), 142 ms (project), 673 ms (suite); our own medians give the same (true). A static skip costs 0 ms."
     },
     {
       "id": "w.plan-workers",
       "group": "workers",
-      "claim": "A plan packed for the workers a shard runs predicts its time better than a plan packed for one worker.",
+      "claim": "Under `--workers=2` the plan packed for one worker and the plan packed for two predict different shard times, and each predicts its shards within 25% on average.",
       "status": "pass",
       "facts": {
         "harnessOk": [true, true],
         "predictedMs": [
-          [9122, 9118, 7332],
-          [9122, 9118, 3843]
+          [9126, 9119, 7380],
+          [9126, 9119, 3858]
         ],
         "testsMs": [
-          [9599, 9603, 5146],
-          [9559, 9583, 5169]
+          [9574, 9541, 5090],
+          [9569, 9566, 5115]
         ],
-        "errorPlanWorkers1": 0.175,
-        "errorPlanWorkers2": 0.117
+        "errorPlanWorkers1": 0.18,
+        "errorPlanWorkers2": 0.113,
+        "tolerance": 0.25,
+        "predictionsDiffer": true
       },
-      "finding": "Three shards under `--workers=2`: the plan for one worker predicted 9122 / 9118 / 7332 ms and missed the measured 9599 / 9603 / 5146 ms by 17.5% on average; the plan for two workers predicted 9122 / 9118 / 3843 ms against 9559 / 9583 / 5169 ms, off by 11.7%."
+      "finding": "Three shards under `--workers=2`: the plan for one worker predicted 9126 / 9119 / 7380 ms and missed the measured 9574 / 9541 / 5090 ms by 18.0% on average; the plan for two workers predicted 9126 / 9119 / 3858 ms against 9569 / 9566 / 5115 ms, off by 11.3%."
     },
     {
       "id": "sim.predicted-vs-actual",
       "group": "simulate",
-      "claim": "`simulate` predicts the slowest shard of the fixture within 20%, with the built-in split and balanced, and never predicts the balanced plan above the built-in split.",
+      "claim": "`simulate` predicts the slowest shard of the fixture within 25%, with the built-in split and balanced, and never predicts the balanced plan above the built-in split.",
       "status": "pass",
       "facts": {
         "rows": [
           {
             "shards": 2,
-            "simulatedBuiltinMs": 12737,
-            "measuredBuiltinMs": 13700,
-            "simulatedBalancedMs": 12733,
-            "measuredBalancedMs": 13877,
-            "builtinError": 0.07,
-            "balancedError": 0.082
+            "simulatedBuiltinMs": 12763,
+            "measuredBuiltinMs": 13802,
+            "simulatedBalancedMs": 12760,
+            "measuredBalancedMs": 14002,
+            "builtinError": 0.075,
+            "balancedError": 0.089
           },
           {
             "shards": 3,
-            "simulatedBuiltinMs": 11441,
-            "measuredBuiltinMs": 12268,
-            "simulatedBalancedMs": 9122,
-            "measuredBalancedMs": 9530,
-            "builtinError": 0.067,
-            "balancedError": 0.043
+            "simulatedBuiltinMs": 11451,
+            "measuredBuiltinMs": 12319,
+            "simulatedBalancedMs": 9126,
+            "measuredBalancedMs": 9579,
+            "builtinError": 0.07,
+            "balancedError": 0.047
           }
         ],
-        "tolerance": 0.2,
+        "tolerance": 0.25,
         "balancedNeverSlower": true
       },
-      "finding": "2 shards: built-in 12737 ms simulated against 13700 ms measured, balanced 12733 ms against 13877 ms. 3 shards: built-in 11441 ms simulated against 12268 ms measured, balanced 9122 ms against 9530 ms. The balanced prediction is at or below the built-in one at every shard count (true)."
+      "finding": "2 shards: built-in 12763 ms simulated against 13802 ms measured, balanced 12760 ms against 14002 ms. 3 shards: built-in 11451 ms simulated against 12319 ms measured, balanced 9126 ms against 9579 ms. The balanced prediction is at or below the built-in one at every shard count (true)."
     },
     {
       "id": "sim.overhead",
@@ -700,13 +749,13 @@
       "claim": "`--overhead` adds a fixed cost per shard: once to the elapsed time and once per shard to the machine time, leaving the plan alone.",
       "status": "pass",
       "facts": {
-        "elapsedMs": 9122,
-        "elapsedWithOverheadMs": 99122,
-        "machineMs": 25572,
-        "machineWithOverheadMs": 295572,
-        "balancedMs": 9122
+        "elapsedMs": 9126,
+        "elapsedWithOverheadMs": 99126,
+        "machineMs": 25625,
+        "machineWithOverheadMs": 295625,
+        "balancedMs": 9126
       },
-      "finding": "Three shards with `--overhead 90s`: elapsed 9122 ms becomes 99122 ms and machine time 25572 ms becomes 295572 ms; the balanced slowest shard stays 9122 ms."
+      "finding": "Three shards with `--overhead 90s`: elapsed 9126 ms becomes 99126 ms and machine time 25625 ms becomes 295625 ms; the balanced slowest shard stays 9126 ms."
     },
     {
       "id": "sim.couture-cast",
@@ -1042,20 +1091,22 @@
     {
       "id": "n.no-network",
       "group": "network",
-      "claim": "The reporter, `update`, `check` and `simulate` make no network connection and start no program of their own.",
+      "claim": "The reporter, `update`, `check` and `simulate` make no network connection; the reporter starts no program beyond what Playwright starts without it, and the commands start none.",
       "status": "pass",
       "facts": {
         "controlAttempts": 1,
+        "controlExit": 0,
+        "controlStderr": "",
         "harnessOk": true,
         "strategies": ["balanced", "balanced"],
         "cliExits": [0, 0, 0],
         "attempts": 0,
-        "spawned": {
-          "workerProcessEntry.js": 23
-        },
-        "programs": []
+        "reporterRunPrograms": {},
+        "plainRunPrograms": {},
+        "programsAdded": [],
+        "cliSpawns": 0
       },
-      "finding": "A balanced two-shard run and the three commands under the guard: 0 connection attempts and no program started besides Node and Playwright's workers (0 others). The control `fetch` was recorded 1 time."
+      "finding": "A balanced two-shard run and the three commands under the guard: 0 connection attempts. Besides Node workers the reporter run started no program and the same shards without the reporter no program, so the reporter added 0 programs; the commands started 0. The control `fetch` was recorded 1 time."
     }
   ],
   "citations": [
@@ -1191,7 +1242,7 @@
       "source": "upstream",
       "file": "src/report.ts",
       "lines": "33-37",
-      "quote": "return [`[${project}]`, file, ...titles].join(' › ');",
+      "quote": "return [`[${project}]`, file, ...titles].join(' \u203a ');",
       "ok": true,
       "reason": null
     },
@@ -1208,6 +1259,22 @@
       "file": "src/reporter.ts",
       "lines": "203-204",
       "quote": "testRun.skipSharding();",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "src/atoms.ts",
+      "lines": "21",
+      "quote": "export const repeatSuffix = (r: number) => (r > 0 ? ` (repeat ${r})` : '');",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "src/run.ts",
+      "lines": "76",
+      "quote": "const testId = (t: { key: string; repeat: number }) => t.key + repeatSuffix(t.repeat);",
       "ok": true,
       "reason": null
     },
@@ -1264,6 +1331,14 @@
       "file": "src/timings.ts",
       "lines": "60-67",
       "quote": "renameSync(tmp, path);",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "src/run.ts",
+      "lines": "80-154",
+      "quote": "// Proves a sharded run ran every test exactly once: all shards present, all on the same plan,",
       "ok": true,
       "reason": null
     },
@@ -1349,14 +1424,6 @@
     },
     {
       "source": "upstream",
-      "file": "src/run.ts",
-      "lines": "80-154",
-      "quote": "// Proves a sharded run ran every test exactly once: all shards present, all on the same plan,",
-      "ok": true,
-      "reason": null
-    },
-    {
-      "source": "upstream",
       "file": "src/commands.ts",
       "lines": "265-279",
       "quote": "'| Shard | Tests | Predicted | Test time | Whole run | Status |',",
@@ -1408,6 +1475,14 @@
       "file": "src/timings.ts",
       "lines": "71-87",
       "quote": "if (daysBetween(entry.seen, today) <= PRUNE_AFTER_DAYS)",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "src/timings.ts",
+      "lines": "35",
+      "quote": "Number.isInteger(s) && s >= 0",
       "ok": true,
       "reason": null
     },
@@ -1628,5 +1703,5 @@
       "reason": null
     }
   ],
-  "durationMs": 955648
+  "durationMs": 1015873
 }

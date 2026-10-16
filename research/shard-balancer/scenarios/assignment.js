@@ -211,6 +211,50 @@ function renamed(ctx) {
   );
 }
 
+// Two tests whose titles collide with the repeat suffix of the package: under --repeat-each=2
+// `target` repeat 1 and `target (repeat 1)` repeat 0 get one id.
+const COLLIDING = `'use strict';
+
+const { test } = require('@playwright/test');
+const { sleep } = require('./support');
+
+test('target', async () => {
+  await sleep(50);
+});
+
+test('target (repeat 1)', async () => {
+  await sleep(50);
+});
+`;
+
+function repeatCollision(ctx) {
+  const cwd = ctx.once('variant:colliding', () => {
+    const edits = { 'tests/colliding.spec.js': COLLIDING };
+    for (const file of fs.readdirSync(path.join(ctx.cwd, 'tests'))) {
+      if (file.endsWith('.spec.js')) edits[`tests/${file}`] = null;
+    }
+    edits['tests/colliding.spec.js'] = COLLIDING;
+    return ctx.copy('variant-colliding', edits);
+  });
+  const run = ctx.run({ name: 'repeat-collision-2', cwd, shards: 2, repeatEach: 2 });
+  const checked = checkRun(run);
+  const json = checked.json || { duplicates: [], tests: null };
+  const facts = {
+    ...harnessFacts(run),
+    leaves: run.listing.leaves.filter((l) => !l.dependency).length,
+    checkExit: checked.status,
+    checkedTests: json.tests,
+    collides: json.duplicates.some((id) => id.endsWith('target (repeat 1)')),
+  };
+  return row(
+    'a.repeat-collision',
+    'Under `--repeat-each` a test whose title reads like a repeat of another keeps its own identity in the records.',
+    facts.harnessOk && facts.checkExit === 0 && facts.checkedTests === facts.leaves,
+    facts,
+    `Tests \`target\` and \`target (repeat 1)\` under \`--repeat-each=2\`: the harness counts ${facts.leaves} leaves run once (violations ${kindsText(facts.violations)}), while \`check\` exits ${facts.checkExit}, counts ${facts.checkedTests} distinct tests and reports \`target (repeat 1)\` as run twice (${facts.collides}), because a repeat is the key plus a \` (repeat N)\` suffix.`
+  );
+}
+
 /** The setup project's leaves a shard ran. */
 const ranSetup = (shard) => (shard.leaves || []).some((leaf) => leaf.project === 'setup');
 
@@ -377,6 +421,7 @@ function assignmentRows(ctx) {
     renamed(ctx),
     logLine(ctx),
     setupAware(ctx),
+    repeatCollision(ctx),
   ];
 }
 

@@ -93,11 +93,16 @@ function volatileSamples(file) {
 function updateCopy(ctx, name, run, base = greenHistory(ctx).timings) {
   const timings = ctx.timingsCopy(name, base);
   const before = volatileSamples(timings);
+  const entriesBefore = drive.readTimings(timings).tests;
   const call = drive.update(
     timings,
     run.records.filter(Boolean).map((r) => r.file)
   );
-  return { timings, before, after: volatileSamples(timings), call };
+  const entriesAfter = drive.readTimings(timings).tests;
+  const changed = Object.keys({ ...entriesBefore, ...entriesAfter }).filter(
+    (key) => JSON.stringify(entriesBefore[key]) !== JSON.stringify(entriesAfter[key])
+  );
+  return { timings, before, after: volatileSamples(timings), call, changedEntries: changed.length };
 }
 
 function failedSlow(ctx) {
@@ -141,6 +146,7 @@ function cancelled(ctx) {
     ran: test ? test.ran : null,
     before: merged && merged.before,
     after: merged && merged.after,
+    changedEntries: merged && merged.changedEntries,
   };
   return row(
     'h.cancelled',
@@ -151,7 +157,7 @@ function cancelled(ctx) {
       merged !== null &&
       unchanged(facts.before, facts.after),
     facts,
-    `SIGINT ${CANCEL_AFTER_MS} ms into the test: exit ${facts.exitCode}, the record says \`${facts.status}\` and marks the test as not run, and \`update\` leaves its samples at ${facts.after ? facts.after.chromium.join(', ') : 'none'} ms in chromium.`
+    `SIGINT ${CANCEL_AFTER_MS} ms into the test: exit ${facts.exitCode}, the record says \`${facts.status}\` and marks the test as not run, and \`update\` leaves its samples at ${facts.after ? facts.after.chromium.join(', ') : 'none'} ms in chromium. Across the whole history \`update\` changed ${facts.changedEntries} ${facts.changedEntries === 1 ? 'entry' : 'entries'}, from the tests that passed before the signal.`
   );
 }
 
@@ -182,6 +188,67 @@ function fasterTest(ctx) {
   );
 }
 
+function mixedOutcome(ctx) {
+  const run = ctx.run({
+    name: 'red-mixed-2',
+    cwd: redProject(ctx),
+    shards: 2,
+    timings: greenHistory(ctx).timings,
+  });
+  const files = run.records.filter(Boolean).map((r) => r.file);
+  const checked = drive.check(files);
+  const merged = updateCopy(ctx, 'red-mixed', run);
+  const facts = {
+    recordStatuses: run.records.map((r) => r && r.data.status),
+    checkExit: checked.status,
+    updateExit: merged.call.status,
+    changedEntries: merged.changedEntries,
+    volatileUnchanged: unchanged(merged.before, merged.after),
+  };
+  return row(
+    'h.mixed-outcome',
+    'A complete run in which one test failed leaves the history as it was.',
+    merged.call.status === 0 && merged.changedEntries === 0,
+    facts,
+    `The volatile test failed in a complete two-shard run (records ${facts.recordStatuses.join(', ')}). \`check\` exits ${facts.checkExit}, since no test is missing, repeated or stopped, and \`update\` exits ${facts.updateExit} and changes ${facts.changedEntries} entries of the history with the samples of the tests that passed; the failed test keeps its samples (${facts.volatileUnchanged}).`
+  );
+}
+
+function zeroSamples(ctx) {
+  const file = fullWindow(ctx, 'zero');
+  const priceBefore = median(drive.samplesOf(file, keyOf('chromium')));
+  const source = greenHistory(ctx).records.find((r) =>
+    r.data.tests.some((t) => t.key === keyOf('chromium') && t.ran)
+  );
+  const exits = [];
+  for (let n = 1; n <= 3; n += 1) {
+    // A run record in which the test passed in 0 ms; `wall_ms` differs, so no input repeats.
+    const record = {
+      ...source.data,
+      wall_ms: n,
+      tests: source.data.tests
+        .filter((t) => t.key === keyOf('chromium'))
+        .map((t) => ({ ...t, duration_ms: 0 })),
+    };
+    const input = path.join(ctx.dir(`zero-${n}`), 'record.json');
+    fs.writeFileSync(input, `${JSON.stringify(record)}\n`);
+    exits.push(drive.update(file, [input]).status);
+  }
+  const facts = {
+    updateExits: exits,
+    priceBeforeMs: priceBefore,
+    priceAfterMs: median(drive.samplesOf(file, keyOf('chromium'))),
+    samples: drive.samplesOf(file, keyOf('chromium')),
+  };
+  return row(
+    'h.zero-samples',
+    'Passing samples of zero milliseconds never move the price of a full window to zero.',
+    exits.every((c) => c === 0) && facts.priceAfterMs > 0,
+    facts,
+    `Three records in which the test passed in 0 ms, merged into a full window priced at ${facts.priceBeforeMs} ms: \`update\` accepts each (exit ${exits.join(' / ')}), the window holds ${facts.samples.join(', ')} ms and the price is ${facts.priceAfterMs} ms.`
+  );
+}
+
 function flakySlow(ctx) {
   const run = volatileRun(ctx, {
     name: 'flaky-slow',
@@ -192,8 +259,20 @@ function flakySlow(ctx) {
     json: true,
   });
   const record = run.records[0];
-  const test = record && record.data.tests.find((t) => t.key === keyOf('chromium'));
-  const report = JSON.parse(fs.readFileSync(path.join(run.dir, 'report-1.json'), 'utf8'));
+  const claim =
+    'A flaky result adds one sample with every attempt summed, so a slow failed attempt inflates it, and the median of a full window absorbs one such sample.';
+  const reportFile = path.join(run.dir, 'report-1.json');
+  if (!record || !fs.existsSync(reportFile)) {
+    return row(
+      'h.flaky-slow',
+      claim,
+      false,
+      { recordWritten: Boolean(record) },
+      'The run wrote no record or no JSON report.'
+    );
+  }
+  const test = record.data.tests.find((t) => t.key === keyOf('chromium'));
+  const report = JSON.parse(fs.readFileSync(reportFile, 'utf8'));
   const results = [];
   const visit = (suite) => {
     for (const spec of suite.specs || []) {
@@ -219,7 +298,7 @@ function flakySlow(ctx) {
   const inflated = facts.sampleMs >= facts.passingAttemptMs + SLOW_FAILURE_MS * 0.9;
   return row(
     'h.flaky-slow',
-    'A flaky result adds one sample with every attempt summed, so a slow failed attempt inflates it, and the median of a full window absorbs one such sample.',
+    claim,
     facts.outcome === 'flaky' &&
       inflated &&
       facts.updateExits.every((c) => c === 0) &&
@@ -557,6 +636,8 @@ function historyRows(ctx) {
     cancelled(ctx),
     fasterTest(ctx),
     flakySlow(ctx),
+    mixedOutcome(ctx),
+    zeroSamples(ctx),
     damagedHistory(ctx),
     duplicateInput(ctx),
     filtered(ctx),

@@ -330,13 +330,18 @@ function flakinessLines(output) {
 
 /** Clears the Flakiness variables of the developer's environment before any Flakiness run. */
 function clearFlakinessEnvironment() {
+  const saved = {};
   for (const name of Object.keys(process.env)) {
-    if (name.startsWith('FLAKINESS_') || name.startsWith('PSP_FLK_')) delete process.env[name];
+    if (name.startsWith('FLAKINESS_') || name.startsWith('PSP_FLK_')) {
+      saved[name] = process.env[name];
+      delete process.env[name];
+    }
   }
+  return () => Object.assign(process.env, saved);
 }
 
 function flakinessNoParallelMode(ctx) {
-  clearFlakinessEnvironment();
+  const restore = clearFlakinessEnvironment();
   const copy = ctx.once('flk-no-mode', () =>
     mutatedCopy({
       dir: ctx.dir('flk-no-mode'),
@@ -383,6 +388,7 @@ function flakinessNoParallelMode(ctx) {
       `A copy of \`@flakiness/playwright\` whose ${copy.replacements} read of \`_parallelMode\` names a missing property. Default config: exit ${configs.default.exitCodes.join(' / ')}, balanced (${configs.default.balances}), ${configs.default.splitFiles} files split, violations ${kindsText(configs.default.violations)}. \`fullyParallel\`: exit ${configs.fullyParallel.exitCodes.join(' / ')}, balanced (${configs.fullyParallel.balances}), ${configs.fullyParallel.splitFiles} files split where the unmodified reporter split ${configs.fullyParallel.unmodifiedSplitFiles}, violations ${kindsText(configs.fullyParallel.violations)}. It prints no warning about the missing field (${!configs.default.warns && !configs.fullyParallel.warns}).`
     );
   } finally {
+    restore();
     if (!process.env.PSP_KEEP_TMP) flk.dispose();
   }
 }

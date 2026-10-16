@@ -79,7 +79,10 @@ function failOpenDamaged(ctx) {
   const facts = {
     ...harnessFacts(run),
     strategies: strategies(run),
-    reason: run.records[1] ? run.records[1].data.reason.split(':')[0] : null,
+    reason:
+      run.records[1] && run.records[1].data.reason
+        ? run.records[1].data.reason.split(':')[0]
+        : null,
     checkExit: checked.status,
     checkNamesMixed: problemsOf(checked).some((p) =>
       p.startsWith('shards split the suite differently')
@@ -302,13 +305,15 @@ function duplicateRecord(ctx) {
     checkExit: checked.status,
     namesRepeat: checked.json.problems.includes('more than one record for shard 1'),
     duplicates: checked.json.duplicates.length,
+    shardOneTests: run.records[0].data.tests.filter((t) => !t.setup).length,
   };
+  facts.duplicatesAreShardOne = facts.duplicates === facts.shardOneTests;
   return row(
     'c.duplicate-record',
-    '`check` fails when a shard has two records, and counts the tests that ran twice.',
-    facts.checkExit === 1 && facts.namesRepeat && facts.duplicates > 0,
+    '`check` fails when a shard has two records, and counts every test of that shard as run twice.',
+    facts.checkExit === 1 && facts.namesRepeat && facts.duplicatesAreShardOne,
     facts,
-    `Shard 1's record given twice: exit ${facts.checkExit}, \`more than one record for shard 1\`, ${facts.duplicates} tests counted twice.`
+    `Shard 1's record given twice: exit ${facts.checkExit}, \`more than one record for shard 1\`, ${facts.duplicates} tests counted twice, the ${facts.shardOneTests} tests of that shard.`
   );
 }
 

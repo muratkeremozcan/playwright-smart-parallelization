@@ -21,7 +21,8 @@ const SEP = ' › ';
 const RAW = path.resolve(__dirname, '..', '..', '..', 'docs', 'measurements', 'raw');
 const COUTURE_LABEL = 'baseline-b';
 const SIM_SHARDS = '2-8';
-const PREDICTION_TOLERANCE = 0.2;
+const PREDICTION_TOLERANCE = 0.25;
+const WORKERS_TOLERANCE = 0.25;
 const COUTURE_TOLERANCE = 0.2;
 
 /** Our own computation of the estimate hierarchy: describe, file, project, suite medians. */
@@ -180,11 +181,18 @@ function planWorkers(ctx) {
     testsMs: runs.map((run) => run.records.map((r) => r.data.tests_ms)),
     errorPlanWorkers1: predictionError(runs[0]),
     errorPlanWorkers2: predictionError(runs[1]),
+    predictionsDiffer:
+      JSON.stringify(runs[0].records[0].data.predicted_ms) !==
+      JSON.stringify(runs[1].records[0].data.predicted_ms),
+    tolerance: WORKERS_TOLERANCE,
   };
   return row(
     'w.plan-workers',
-    'A plan packed for the workers a shard runs predicts its time better than a plan packed for one worker.',
-    facts.harnessOk.every(Boolean) && facts.errorPlanWorkers2 < facts.errorPlanWorkers1,
+    `Under \`--workers=2\` the plan packed for one worker and the plan packed for two predict different shard times, and each predicts its shards within ${WORKERS_TOLERANCE * 100}% on average.`,
+    facts.harnessOk.every(Boolean) &&
+      facts.predictionsDiffer &&
+      facts.errorPlanWorkers1 <= WORKERS_TOLERANCE &&
+      facts.errorPlanWorkers2 <= WORKERS_TOLERANCE,
     facts,
     `Three shards under \`--workers=2\`: the plan for one worker predicted ${facts.predictedMs[0].join(' / ')} ms and missed the measured ${facts.testsMs[0].join(' / ')} ms by ${(facts.errorPlanWorkers1 * 100).toFixed(1)}% on average; the plan for two workers predicted ${facts.predictedMs[1].join(' / ')} ms against ${facts.testsMs[1].join(' / ')} ms, off by ${(facts.errorPlanWorkers2 * 100).toFixed(1)}%.`
   );

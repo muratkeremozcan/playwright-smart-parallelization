@@ -18,6 +18,7 @@ const EXPECTED_ROWS = {
   'a.renamed': 'pass',
   'a.log-line': 'pass',
   'a.setup-aware': 'pass',
+  'a.repeat-collision': 'fail',
   'p.copies-same-plan': 'pass',
   'p.workers-independent': 'pass',
   'p.slow-clock': 'pass',
@@ -36,6 +37,8 @@ const EXPECTED_ROWS = {
   'h.cancelled': 'pass',
   'h.faster-test': 'pass',
   'h.flaky-slow': 'pass',
+  'h.mixed-outcome': 'fail',
+  'h.zero-samples': 'fail',
   'h.damaged-history': 'pass',
   'h.duplicate-input': 'pass',
   'h.filtered-run': 'pass',
@@ -111,7 +114,7 @@ const EXPECTED_FACTS = {
     checkUsage: true,
   },
   'c.missing-record': { checkExit: 1 },
-  'c.duplicate-record': { checkExit: 1, namesRepeat: true, duplicates: 26 },
+  'c.duplicate-record': { checkExit: 1, namesRepeat: true, duplicatesAreShardOne: true },
   'c.not-run': { checkExit: 1, recordsWritten: [true, true] },
   'c.corpus-mismatch': { checkExit: 1, namesCorpus: true, corpora: [52, 6] },
   'c.summary': { checkExit: 0, shardRows: 3, heading: '### Shard balance: ok' },
@@ -151,7 +154,7 @@ const EXPECTED_FACTS = {
     levels: ['known', 'describe', 'file', 'project', 'suite'],
     staticSkipMs: 0,
   },
-  'w.plan-workers': { harnessOk: [true, true] },
+  'w.plan-workers': { harnessOk: [true, true], predictionsDiffer: true },
   'sim.predicted-vs-actual': { balancedNeverSlower: true },
   'sim.couture-cast': {
     runs: 5,
@@ -184,7 +187,10 @@ const EXPECTED_FACTS = {
     'default.harnessOk': true,
     'fullyParallel.harnessOk': true,
   },
-  'n.no-network': { attempts: 0, programs: [] },
+  'n.no-network': { attempts: 0, programsAdded: [], cliSpawns: 0, controlExit: 0 },
+  'a.repeat-collision': { harnessOk: true, checkExit: 1, collides: true },
+  'h.mixed-outcome': { checkExit: 0, updateExit: 0, volatileUnchanged: true },
+  'h.zero-samples': { updateExits: [0, 0, 0], priceAfterMs: 0 },
 };
 
 /** The value at a dotted path of an object. */
