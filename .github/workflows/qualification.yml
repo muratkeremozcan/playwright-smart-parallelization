@@ -1,7 +1,8 @@
-# Qualifies the NSXBet Playwright orchestrator against the consumer fixture. Five independent
-# groups of checks collect evidence, one per runner, then a final job merges the evidence and
-# asserts every result with `node --test`. It runs on demand and on pull requests that touch the
-# qualification code, the harness or the fixture.
+# Qualifies the NSXBet Playwright orchestrator and the Flakiness Playwright reporter against the
+# consumer fixture. The independent groups of checks of each engine collect evidence, one per
+# runner, then one final job per engine merges its evidence and asserts every result with
+# `node --test`. It runs on demand and on pull requests that touch the qualification code, the
+# harness or the fixture.
 name: Qualification
 
 on:
@@ -22,15 +23,27 @@ concurrency:
 
 jobs:
   collect:
-    name: collect ${{ matrix.group }}
+    name: collect ${{ matrix.engine }} ${{ matrix.group }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        # Each group runs alone on its runner, so the groups that measure balance (serial) and
-        # footprint (privacy) have no other work competing with them.
-        group: [coverage, serial, assignment, history, privacy]
+        # Each group runs alone on its runner, so the groups that measure balance (serial for
+        # NSXBet, balance for Flakiness) and footprint (privacy) have no other work competing
+        # with them.
+        include:
+          - { engine: nsxbet, group: coverage }
+          - { engine: nsxbet, group: serial }
+          - { engine: nsxbet, group: assignment }
+          - { engine: nsxbet, group: history }
+          - { engine: nsxbet, group: privacy }
+          - { engine: flakiness, group: coverage }
+          - { engine: flakiness, group: serial }
+          - { engine: flakiness, group: balance }
+          - { engine: flakiness, group: assignment }
+          - { engine: flakiness, group: history }
+          - { engine: flakiness, group: privacy }
     steps:
       - uses: actions/checkout@v7
         with:
@@ -44,6 +57,7 @@ jobs:
             package-lock.json
             fixtures/consumer/package-lock.json
             qualification/nsxbet/package-lock.json
+            qualification/flakiness/package-lock.json
 
       - name: Install
         run: |
@@ -52,23 +66,28 @@ jobs:
 
       - name: Collect evidence
         env:
+          ENGINE: ${{ matrix.engine }}
           GROUP: ${{ matrix.group }}
           OS_BLOCK: ${{ matrix.group == 'privacy' && '--require-os-block' || '' }}
-        run: npm run qualify:nsxbet -- --group "$GROUP" --out "$RUNNER_TEMP/evidence-$GROUP.json" $OS_BLOCK
+        run: npm run "qualify:$ENGINE" -- --group "$GROUP" --out "$RUNNER_TEMP/evidence-$GROUP.json" $OS_BLOCK
 
       - name: Upload evidence
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: evidence-${{ matrix.group }}
+          name: evidence-${{ matrix.engine }}-${{ matrix.group }}
           path: ${{ runner.temp }}/evidence-${{ matrix.group }}.json
           if-no-files-found: ignore
 
   assert:
-    name: assert the results
+    name: assert the ${{ matrix.engine }} results
     needs: collect
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [nsxbet, flakiness]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -80,21 +99,25 @@ jobs:
 
       - uses: actions/download-artifact@v7
         with:
-          pattern: evidence-*
+          pattern: evidence-${{ matrix.engine }}-*
           path: ${{ runner.temp }}/parts
 
       - name: Merge the evidence
-        run: node qualification/nsxbet/run.js --merge "$RUNNER_TEMP"/parts/*/*.json --out "$RUNNER_TEMP/evidence.json"
+        env:
+          ENGINE: ${{ matrix.engine }}
+        run: node "qualification/$ENGINE/run.js" --merge "$RUNNER_TEMP"/parts/*/*.json --out "$RUNNER_TEMP/evidence.json"
 
       - name: Assert the results
         env:
+          ENGINE: ${{ matrix.engine }}
           PSP_NSX_EVIDENCE: ${{ runner.temp }}/evidence.json
-        run: npm run qualify:nsxbet:test
+          PSP_FLK_EVIDENCE: ${{ runner.temp }}/evidence.json
+        run: npm run "qualify:$ENGINE:test"
 
       - name: Upload merged evidence
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: nsxbet-evidence
+          name: ${{ matrix.engine }}-evidence
           path: ${{ runner.temp }}/evidence.json
           if-no-files-found: ignore

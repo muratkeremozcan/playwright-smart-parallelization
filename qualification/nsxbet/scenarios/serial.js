@@ -6,7 +6,7 @@
  */
 
 const fs = require('node:fs');
-const { coverageKinds } = require('./coverage');
+const { coverageKinds, dependencyRow } = require('../../lib/scoring');
 const { reportFiles } = require('../drive');
 
 /** Titles of the tests that ended unexpectedly, from the JSON reports of a run (empty without). */
@@ -43,26 +43,6 @@ function serialRow(id, title, run, extra = {}) {
       failedTests: failedTitles(run),
       kinds,
       ...extra,
-    },
-  };
-}
-
-/** Setup and teardown run once in every shard that needs them, in every run, and nothing skipped. */
-function dependencyRow(runs) {
-  const violations = runs.flatMap((run) =>
-    Object.keys(run.summary.kinds).filter(
-      (kind) => kind.startsWith('dependency-') || kind === 'not-executed'
-    )
-  );
-  return {
-    id: '2.dependencies',
-    proof: 2,
-    title: 'setup and teardown run once per shard that needs them',
-    status: violations.length === 0 ? 'pass' : 'fail',
-    evidence: {
-      runsChecked: runs.length,
-      dependencyViolations: violations,
-      dependencyExecutions: runs.map((run) => run.report.dependencyExecutions),
     },
   };
 }

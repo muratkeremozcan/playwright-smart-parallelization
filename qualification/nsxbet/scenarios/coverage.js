@@ -8,26 +8,7 @@
 const { checkAll, qualify, runPartition } = require('../../../harness');
 const { plan } = require('../drive');
 const { prefixProject, siblingsProject } = require('../variants');
-
-// Violations that mean a leaf did not run exactly once to a result. A leaf that skipped or never
-// ran is `not-executed`: a suite that skips every test must not pass any row.
-const COVERAGE_KINDS = ['missing', 'duplicate', 'unexpected', 'not-executed'];
-
-/** The coverage and execution violations among the violation counts of a run. */
-function coverageKinds(kinds) {
-  return Object.fromEntries(COVERAGE_KINDS.filter((kind) => kinds[kind]).map((k) => [k, kinds[k]]));
-}
-
-function coverageRow(id, proof, title, run, extra = {}) {
-  const found = coverageKinds(run.summary.kinds);
-  return {
-    id,
-    proof,
-    title,
-    status: Object.keys(found).length === 0 ? 'pass' : 'fail',
-    evidence: { coverageViolations: found, kinds: run.summary.kinds, ...extra },
-  };
-}
+const { COVERAGE_KINDS, coverageKinds, coverageRow } = require('../../lib/scoring');
 
 /**
  * A test and a describe block with one title. The engine's line for the test selects the block's

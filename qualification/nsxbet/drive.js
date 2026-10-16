@@ -19,43 +19,15 @@
  */
 
 const fs = require('node:fs');
-const os = require('node:os');
 const path = require('node:path');
 const { TITLE_SEPARATOR, dependencyProjects } = require('../../harness/leaves');
 const { listIntended, qualify } = require('../../harness');
+const { copyProject, tempDir: makeTempDir, writeJson } = require('../lib/project');
 const { listJson } = require('./playwright');
 const { assign, extractTiming, mergeTiming } = require('./engine');
 const shim = require('./shim');
 
-function tempDir(prefix) {
-  return fs.mkdtempSync(path.join(os.tmpdir(), `psp-nsx-${prefix}-`));
-}
-
-/**
- * Copies a consumer project into `dir` and applies `edits`, a map from a project-relative path to
- * new file content (or null to delete the file). The copy shares the original `node_modules`.
- * Returns the path of the copy.
- */
-function copyProject(source, dir, edits = {}) {
-  const target = path.join(dir, 'project');
-  const skipped = new Set(['node_modules', 'test-results', 'playwright-report', 'blob-report']);
-  fs.cpSync(source, target, {
-    recursive: true,
-    filter: (file) => !skipped.has(path.basename(file)),
-  });
-  fs.symlinkSync(path.join(source, 'node_modules'), path.join(target, 'node_modules'));
-  for (const [relative, content] of Object.entries(edits)) {
-    const file = path.join(target, relative);
-    if (content === null) fs.rmSync(file, { force: true });
-    else fs.writeFileSync(file, content);
-  }
-  return target;
-}
-
-function writeJson(file, value) {
-  fs.writeFileSync(file, JSON.stringify(value));
-  return file;
-}
+const tempDir = (prefix) => makeTempDir(`nsx-${prefix}`);
 
 /** Primary (non-dependency) project names of a listing, in declaration order. */
 function primaryProjects(listing) {

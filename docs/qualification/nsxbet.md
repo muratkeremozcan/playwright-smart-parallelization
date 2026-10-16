@@ -143,7 +143,7 @@ The engine writes no report of its own and adds no reporter or fixture to the Pl
 
 ## Privacy
 
-The plan and timing steps make no outbound connection. Two independent checks cover them. A preload (`qualification/nsxbet/net-guard.js`) records and refuses every socket, DNS lookup and `fetch` in the process and its Node children, and records every process the engine spawns; its control row shows it catches each kind, and the mutation control row shows a spawned `curl` fails the check. The same steps also ran under an OS-level network block, after the block was shown to stop a connection to a local listener. Both ran for cold and warm `assign`, `extract-timing` and `merge-timing`.
+The plan and timing steps make no outbound connection. Two independent checks cover them. A preload (`qualification/lib/net-guard.js`) records and refuses every socket, DNS lookup and `fetch` in the process and its Node children, and records every process the engine spawns; its control row shows it catches each kind, and the mutation control row shows a spawned `curl` fails the check. The same steps also ran under an OS-level network block, after the block was shown to stop a connection to a local listener. Both ran for cold and warm `assign`, `extract-timing` and `merge-timing`.
 
 ## Smallest remaining integration gap
 

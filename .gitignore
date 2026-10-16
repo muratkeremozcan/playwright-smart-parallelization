@@ -10,3 +10,4 @@ fixtures/consumer/playwright-report/
 harness-report*.json
 _bmad/
 qualification/nsxbet/evidence.json
+qualification/flakiness/evidence.json

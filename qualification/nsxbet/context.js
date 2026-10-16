@@ -10,6 +10,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { listIntended } = require('../../harness');
 const { nativePartition } = require('../../harness/partitions');
+const { copyProject } = require('../lib/project');
 const drive = require('./drive');
 
 // Fixture tests sleep for multiples of 10 ms, so 50 ms keeps history faithful and reproducible.
@@ -60,6 +61,11 @@ function createContext({ log = () => {}, source = FIXTURE } = {}) {
       const dir = path.join(root, name);
       fs.mkdirSync(dir, { recursive: true });
       return dir;
+    },
+
+    /** A copy of the fixture with `edits` applied, in a scratch directory named `name`. */
+    copy(name, edits) {
+      return copyProject(source, ctx.dir(name), edits);
     },
 
     /** The intended-leaf listing for a selection (memoized). */

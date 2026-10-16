@@ -33,6 +33,7 @@ jobs:
           cache-dependency-path: |
             package-lock.json
             fixtures/consumer/package-lock.json
+            qualification/flakiness/package-lock.json
 
       - name: Install dependencies
         run: npm ci
@@ -40,6 +41,11 @@ jobs:
       # The unit tests list and run the consumer fixture with its real Playwright.
       - name: Install the consumer fixture
         working-directory: fixtures/consumer
+        run: npm ci
+
+      # The unit tests of the Flakiness qualification run its installed package.
+      - name: Install the Flakiness qualification package
+        working-directory: qualification/flakiness
         run: npm ci
 
       - name: Lint
