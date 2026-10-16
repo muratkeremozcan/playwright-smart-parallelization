@@ -263,7 +263,7 @@ function withEnv(partition, env) {
  * `listIntended`, `qualify` and `playwrightVersion` (tests inject stubs).
  */
 function runNegativeControl(options, { log = () => {}, deps = {} } = {}) {
-  assertSupportedSelection(options.forward);
+  assertSupportedSelection(options);
   const list = deps.listIntended || listIntended;
   const run = deps.qualify || qualify;
   const versionOf = deps.playwrightVersion || playwrightVersion;
