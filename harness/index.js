@@ -20,7 +20,7 @@ const {
   imbalance,
 } = require('./checks');
 const { classify, dependencyMap, listedLeaf } = require('./leaves');
-const { passesOption, playwrightOptionArity } = require('./cli-options');
+const { optionsOf, passesOption, playwrightOptionArity } = require('./cli-options');
 const { TEST_LIST_FLAGS, assertSelectable, nativePartition } = require('./partitions');
 
 const REPORTER = path.join(__dirname, 'reporter.js');
@@ -112,15 +112,19 @@ const UNSUPPORTED = [
 const SEPARATOR_REASON =
   'it hands every argument after it to the tests, and the harness adds its own options after the forwarded arguments';
 
-/** Throws for a forwarded flag outside the contract (see `UNSUPPORTED`). */
-function assertSupportedSelection(forward = []) {
-  for (const arg of forward) {
-    if (arg === '--') throw new Error(`-- is not supported by the harness: ${SEPARATOR_REASON}`);
-    for (const [flag, reason] of UNSUPPORTED) {
-      if (arg === flag || arg.startsWith(`${flag}=`)) {
-        throw new Error(`${arg} is not supported by the harness: ${reason}`);
-      }
-    }
+/**
+ * Throws for a forwarded option outside the contract (see `UNSUPPORTED`), and for a separator.
+ * Options are read with the option arity of the Playwright installed at `cwd`, since a value can
+ * look like a flag (`--grep-invert --list` gives `--grep-invert` the pattern `--list`). The text
+ * test only saves the help run for the many selections that name no such flag.
+ */
+function assertSupportedSelection({ cwd, forward = [] }, optionArity = optionArityOf) {
+  const named = (arg) => arg === '--' || UNSUPPORTED.some(([flag]) => arg.includes(flag));
+  if (!forward.some(named)) return;
+  for (const { name, arg } of optionsOf(forward, optionArity(cwd))) {
+    if (name === '--') throw new Error(`-- is not supported by the harness: ${SEPARATOR_REASON}`);
+    const unsupported = UNSUPPORTED.find(([flag]) => flag === name);
+    if (unsupported) throw new Error(`${arg} is not supported by the harness: ${unsupported[1]}`);
   }
 }
 
@@ -140,7 +144,7 @@ function countByProject(leaves) {
  * answers `--project`, filters and `--no-deps` for the harness, with no argument read here.
  */
 function listIntended({ cwd, config, repeatEach = 1, forward = [] }) {
-  assertSupportedSelection(forward);
+  assertSupportedSelection({ cwd, forward });
   const selection = selectionArgs({ config, forward });
   const listed = listWithReporter(cwd, [`--repeat-each=${repeatEach}`, ...selection]);
   if (listed.shard) {
@@ -170,7 +174,7 @@ function listIntended({ cwd, config, repeatEach = 1, forward = [] }) {
  * wrote no leaves file.
  */
 function runPartition({ cwd, config, repeatEach = 1, workers = 1, forward = [] }, partition) {
-  assertSupportedSelection(forward);
+  assertSupportedSelection({ cwd, forward });
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'psp-harness-'));
   try {
     return partition.map((shard, position) => {
@@ -227,7 +231,7 @@ function checkAll(intended, dependencies, shards) {
  * `playwrightVersion` and `optionArity` (tests inject stubs). Returns the report.
  */
 function qualify(options, { log = () => {}, quiet = false, deps = {} } = {}) {
-  assertSupportedSelection(options.forward);
+  assertSupportedSelection(options, deps.optionArity);
   const { cwd } = options;
   const list = deps.listIntended || listIntended;
   const run = deps.runPartition || runPartition;

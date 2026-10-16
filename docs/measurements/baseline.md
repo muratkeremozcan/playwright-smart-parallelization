@@ -88,10 +88,10 @@ The suite has 160 tests in 36 spec files. 3 of its suites are serial, so Playwri
 
 ## Where the time goes
 
-| Part of completion | baseline-a median | baseline-a share | baseline-b median | baseline-b share |
+| Part of completion | baseline-a median | baseline-a median per-run share | baseline-b median | baseline-b median per-run share |
 | --- | --- | --- | --- | --- |
 | Queue delay on the critical path | 6.0 s | 1.0% | 5.0 s | 0.9% |
-| Fixed cost: every job and step outside the critical shard test run | 529.3 s | 86.1% | 514.1 s | 87.0% |
+| Fixed cost: every job and step outside the critical shard's test span | 529.3 s | 86.1% | 514.1 s | 87.0% |
 | Test time, ideal share (total test time over shards) | 54.7 s | 8.9% | 54.6 s | 8.2% |
 | Test time, atomic group beyond the ideal share | 0.0 s | 0.0% | 0.0 s | 0.0% |
 | Test time, critical shard above the lower bound (assignment) | 21.8 s | 3.6% | 23.1 s | 3.6% |
@@ -99,15 +99,17 @@ The suite has 160 tests in 36 spec files. 3 of its suites are serial, so Playwri
 
 ### Dominant delay
 
-- `baseline-a`: the dominant delay is **fixed setup cost**.
-  Fixed cost is 529.3 s (86.1% of the 599.0 s completion).
-  The assignment gap is 21.8 s (3.6%).
-  The largest atomic group exceeds the ideal share by 0.0 s (0.0%).
+- `baseline-a`: the dominant delay is **time outside the critical shard's test span**.
+  Median fixed cost: 529.3 s; median per-run share of completion: 86.1%. Median completion: 599.0 s.
+  Median assignment gap: 21.8 s; median per-run share of completion: 3.6%.
+  Median excess of the largest atomic group over the ideal share: 0.0 s; median per-run share of completion: 0.0%.
+  Each share is the median of the per-run ratios, so dividing one median by another gives a different figure.
   The fixed cost ranged over 53.6 s between runs, against a median balance headroom of 21.8 s.
-- `baseline-b`: the dominant delay is **fixed setup cost**.
-  Fixed cost is 514.1 s (87.0% of the 602.0 s completion).
-  The assignment gap is 23.1 s (3.6%).
-  The largest atomic group exceeds the ideal share by 0.0 s (0.0%).
+- `baseline-b`: the dominant delay is **time outside the critical shard's test span**.
+  Median fixed cost: 514.1 s; median per-run share of completion: 87.0%. Median completion: 602.0 s.
+  Median assignment gap: 23.1 s; median per-run share of completion: 3.6%.
+  Median excess of the largest atomic group over the ideal share: 0.0 s; median per-run share of completion: 0.0%.
+  Each share is the median of the per-run ratios, so dividing one median by another gives a different figure.
   The fixed cost ranged over 112.1 s between runs, against a median balance headroom of 23.1 s.
 
 ### Per shard phases

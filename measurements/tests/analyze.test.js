@@ -134,8 +134,11 @@ test('an oversized serial group dominates when it exceeds the ideal share and se
   assert.equal(dominantDelay(run.decomposition), 'one oversized atomic group');
 });
 
-test('fixed setup cost dominates the standard shape', () => {
-  assert.equal(dominantDelay(analyzeRun(standard()).decomposition), 'fixed setup cost');
+test('time outside the critical shard test span dominates the standard shape', () => {
+  assert.equal(
+    dominantDelay(analyzeRun(standard()).decomposition),
+    "time outside the critical shard's test span"
+  );
 });
 
 test('dominantDelay picks the largest of the three and keeps the first on a tie', () => {
@@ -144,8 +147,14 @@ test('dominantDelay picks the largest of the three and keeps the first on a tie'
     dominantDelay({ fixed: 1, atomicExcess: 3, assignmentGap: 2 }),
     'one oversized atomic group'
   );
-  assert.equal(dominantDelay({ fixed: 3, atomicExcess: 2, assignmentGap: 1 }), 'fixed setup cost');
-  assert.equal(dominantDelay({ fixed: 2, atomicExcess: 2, assignmentGap: 2 }), 'fixed setup cost');
+  assert.equal(
+    dominantDelay({ fixed: 3, atomicExcess: 2, assignmentGap: 1 }),
+    "time outside the critical shard's test span"
+  );
+  assert.equal(
+    dominantDelay({ fixed: 2, atomicExcess: 2, assignmentGap: 2 }),
+    "time outside the critical shard's test span"
+  );
 });
 
 test('the lower bound is the larger of the ideal share and the largest atomic group', () => {
@@ -376,7 +385,7 @@ test('analyzeLabel counts every run in the pass rate and every timed run in the 
   assert.equal(label.completion.n, 3);
   assert.equal(label.completion.max, 347000);
   assert.equal(label.completion.median, 257000);
-  assert.equal(label.dominant, 'fixed setup cost');
+  assert.equal(label.dominant, "time outside the critical shard's test span");
 });
 
 test('compareLabels reports the median change and whether the ranges overlap', () => {

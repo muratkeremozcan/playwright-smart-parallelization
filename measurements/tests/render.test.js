@@ -41,7 +41,7 @@ test('renders every section with figures that come from the records', () => {
     doc,
     /\| Completion \(created to last job done\) \| a \| 267\.0 s \| 257\.0 s \| 277\.0 s \| 7\.5% \|/
   );
-  assert.match(doc, /the dominant delay is \*\*fixed setup cost\*\*/);
+  assert.match(doc, /the dominant delay is \*\*time outside the critical shard's test span\*\*/);
   assert.match(doc, /\| a \| 3 \| 3 \| 100\.0% \| 3 \| 3 \| none \|/);
   assert.match(
     doc,
@@ -186,4 +186,29 @@ test('the pass-rate table counts timed runs whose tests all passed apart from ti
   data[0].shards[0].blob.tests[0].attempts.forEach((a) => (a.status = 'failed'));
   const doc = render(data);
   assert.match(doc, /\| a \| 3 \| 3 \| 100\.0% \| 3 \| 2 \| none \|/);
+});
+
+test('the dominant delay prose labels each figure with the statistic it is', () => {
+  // Runs where the median of the per-run shares (54.3%) differs from the median fixed cost over
+  // the median completion (109.0 s / 315.0 s = 34.6%), so the prose cannot tie the two together.
+  const run = (id, mergeMs, testMs) =>
+    makeRecord({
+      id,
+      pair: id,
+      label: 'a',
+      mergeMs,
+      shards: [
+        { ...lean, tests: [makeTest('t1', [testMs])] },
+        { ...lean, tests: [makeTest('t2', [testMs])] },
+      ],
+    });
+  const doc = render([run(1, 10000, 10000), run(2, 100000, 200000), run(3, 300000, 20000)]);
+  assert.match(doc, /the dominant delay is \*\*time outside the critical shard's test span\*\*/);
+  assert.match(
+    doc,
+    /Median fixed cost: 109\.0 s; median per-run share of completion: 54\.3%\. Median completion: 315\.0 s\./
+  );
+  assert.doesNotMatch(doc, /34\.6%/);
+  assert.doesNotMatch(doc, /% of the [\d.]+ s completion/);
+  assert.match(doc, /\| Part of completion \| a median \| a median per-run share \|/);
 });
