@@ -4,7 +4,8 @@
  * Playwright reporter that records every leaf a run selected, with its outcome, and the projects of
  * the config with their dependencies. Playwright adds it per shard run (`--add-reporter`) and runs
  * it in list mode (`--list --reporter`), so the listing and the run build their leaves the same
- * way. It writes JSON to the path in `PSP_HARNESS_RESULT`: `{ durationMs, projects, leaves }`. It
+ * way. It writes JSON to the path in `PSP_HARNESS_RESULT`: `{ durationMs, shard, projects, leaves }`,
+ * where `shard` is the sharding the resolved config or the command line sets. It
  * uses only the public Reporter API.
  */
 
@@ -60,7 +61,8 @@ class HarnessReporter {
       dependencies: project.dependencies || [],
       teardown: project.teardown || null,
     }));
-    fs.writeFileSync(target, JSON.stringify({ durationMs, projects, leaves }, null, 2));
+    const shard = (this.config && this.config.shard) || null;
+    fs.writeFileSync(target, JSON.stringify({ durationMs, shard, projects, leaves }, null, 2));
   }
 
   printsToStdio() {

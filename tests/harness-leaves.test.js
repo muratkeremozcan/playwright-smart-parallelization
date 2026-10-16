@@ -108,12 +108,22 @@ describe('dependencyMap', () => {
       project('chromium', ['setup']),
       project('deep', ['chromium']),
     ]);
-    assert.deepStrictEqual(map, {
-      setup: ['teardown'],
-      teardown: [],
-      chromium: ['setup', 'teardown'],
-      deep: ['chromium', 'setup', 'teardown'],
-    });
+    assert.deepStrictEqual(
+      { ...map },
+      {
+        setup: ['teardown'],
+        teardown: [],
+        chromium: ['setup', 'teardown'],
+        deep: ['chromium', 'setup', 'teardown'],
+      }
+    );
+  });
+
+  test('keeps a project named like an Object.prototype accessor', () => {
+    const map = leaves.dependencyMap([project('setup'), project('__proto__', ['setup'])]);
+    assert.deepStrictEqual(Object.keys(map), ['setup', '__proto__']);
+    assert.deepStrictEqual(map['__proto__'], ['setup']);
+    assert.strictEqual(Object.getPrototypeOf(map), null);
   });
 
   test('survives a cycle and an unknown dependency', () => {

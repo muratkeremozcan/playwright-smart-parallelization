@@ -70,6 +70,7 @@ function projectsOf(leaves) {
 /**
  * For each project of the config, every project a run of it needs: its dependencies and their
  * teardowns, transitively. `projects` is `[{ name, dependencies, teardown }]` from the reporter.
+ * The map has no prototype, because project names are user strings and `__proto__` is one.
  */
 function dependencyMap(projects) {
   const byName = new Map(projects.map((project) => [project.name, project]));
@@ -88,7 +89,9 @@ function dependencyMap(projects) {
     }
     return seen;
   };
-  return Object.fromEntries(projects.map((project) => [project.name, [...closure(project.name)]]));
+  const map = Object.create(null);
+  for (const project of projects) map[project.name] = [...closure(project.name)];
+  return map;
 }
 
 /** Projects that some other project depends on (setup and teardown). */

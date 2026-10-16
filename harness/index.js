@@ -89,10 +89,13 @@ const UNSUPPORTED = [
   ['--shard', 'the engine under test owns sharding, and the harness partitions the run itself'],
   ['--list', 'a list-only run executes nothing'],
 ];
+const SEPARATOR_REASON =
+  'it hands every argument after it to the tests, and the harness adds its own options after the forwarded arguments';
 
 /** Throws for a forwarded flag outside the contract (see `UNSUPPORTED`). */
 function assertSupportedSelection(forward = []) {
   for (const arg of forward) {
+    if (arg === '--') throw new Error(`-- is not supported by the harness: ${SEPARATOR_REASON}`);
     for (const [flag, reason] of UNSUPPORTED) {
       if (arg === flag || arg.startsWith(`${flag}=`)) {
         throw new Error(`${arg} is not supported by the harness: ${reason}`);
@@ -102,8 +105,8 @@ function assertSupportedSelection(forward = []) {
 }
 
 function countByProject(leaves) {
-  const counts = {};
-  for (const leaf of leaves) counts[leaf.project] = (counts[leaf.project] || 0) + 1;
+  const counts = new Map();
+  for (const leaf of leaves) counts.set(leaf.project, (counts.get(leaf.project) || 0) + 1);
   return counts;
 }
 
@@ -120,13 +123,24 @@ function listIntended({ cwd, config, repeatEach = 1, forward = [] }) {
   assertSupportedSelection(forward);
   const selection = selectionArgs({ config, forward });
   const listed = listWithReporter(cwd, [`--repeat-each=${repeatEach}`, ...selection]);
+  if (listed.shard) {
+    throw new Error(
+      `the config shards the run (shard ${listed.shard.current} of ${listed.shard.total}), which is ` +
+        'not supported by the harness: the engine under test owns sharding'
+    );
+  }
   const once = countByProject(listWithReporter(cwd, [...selection, '--repeat-each=1']).leaves);
   const twice = countByProject(listWithReporter(cwd, [...selection, '--repeat-each=2']).leaves);
-  const topLevel = new Set(Object.keys(twice).filter((project) => twice[project] > once[project]));
-  return {
-    leaves: classify(listed.leaves.map(listedLeaf), topLevel),
-    dependencies: dependencyMap(listed.projects),
-  };
+  const topLevel = new Set(
+    [...twice.keys()].filter((project) => twice.get(project) > (once.get(project) || 0))
+  );
+  const leaves = classify(listed.leaves.map(listedLeaf), topLevel);
+  if (!leaves.some((leaf) => !leaf.dependency)) {
+    throw new Error(
+      "the selection has no test to qualify: it lists no leaf, whatever Playwright's exit code says"
+    );
+  }
+  return { leaves, dependencies: dependencyMap(listed.projects) };
 }
 
 /**

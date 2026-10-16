@@ -71,11 +71,21 @@ Playwright and Node versions, per-shard durations, the slowest shard and the imb
 
 The harness supports and proves these selections, each against real Playwright: `--project`,
 `--grep`, `--grep-invert`, `--repeat-each`, `--no-deps`, `--config` or `-c`, file filters and
-project-level config. It rejects, before any listing or run, the flags that make the selection
-depend on state outside the command line or on sharding, which the engine under test owns, and the
-flag that runs nothing: `--last-failed`, `--only-changed`, `--shard` and `--list`. A selection that
-depends on external state cannot be proved exactly-once, so the harness fails closed instead of
-qualifying a different suite.
+project-level config. It rejects, before any listing or run, what it cannot prove exactly-once, and
+fails closed instead of qualifying a different suite:
+
+- `--last-failed` and `--only-changed`, which select tests from state outside the command line.
+- `--shard`, and a config that sets `shard`, because the engine under test owns sharding and the
+  harness partitions the run itself. The reporter reports the sharding of the resolved config, and
+  a listing that carries one is rejected.
+- `--list`, which executes nothing.
+- The `--` separator among the forwarded arguments, which hands everything after it to the tests
+  and would swallow the options the harness adds.
+- An empty selection, even when Playwright accepts it with `--pass-with-no-tests`: a run needs at
+  least one primary leaf to qualify.
+
+Project names are user strings, so no table keyed by them is a plain object: a project named
+`__proto__` keeps its leaves and its dependencies.
 
 ```sh
 (cd fixtures/consumer && npm ci)

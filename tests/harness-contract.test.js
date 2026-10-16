@@ -17,6 +17,9 @@ const {
 } = require('../harness/index.js');
 const { runNegativeControl } = require('../harness/negative-control.js');
 const { main } = require('../harness/cli.js');
+const { spawnSync } = require('node:child_process');
+const path = require('node:path');
+const { requireFixture } = require('./support/fixture.js');
 
 const cwd = '/nonexistent/consumer';
 const REJECTED = [
@@ -27,6 +30,8 @@ const REJECTED = [
   [['--shard', '1/2'], /--shard is not supported/],
   [['--list'], /--list is not supported.*executes nothing/],
   [['--grep', 'x', '--last-failed'], /--last-failed is not supported/],
+  [['--'], /-- is not supported.*after it/],
+  [['--project=chromium', '--', 'foo'], /-- is not supported/],
 ];
 
 describe('flags outside the contract are rejected before any run', () => {
@@ -89,5 +94,68 @@ describe('flags inside the contract pass the check', () => {
 
   test('a partition may still shard through its own args', () => {
     assert.doesNotThrow(() => assertSupportedSelection([]));
+  });
+});
+
+describe('a selection the harness cannot qualify is rejected on real Playwright', () => {
+  const real = requireFixture();
+  const CASES = [
+    {
+      name: 'a config that shards the run',
+      options: { config: 'shard.config.js' },
+      message: /config shards the run \(shard 1 of 2\).*owns sharding/,
+    },
+    {
+      name: 'a config that shards the run, named by a forwarded flag',
+      options: { forward: ['-cshard.config.js'] },
+      message: /config shards the run/,
+    },
+    {
+      name: 'an empty selection that Playwright accepts with --pass-with-no-tests',
+      options: { forward: ['--grep', 'no such test', '--pass-with-no-tests'] },
+      message: /no test to qualify/,
+    },
+  ];
+
+  for (const { name, options, message } of CASES) {
+    describe(name, () => {
+      test('listIntended throws', () => {
+        assert.throws(() => listIntended({ cwd: real, ...options }), message);
+      });
+
+      test('qualify throws instead of passing', () => {
+        assert.throws(
+          () => qualify({ cwd: real, shards: 2, ...options }, { quiet: true }),
+          message
+        );
+      });
+
+      test('the negative control throws', () => {
+        assert.throws(() => runNegativeControl({ cwd: real, ...options }), message);
+      });
+
+      test('the CLI exits 2 with the error', () => {
+        const written = [];
+        const argv = ['--cwd', real];
+        if (options.config) argv.push('--config', options.config);
+        argv.push('--', ...(options.forward || []));
+        const code = main(argv, {
+          stdout: { write: () => {} },
+          stderr: { write: (text) => written.push(text) },
+        });
+        assert.strictEqual(code, 2);
+        assert.match(written.join(''), message);
+      });
+    });
+  }
+
+  test('Playwright itself exits 0 for the empty selection, so the harness must check', () => {
+    const forward = ['--grep', 'no such test', '--pass-with-no-tests'];
+    const run = spawnSync(
+      process.execPath,
+      [path.join(real, 'node_modules', '@playwright', 'test', 'cli'), 'test', '--list', ...forward],
+      { cwd: real, encoding: 'utf8' }
+    );
+    assert.strictEqual(run.status, 0);
   });
 });
