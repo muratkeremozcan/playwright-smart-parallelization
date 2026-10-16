@@ -1,7 +1,8 @@
 # Every gate the repository defines runs here: lint, format, unit tests and the public-repo check.
-# The `stub` job runs the action itself, which proves a consuming workflow sees a failed step. It
-# checks the outcome only: the not-implemented message is asserted by the unit tests, which execute
-# action.yml's run line, so a broken run line cannot hide behind this job's failure check.
+# The `e2e` jobs run the Action from this checkout on the consumer fixture, each a full pipeline of
+# prepare, a three-shard matrix and finish against this repository's own Actions cache: a cold
+# start publishes the first history, the warm run balances from it, a failed shard and the rollback
+# switch leave it as it was, and a race makes finish lose its first key to another writer.
 name: Test
 
 on:
@@ -11,6 +12,8 @@ on:
 
 permissions:
   contents: read
+  # The finish phase reads the jobs API to measure the per-shard overhead in its summary.
+  actions: read
 
 concurrency:
   group: test-${{ github.ref }}
@@ -20,7 +23,7 @@ jobs:
   validate:
     name: lint, format, unit tests, public check
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
         with:
@@ -52,28 +55,53 @@ jobs:
       - name: Public repo check
         run: npm run check:public
 
-  stub:
-    name: the action fails when used
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
+  e2e-cold:
+    name: e2e, cold start
+    uses: ./.github/workflows/e2e-pipeline.yml
+    with:
+      history-key: e2e-${{ github.run_id }}-${{ github.run_attempt }}
+      expect-mode: native
+      expect-history: changed
 
-      - name: Run the action
-        id: action
-        uses: ./
-        continue-on-error: true
+  # Same run id as the cold start, so finish finds the run already in the history and writes nothing.
+  e2e-warm:
+    name: e2e, warm
+    needs: e2e-cold
+    uses: ./.github/workflows/e2e-pipeline.yml
+    with:
+      history-key: e2e-${{ github.run_id }}-${{ github.run_attempt }}
+      expect-mode: balanced
+      expect-history: unchanged
 
-      - name: Require the failure
-        env:
-          OUTCOME: ${{ steps.action.outcome }}
-        run: |
-          if [ "$OUTCOME" != 'failure' ]; then
-            echo "Expected the stub action to fail, got outcome $OUTCOME." >&2
-            exit 1
-          fi
+  e2e-failed:
+    name: e2e, failed shard
+    needs: e2e-warm
+    uses: ./.github/workflows/e2e-pipeline.yml
+    with:
+      history-key: e2e-${{ github.run_id }}-${{ github.run_attempt }}
+      fail-test: adds an item
+      expect-mode: balanced
+      expect-finish: failure
+      expect-history: unchanged
+
+  e2e-rollback:
+    name: e2e, rollback
+    needs: e2e-warm
+    uses: ./.github/workflows/e2e-pipeline.yml
+    with:
+      history-key: e2e-${{ github.run_id }}-${{ github.run_attempt }}
+      enabled: 'false'
+      expect-mode: disabled
+      expect-history: unchanged
+
+  e2e-race:
+    name: e2e, racing writers
+    uses: ./.github/workflows/e2e-pipeline.yml
+    with:
+      history-key: e2e-race-${{ github.run_id }}-${{ github.run_attempt }}
+      race: true
+      expect-mode: native
+      expect-history: race
 
   # Each harness run is independent and spends most of its time in the fixture's serial sleeps, so
   # the runs are matrix legs that execute in parallel. A leg fails on any violation, and the

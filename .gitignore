@@ -7,6 +7,8 @@ _bmad-output/**/inputs/
 .agents/
 fixtures/consumer/test-results/
 fixtures/consumer/playwright-report/
+fixtures/consumer/blob-report/
+.psp/
 harness-report*.json
 _bmad/
 qualification/nsxbet/evidence.json

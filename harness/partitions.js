@@ -40,6 +40,9 @@ function unsafeReason(value) {
 }
 
 /**
+ * The limits below and their reproductions on Playwright 1.56.1, 1.60.0 and 1.64.1 are in
+ * docs/playwright-test-list-selection-limits.md.
+ *
  * Playwright's `--test-list` is a lossy selector: a line is split on "›", trimmed, matched to a
  * test by project name, the file of the test call and a title-path prefix, and the line and column
  * are ignored. A suite that the selector cannot pick out exactly is rejected before any run, with

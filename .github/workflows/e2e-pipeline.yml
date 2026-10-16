@@ -1,0 +1,231 @@
+# One pipeline of the Action on the consumer fixture, the way a consumer wires it: a prepare job,
+# a shard matrix and a finish job, each using the Action from this checkout. The caller sets the
+# scenario and what it expects: the mode prepare chooses, the outcome of finish and what happens
+# to the newest history entry. `race` seeds the cache so this run's finish loses its first key to
+# another writer: an entry under key 2 created before an entry under key 1, so the newest entry
+# by prefix is key 1 and the writer's first choice, key 2, is taken.
+name: E2E pipeline
+
+on:
+  workflow_call:
+    inputs:
+      history-key:
+        type: string
+        required: true
+      enabled:
+        type: string
+        default: 'true'
+      fail-test:
+        description: A title the fixture fails on every attempt, empty for none.
+        type: string
+        default: ''
+      race:
+        type: boolean
+        default: false
+      expect-mode:
+        type: string
+        required: true
+      expect-finish:
+        type: string
+        default: success
+      expect-history:
+        description: changed, unchanged or race
+        type: string
+        required: true
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.psp.outputs.matrix }}
+      plan: ${{ steps.psp.outputs.plan }}
+      before: ${{ steps.before.outputs.cache-matched-key }}
+      prefix: ${{ steps.prefix.outputs.prefix }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - id: psp
+        uses: ./
+        with:
+          phase: prepare
+          shards: 3
+          command: npx playwright test --reporter=blob
+          working-directory: fixtures/consumer
+          history-key: ${{ inputs.history-key }}
+          enabled: ${{ inputs.enabled }}
+
+      - id: prefix
+        env:
+          PLAN: ${{ steps.psp.outputs.plan }}
+        run: echo "prefix=psp-history-v1-$(jq -r .key <<< "$PLAN")-" >> "$GITHUB_OUTPUT"
+
+      - id: before
+        uses: actions/cache/restore@v6
+        with:
+          path: .psp/history
+          key: ${{ steps.prefix.outputs.prefix }}
+          restore-keys: ${{ steps.prefix.outputs.prefix }}
+          lookup-only: true
+
+      - name: Require the mode
+        env:
+          MODE: ${{ steps.psp.outputs.mode }}
+          EXPECTED: ${{ inputs.expect-mode }}
+        run: |
+          if [ "$MODE" != "$EXPECTED" ]; then
+            echo "::error::prepare chose $MODE, expected $EXPECTED"
+            exit 1
+          fi
+
+  seed-taken-key:
+    if: inputs.race
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Write the history of another writer
+        env:
+          PLAN: ${{ needs.prepare.outputs.plan }}
+        run: node tests/e2e/history.js seed "$(jq -r .key <<< "$PLAN")" 2
+      - uses: actions/cache/save@v6
+        with:
+          path: .psp/history
+          key: ${{ needs.prepare.outputs.prefix }}2
+
+  seed-newest:
+    if: inputs.race
+    needs: [prepare, seed-taken-key]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Write the newest history
+        env:
+          PLAN: ${{ needs.prepare.outputs.plan }}
+        run: node tests/e2e/history.js seed "$(jq -r .key <<< "$PLAN")" 1
+      - uses: actions/cache/save@v6
+        with:
+          path: .psp/history
+          key: ${{ needs.prepare.outputs.prefix }}1
+      - id: newest
+        uses: actions/cache/restore@v6
+        with:
+          path: .psp/history
+          key: ${{ needs.prepare.outputs.prefix }}
+          restore-keys: ${{ needs.prepare.outputs.prefix }}
+          lookup-only: true
+      - name: Require key 1 to be the newest entry
+        env:
+          NEWEST: ${{ steps.newest.outputs.cache-matched-key }}
+          EXPECTED: ${{ needs.prepare.outputs.prefix }}1
+        run: |
+          if [ "$NEWEST" != "$EXPECTED" ]; then
+            echo "::error::the newest entry is $NEWEST, expected $EXPECTED"
+            exit 1
+          fi
+
+  test:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PSP_FIXTURE_FAIL: ${{ inputs.fail-test }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: fixtures/consumer/package-lock.json
+      - name: Install the consumer fixture
+        working-directory: fixtures/consumer
+        run: npm ci
+      # A shard that fails on purpose is expected to fail; finish asserts what it does about it.
+      - uses: ./
+        continue-on-error: ${{ inputs.fail-test != '' }}
+        with:
+          phase: run
+          plan: ${{ needs.prepare.outputs.plan }}
+          shard: ${{ matrix.shard }}
+
+  finish:
+    needs: [prepare, test, seed-newest]
+    if: ${{ !cancelled() && needs.prepare.result == 'success' && needs.test.result == 'success' && needs.seed-newest.result != 'failure' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - id: finish
+        uses: ./
+        continue-on-error: true
+        with:
+          phase: finish
+          plan: ${{ needs.prepare.outputs.plan }}
+
+      - name: Require the finish outcome
+        env:
+          OUTCOME: ${{ steps.finish.outcome }}
+          EXPECTED: ${{ inputs.expect-finish }}
+        run: |
+          if [ "$OUTCOME" != "$EXPECTED" ]; then
+            echo "::error::finish ended $OUTCOME, expected $EXPECTED"
+            exit 1
+          fi
+
+      - id: after
+        uses: actions/cache/restore@v6
+        with:
+          path: .psp/history
+          key: ${{ needs.prepare.outputs.prefix }}
+          restore-keys: ${{ needs.prepare.outputs.prefix }}
+
+      - name: Require the history
+        env:
+          BEFORE: ${{ needs.prepare.outputs.before }}
+          AFTER: ${{ steps.after.outputs.cache-matched-key }}
+          PREFIX: ${{ needs.prepare.outputs.prefix }}
+          EXPECTED: ${{ inputs.expect-history }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          echo "newest entry before: ${BEFORE:-none}, after: ${AFTER:-none}"
+          case "$EXPECTED" in
+            unchanged) [ "$AFTER" = "$BEFORE" ] || { echo "::error::the history changed"; exit 1; } ;;
+            changed)
+              [ -n "$AFTER" ] && [ "$AFTER" != "$BEFORE" ] || { echo "::error::nothing was published"; exit 1; }
+              node tests/e2e/history.js expect-runs "$RUN_ID" ;;
+            race)
+              [ "$AFTER" = "${PREFIX}3" ] || { echo "::error::expected ${PREFIX}3, got $AFTER"; exit 1; }
+              node tests/e2e/history.js expect-runs 1 2 "$RUN_ID" ;;
+            *) echo "::error::unknown expectation $EXPECTED"; exit 1 ;;
+          esac
+
+      - name: Require the merged report
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PLAN: ${{ needs.prepare.outputs.plan }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          name="playwright-report-$(jq -r '.key[0:12]' <<< "$PLAN")-$RUN_ID"
+          count=$(gh api "repos/$REPO/actions/runs/$RUN_ID/artifacts?name=$name" --jq .total_count)
+          [ "$count" = 1 ] || { echo "::error::no merged report artifact $name"; exit 1; }
