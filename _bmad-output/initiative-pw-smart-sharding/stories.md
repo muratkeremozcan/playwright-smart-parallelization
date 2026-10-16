@@ -24,5 +24,5 @@ Decisions (owner, 2026-10-15): float every package and Action to latest and reco
 - A story merges only after the worker reports `completed` with green CI.
 - Every finding is fixed in the story that found it. The story count may only fall.
 - Coordinator rules appended by date below.
-- Per-story loop (owner, 2026-10-15): a fresh Claude peer session implements the story and opens the PR. The session summons one Codex peer session (herdr, kind codex, read-only, material defects only) for an adversarial review and fixes every finding. CodeRabbit is addressed, CI goes green, the coordinator merges, then hands the next story to a new Claude peer session. Repeat until S10.
+- Per-story loop (owner, 2026-10-15): a fresh Claude peer session implements the story and opens the PR. The moment the PR opens, the session summons one Codex peer session (herdr, kind codex, read-only, material defects only) for an adversarial review that runs alongside CI and CodeRabbit, not after them, and fixes every finding from all three. CodeRabbit is addressed, CI goes green, the coordinator merges, then hands the next story to a new Claude peer session. Repeat until S10.
 - Merged work gets a Codex review too; real findings are fixed in a fix PR, never filed as a new story.
