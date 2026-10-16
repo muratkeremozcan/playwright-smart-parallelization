@@ -2,7 +2,7 @@
 
 const { test, describe } = require('node:test');
 const assert = require('node:assert');
-const { assignArgs, extractArgs, lastJsonLine, mergeArgs } = require('../../engine');
+const { assignArgs, extractArgs, lastJsonLine, mergeArgs, runEngine } = require('../../engine');
 
 describe('assignArgs', () => {
   test('passes the list and shard count and nothing else by default', () => {
@@ -100,6 +100,17 @@ describe('extractArgs and mergeArgs', () => {
 
   test('merge-timing without existing history has no --existing', () => {
     assert.ok(!mergeArgs({ artifacts: ['a'], output: 'o' }).includes('--existing'));
+  });
+});
+
+describe('runEngine', () => {
+  test('keeps the reason when the process cannot start', () => {
+    const result = runEngine(['--version'], {
+      root: '/nonexistent',
+      wrap: ['psp-no-such-command'],
+    });
+    assert.strictEqual(result.status, 1);
+    assert.match(result.stderr, /ENOENT/);
   });
 });
 

@@ -67,25 +67,32 @@ function singleAssignment(ctx) {
   const hashes = new Set(runs.map((run) => digest(run.assignment)));
   const first = runs[0].assignment;
   const synthetic = syntheticTiming(list.ids, dir);
+  const missing = [];
   const differing = [2, 3, 4, 5].filter((shards) => {
     const input = { testList: list.file, shards, timingFile: synthetic };
     const real = assign(input).assignment;
     const slow = assign(input, { env: { NODE_OPTIONS: `--require "${SLOW_CLOCK}"` } }).assignment;
+    if (!real || !slow) {
+      missing.push(shards);
+      return false;
+    }
     return digest(real.shards) !== digest(slow.shards);
   });
-  const shape = completeness(first, list.ids);
+  const answered = runs.every((run) => run.assignment) && missing.length === 0;
+  const shape = first ? completeness(first, list.ids) : { complete: false };
   return {
     id: '4.single-assignment',
     proof: 4,
     title: 'one assign call yields the lists of all shards',
-    status: shape.complete && hashes.size === 1 ? 'pass' : 'fail',
+    status: answered && shape.complete && hashes.size === 1 ? 'pass' : 'fail',
     evidence: {
       ...shape,
       repeatedRuns: runs.length,
       distinctOutputs: hashes.size,
-      outputKeys: Object.keys(first).sort(),
+      outputKeys: Object.keys(first || {}).sort(),
       timingKeys: Object.keys(JSON.parse(fs.readFileSync(timingFile, 'utf8'))).sort(),
       shardCountsWhereSlowClockChangesAssignment: differing,
+      shardCountsWithoutAnswer: missing,
     },
   };
 }

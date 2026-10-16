@@ -162,6 +162,7 @@ describe('proof 4: one assignment', () => {
     const evidenceRow = row('4.single-assignment');
     assert.strictEqual(evidenceRow.complete, true);
     assert.strictEqual(evidenceRow.distinctOutputs, 1);
+    assert.deepStrictEqual(evidenceRow.shardCountsWithoutAnswer, []);
   });
 
   test('the assignment depends on the time the search was given', () => {

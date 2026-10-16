@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-16T04:29:03.722Z",
+  "generatedAt": "2026-10-16T04:38:02.923Z",
   "group": "all",
   "versions": {
     "engine": "@nsxbet/playwright-orchestrator@2.0.1",
@@ -29,7 +29,8 @@
           "totalTests"
         ],
         "timingKeys": ["tests", "updatedAt", "version"],
-        "shardCountsWhereSlowClockChangesAssignment": [2, 3, 4, 5]
+        "shardCountsWhereSlowClockChangesAssignment": [2, 3, 4, 5],
+        "shardCountsWithoutAnswer": []
       }
     },
     {
@@ -198,8 +199,8 @@
             "estimated": 26,
             "isOptimal": true,
             "expectedDurations": {
-              "1": 5902,
-              "2": 5902
+              "1": 5850,
+              "2": 5850
             }
           }
         ]
@@ -844,7 +845,7 @@
   },
   "durationMs": 256914,
   "legsMs": {
-    "assignment": 47263,
+    "assignment": 47251,
     "coverage": 190405,
     "history": 137359,
     "privacy": 42786,

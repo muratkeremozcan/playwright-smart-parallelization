@@ -43,7 +43,7 @@ function runEngine(args, { cwd = __dirname, env = {}, wrap = [], root = packageR
   return {
     status: result.status === null ? 1 : result.status,
     stdout: result.stdout || '',
-    stderr: result.stderr || '',
+    stderr: result.stderr || (result.error ? result.error.message : ''),
     ms,
   };
 }
