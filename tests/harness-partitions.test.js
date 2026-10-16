@@ -67,7 +67,13 @@ describe('testListPartition', () => {
       column: 3,
       dependency: false,
     };
-    const own = { ...helper, key: 'o', file: 'b.spec.js', specFile: 'b.spec.js', titlePath: ['u'] };
+    const own = {
+      ...helper,
+      key: 'o',
+      file: 'b.spec.js',
+      specFile: 'b.spec.js',
+      titlePath: ['u'],
+    };
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'psp-partition-test-'));
     tempDirs.push(dir);
     const [shard] = testListPartition([['k', 'o']], [helper, own], dir);

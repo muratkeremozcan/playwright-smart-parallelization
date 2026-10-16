@@ -30,7 +30,7 @@ function leaf(titlePath, extra = {}) {
     testRef: `${project}|${extra.specFile || file}|${titlePath.join(' › ')}`,
     project,
     file,
-    specFile: file,
+    specFile: extra.specFile || file,
     titlePath,
     repeatIndex: 0,
     serialGroup: null,

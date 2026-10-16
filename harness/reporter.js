@@ -40,9 +40,8 @@ function outermostSerialSuite(test) {
   return matching[0];
 }
 
-function leafOf(test) {
+function leafOf(test, rootDir = test.parent.project().testDir) {
   const project = test.parent.project();
-  const testDir = project.testDir;
   const [, , specFile, ...titlePath] = test.titlePath();
   const serial = outermostSerialSuite(test);
   const serialGroup = serial
@@ -57,7 +56,7 @@ function leafOf(test) {
     id: test.id,
     project: project.name,
     specFile,
-    file: toPosix(path.relative(testDir, test.location.file)),
+    file: toPosix(path.relative(rootDir, test.location.file)),
     titlePath,
     repeatIndex: test.repeatEachIndex,
     serialGroup,
@@ -77,11 +76,11 @@ function leafOf(test) {
  * Leaves of every test, failing closed when two distinct serial suites get one group id or two
  * tests get one key: a collision would let a split group or a dropped test qualify.
  */
-function leavesOf(tests) {
+function leavesOf(tests, rootDir) {
   const groups = new Map();
   const keys = new Set();
   return tests.map((test) => {
-    const leaf = leafOf(test);
+    const leaf = leafOf(test, rootDir);
     if (keys.has(leaf.key)) throw new Error(`two tests share the id ${leaf.key} (${leaf.label})`);
     keys.add(leaf.key);
     if (leaf.serialGroup) {
@@ -115,7 +114,7 @@ class HarnessReporter {
     const durationMs =
       typeof result.duration === 'number' ? result.duration : Date.now() - this.startedAt;
     assertNamedProjects((this.config && this.config.projects) || []);
-    const leaves = leavesOf(this.suite.allTests());
+    const leaves = leavesOf(this.suite.allTests(), this.config && this.config.rootDir);
     const projects = ((this.config && this.config.projects) || []).map((project) => ({
       name: project.name,
       dependencies: project.dependencies || [],

@@ -204,6 +204,38 @@ describe("explicit test-list partitions of a helper's tests", () => {
   });
 });
 
+describe('a config with testDir only inside its projects', () => {
+  // The config rootDir is the fixture directory, so a list line names a file relative to it.
+  const config = 'project-testdir.config.js';
+  const dirs = [];
+  after(() => {
+    for (const dir of dirs) fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  test('names each file relative to the rootDir, not to the project testDir', () => {
+    const { leaves } = listIntended({ cwd, config });
+    assert.strictEqual(leaves.length, 9);
+    for (const leaf of leaves) {
+      assert.ok(leaf.file.includes('-tests/'), `${leaf.file} is not relative to the rootDir`);
+      assert.ok(leaf.specFile.includes('-tests/'));
+    }
+  });
+
+  test('an explicit test-list partition runs every leaf exactly once', () => {
+    const { leaves, dependencies } = listIntended({ cwd, config });
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'psp-rootdir-'));
+    dirs.push(dir);
+    const keys = (project) => leaves.filter((leaf) => leaf.project === project).map((l) => l.key);
+    const partition = testListPartition([keys('p'), keys('q')], leaves, dir);
+    const shards = runPartition({ cwd, config }, partition);
+    assert.deepStrictEqual(
+      shards.map((shard) => shard.leaves.length),
+      [8, 1]
+    );
+    assert.deepStrictEqual(checkAll(leaves, dependencies, shards), []);
+  });
+});
+
 describe('the identity fixture qualifies under native sharding', () => {
   test('2 shards of the real run pass every check', () => {
     const report = qualify({ cwd, config: 'identity.config.js', shards: 2 }, { quiet: true });

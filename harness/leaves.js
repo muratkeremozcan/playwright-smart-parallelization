@@ -40,7 +40,9 @@ function serialGroupId({ project, specFile, suiteTitles, repeatIndex }) {
  * repeat, and it is the leaf key: a key from the call location collides when a helper registers
  * the same tests for several spec files, the id cannot. `label` is the readable
  * name used in output, `testRef` names one test across its repeats, and `file` with `line` and
- * `column` is the location of the test call for the `--test-list` form.
+ * `column` is the location of the test call for the `--test-list` form. `file`, like the spec
+ * file (the file suite's title), is relative to the config `rootDir`, which is what a list line is
+ * matched against.
  */
 function buildLeaf({
   id,
