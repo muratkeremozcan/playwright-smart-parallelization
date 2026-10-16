@@ -402,7 +402,7 @@ function pathsProject(ctx) {
   );
 }
 
-/** A wrapper the Action generates, in a folder outside the project. */
+/** A wrapper config the Action would generate, in a folder outside the project (rejected). */
 function wrapper(ctx, name, { userConfig, mode = 'resolved', options = {} }) {
   return ctx.once(`wrapper:${name}`, () =>
     writeWrapper({
@@ -486,19 +486,6 @@ function configDifferences(plain, wrapped) {
   };
 }
 
-/** The same comparison over the `config` of the JSON list report. */
-function listDifferences(plain, wrapped) {
-  if (plain.error || wrapped.error) return null;
-  // The command line differs only in the config it names.
-  const strip = (c) => ({
-    ...c,
-    configFile: null,
-    reporter: null,
-    argv: (c.argv || []).filter((arg) => !arg.startsWith('--config=')),
-  });
-  return differences(strip(plain), strip(wrapped));
-}
-
 function wrapperNaive(ctx) {
   const cwd = pathsProject(ctx);
   const js = path.join(cwd, 'playwright.config.js');
@@ -533,7 +520,252 @@ function wrapperNaive(ctx) {
   );
 }
 
-function wrapperPaths(ctx) {
+/** The reporter the Action bundles, added with `--add-reporter`, its options in the environment. */
+const ACTION_REPORTER = path.resolve(__dirname, '..', 'lib', 'action-reporter.mjs');
+
+/** Environment of a shard of the `--add-reporter` route: the reporter's options. */
+function actionEnv({ timings, record, workers = 1 }) {
+  return {
+    ...(timings ? { PSP_ACTION_TIMINGS: timings } : {}),
+    ...(record ? { PSP_ACTION_RECORD: record, PSP_PSB_RECORD: record } : {}),
+    PSP_ACTION_WORKERS: String(workers),
+  };
+}
+
+const SIMPLE = (title) => `'use strict';
+
+const { test, expect } = require('@playwright/test');
+
+test('${title}', async () => {
+  expect(1).toBe(1);
+});
+`;
+
+/**
+ * The five configs a rewritten config changes the meaning of. Each case has the files of its
+ * variant, the config file and what is measured: the tests a list finds (`list`) or the outcome of
+ * running one test (`run`).
+ */
+const CASES = {
+  gitignore: {
+    what: 'a spec in a folder `.gitignore` lists is left out when the config sets no `testDir`',
+    config: 'playwright.config.js',
+    measure: 'list',
+    files: {
+      'playwright.config.js': `'use strict';
+
+// No testDir: Playwright then respects .gitignore while it collects test files.
+module.exports = { testMatch: ['tests/**/*.spec.js', 'ignored/**/*.spec.js'], reporter: 'list' };
+`,
+      '.gitignore': 'ignored/\n',
+      'ignored/skipped.spec.js': SIMPLE('ignored by git'),
+    },
+  },
+  snapshot: {
+    what: 'a relative `snapshotPathTemplate` finds the snapshot next to the config',
+    config: 'playwright.config.js',
+    measure: 'run',
+    grep: 'matches the greeting',
+    files: {
+      'playwright.config.js': `'use strict';
+
+module.exports = { testDir: './tests', snapshotPathTemplate: './snaps/{arg}{ext}', reporter: 'list', updateSnapshots: 'none' };
+`,
+      'tests/snapshot.spec.js': `'use strict';
+
+const { test, expect } = require('@playwright/test');
+
+test('matches the greeting', async () => {
+  expect('hello').toMatchSnapshot('greeting.txt');
+});
+`,
+      'snaps/greeting.txt': 'hello',
+    },
+  },
+  packageSetup: {
+    what: 'a `globalSetup` given by package name runs',
+    config: 'playwright.config.js',
+    measure: 'run',
+    grep: 'loads the page',
+    packages: {
+      'psp-global-setup': {
+        'package.json': '{ "name": "psp-global-setup", "version": "0.0.0", "main": "index.js" }\n',
+        'index.js':
+          "'use strict';\n\nmodule.exports = async () => {\n  require('node:fs').writeFileSync(process.env.PSP_SETUP_MARK, 'ran');\n};\n",
+      },
+    },
+    files: {
+      'playwright.config.js': `'use strict';
+
+module.exports = { testDir: './tests', testMatch: /account\\.spec\\.js/, globalSetup: 'psp-global-setup', reporter: 'list' };
+`,
+    },
+  },
+  builtinReporter: {
+    what: 'the built-in `perfetto` and `coverage` reporters load',
+    config: 'playwright.config.js',
+    measure: 'run',
+    grep: 'loads the page',
+    files: {
+      'playwright.config.js': `'use strict';
+
+module.exports = {
+  testDir: './tests',
+  testMatch: /account\\.spec\\.js/,
+  reporter: [['list'], ['perfetto', { outputFile: 'reports/trace.json' }], ['coverage']],
+};
+`,
+    },
+  },
+  esmTopLevelAwait: {
+    what: 'an ES module config with top-level `await` loads',
+    config: 'playwright.config.mjs',
+    measure: 'list',
+    files: {
+      'playwright.config.mjs': `const projects = await Promise.resolve([{ name: 'chromium' }]);
+
+export default { testDir: './tests', testMatch: /account\\.spec\\.js/, reporter: 'list', projects };
+`,
+    },
+  },
+};
+
+/**
+ * A copy of the fixture with `files` written (folders created) and, for `packages`, a
+ * `node_modules` of its own: links to the fixture's packages plus the given ones.
+ */
+function caseProject(ctx, name) {
+  const c = CASES[name];
+  return ctx.once(`variant:case-${name}`, () => {
+    const cwd = ctx.copy(`variant-case-${name}`, {});
+    for (const [relative, content] of Object.entries(c.files)) {
+      fs.mkdirSync(path.dirname(path.join(cwd, relative)), { recursive: true });
+      fs.writeFileSync(path.join(cwd, relative), content);
+    }
+    if (c.packages) {
+      const modules = path.join(cwd, 'node_modules');
+      const shared = fs.realpathSync(modules);
+      fs.rmSync(modules);
+      fs.mkdirSync(modules);
+      for (const entry of fs.readdirSync(shared)) {
+        fs.symlinkSync(path.join(shared, entry), path.join(modules, entry));
+      }
+      for (const [pkg, files] of Object.entries(c.packages)) {
+        fs.mkdirSync(path.join(modules, pkg));
+        for (const [file, content] of Object.entries(files)) {
+          fs.writeFileSync(path.join(modules, pkg, file), content);
+        }
+      }
+    }
+    return cwd;
+  });
+}
+
+/**
+ * What one case does on one route: `plain` (the user's config), `wrapper` (the resolving wrapper)
+ * or `added` (the user's config and the Action's reporter added with `--add-reporter`). A list
+ * gives the files it finds; a run gives its exit code, and for the package setup whether the
+ * setup ran. A config that does not load gives the first line of its error.
+ */
+function caseOutcome(ctx, name, route) {
+  return ctx.once(`case:${name}:${route}`, () => {
+    const c = CASES[name];
+    const cwd = caseProject(ctx, name);
+    const user = path.join(cwd, c.config);
+    const dir = ctx.dir(`case-${name}-${route}`);
+    const config =
+      route === 'wrapper'
+        ? writeWrapper({
+            dir: path.join(dir, 'action'),
+            userConfig: user,
+            reporter: [reporterPath(), {}],
+          })
+        : user;
+    const added = route === 'added' ? [`--add-reporter=${ACTION_REPORTER}`] : [];
+    const mark = path.join(dir, 'setup-mark');
+    const env = { PSP_SETUP_MARK: mark, ...actionEnv({}) };
+    if (c.measure === 'list') {
+      const file = path.join(dir, 'list.json');
+      const listed = drive.playwright({
+        cwd,
+        args: ['--list', '--reporter=json', `--config=${config}`, ...added],
+        env: { ...env, PLAYWRIGHT_JSON_OUTPUT_FILE: file },
+      });
+      if (!fs.existsSync(file) || listed.exitCode !== 0) {
+        return {
+          loads: false,
+          error: firstLine(listed.output.split('\n').find((l) => /Error/.test(l))),
+        };
+      }
+      const files = new Set();
+      const visit = (suite) => {
+        if (suite.specs && suite.specs.length) files.add(suite.file);
+        (suite.suites || []).forEach(visit);
+      };
+      JSON.parse(fs.readFileSync(file, 'utf8')).suites.forEach(visit);
+      return { loads: true, files: [...files].sort() };
+    }
+    const ran = drive.playwright({
+      cwd,
+      args: [`--config=${config}`, `--grep=${c.grep}`, '--workers=1', ...added],
+      env,
+    });
+    const error = /Error/.test(ran.output)
+      ? firstLine(ran.output.split('\n').find((l) => /Error/.test(l)))
+      : null;
+    return {
+      loads: !/Error: (Cannot find module|Unknown reporter|require\(\) cannot be used)/.test(
+        ran.output
+      ),
+      exitCode: ran.exitCode,
+      setupRan: fs.existsSync(mark),
+      error: ran.exitCode === 0 ? null : error,
+    };
+  });
+}
+
+const sameOutcome = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+function wrapperCase(ctx, name, id) {
+  const plain = caseOutcome(ctx, name, 'plain');
+  const wrapped = caseOutcome(ctx, name, 'wrapper');
+  const facts = { plain, wrapper: wrapped, same: sameOutcome(plain, wrapped) };
+  const describe = (o) =>
+    !o.loads
+      ? `does not load (\`${o.error}\`)`
+      : o.files
+        ? `finds ${o.files.length} spec file${o.files.length === 1 ? '' : 's'}`
+        : `exits ${o.exitCode}${o.setupRan ? ' after the global setup ran' : ''}`;
+  return row(
+    id,
+    `The resolving wrapper keeps the meaning of the user's config where ${CASES[name].what}.`,
+    facts.same,
+    facts,
+    `Plain, the run ${describe(plain)}; through the wrapper it ${describe(wrapped)}.`
+  );
+}
+
+function addedCases(ctx) {
+  const facts = {};
+  for (const name of Object.keys(CASES)) {
+    const plain = caseOutcome(ctx, name, 'plain');
+    const added = caseOutcome(ctx, name, 'added');
+    facts[name] = { plain, added, same: sameOutcome(plain, added) };
+  }
+  const same = Object.values(facts).every((f) => f.same);
+  return row(
+    'sb.add-reporter-cases',
+    "With the Action's reporter added by `--add-reporter`, each of the five configs the wrapper breaks behaves exactly as in the plain run: the gitignored spec, the relative snapshot path, the package global setup, the perfetto and coverage reporters and the ES module config with top-level await.",
+    same,
+    facts,
+    `Same outcome as the plain run: ${Object.entries(facts)
+      .map(([name, f]) => `${name} ${f.same}`)
+      .join(', ')}.`
+  );
+}
+
+/** The resolved config of the user's config with the Action's reporter added, against the plain one. */
+function addedConfig(ctx) {
   const cwd = pathsProject(ctx);
   const results = {};
   for (const [kind, file] of [
@@ -541,68 +773,93 @@ function wrapperPaths(ctx) {
     ['ts', 'playwright.ts.config.ts'],
   ]) {
     const user = path.join(cwd, file);
-    const wrapped = wrapper(ctx, `resolved-${kind}`, { userConfig: user });
-    const full = configDifferences(
-      probe(ctx, cwd, user, `paths-${kind}`),
-      probe(ctx, cwd, wrapped, `resolved-${kind}`)
-    );
+    const plain = probe(ctx, cwd, user, `paths-${kind}`);
+    const added = ctx.once(`config-probe:added-${kind}`, () => {
+      const out = path.join(ctx.dir(`config-probe-added-${kind}`), 'config.json');
+      drive.playwright({
+        cwd,
+        args: ['--list', `--config=${user}`, `--add-reporter=${ACTION_REPORTER},${CONFIG_PROBE}`],
+        env: { PSP_CONFIG_PROBE_OUT: out },
+      });
+      return fs.existsSync(out) ? JSON.parse(fs.readFileSync(out, 'utf8')) : { error: 'no probe' };
+    });
+    const listPlain = listConfig(ctx, cwd, user, `paths-${kind}`);
+    const listAdded = ctx.once(`list-config:added-${kind}`, () => {
+      const out = path.join(ctx.dir(`list-config-added-${kind}`), 'list.json');
+      drive.playwright({
+        cwd,
+        args: [
+          '--list',
+          '--reporter=json',
+          `--config=${user}`,
+          `--add-reporter=${ACTION_REPORTER}`,
+        ],
+        env: { PLAYWRIGHT_JSON_OUTPUT_FILE: out },
+      });
+      return fs.existsSync(out)
+        ? JSON.parse(fs.readFileSync(out, 'utf8')).config
+        : { error: 'no list' };
+    });
+    const lastIsAction = (reporters) =>
+      Array.isArray(reporters) &&
+      reporters.length > 0 &&
+      reporters[reporters.length - 1][0] === ACTION_REPORTER;
+    // The added run differs in its last reporter and, in the JSON list, in its command line.
+    const withoutAdded = (config) => {
+      const out = { ...config, reporter: config.reporter.slice(0, -1) };
+      if (config.argv) out.argv = config.argv.filter((arg) => !arg.startsWith('--add-reporter'));
+      return out;
+    };
     results[kind] = {
-      loads: full.loads,
-      error: full.error,
-      fullConfigDifferences: full.fields,
-      appendedLast: full.appendedLast,
-      listConfigDifferences: listDifferences(
-        listConfig(ctx, cwd, user, `paths-${kind}`),
-        listConfig(ctx, cwd, wrapped, `resolved-${kind}`)
-      ),
+      fullConfigDifferences: added.error ? null : differences(plain, withoutAdded(added)),
+      listConfigDifferences: listAdded.error
+        ? null
+        : differences(listPlain, withoutAdded(listAdded)),
+      addedLast: !added.error && lastIsAction(added.reporter),
     };
   }
   const same = (r) =>
-    r.loads &&
-    r.appendedLast &&
+    r.addedLast &&
+    r.fullConfigDifferences &&
     r.fullConfigDifferences.length === 0 &&
     r.listConfigDifferences &&
     r.listConfigDifferences.length === 0;
   return row(
-    'sb.wrapper-paths',
-    "The resolving wrapper gives the resolved config of the user's config, apart from the config file and the appended reporter, for a JS config with relative paths of every kind and for a TS config.",
+    'sb.add-reporter-config',
+    "With the Action's reporter added by `--add-reporter`, the resolved `FullConfig` and the JSON list config equal those of the plain run apart from the added reporter, for a JS config with relative paths of every kind and for a TS config.",
     same(results.js) && same(results.ts),
     results,
-    `JS config: ${results.js.fullConfigDifferences ? results.js.fullConfigDifferences.length : 'no'} differences in the resolved \`FullConfig\` and ${results.js.listConfigDifferences ? results.js.listConfigDifferences.length : 'no'} in the JSON list config; TS config through the JS wrapper: ${results.ts.fullConfigDifferences ? results.ts.fullConfigDifferences.length : 'no'} and ${results.ts.listConfigDifferences ? results.ts.listConfigDifferences.length : 'no'}. The appended reporter is last (${results.js.appendedLast && results.ts.appendedLast}).`
+    `JS config: ${results.js.fullConfigDifferences ? results.js.fullConfigDifferences.length : 'no'} differences in the \`FullConfig\` and ${results.js.listConfigDifferences ? results.js.listConfigDifferences.length : 'no'} in the JSON list config; TS config: ${results.ts.fullConfigDifferences ? results.ts.fullConfigDifferences.length : 'no'} and ${results.ts.listConfigDifferences ? results.ts.listConfigDifferences.length : 'no'}. The added reporter is last (${results.js.addedLast && results.ts.addedLast}).`
   );
 }
 
-/** A balanced run of the paths project through a resolving wrapper, the Action's files in its own folder. */
-function wrapperRun(
+/** A balanced run of a user config with the Action's reporter added, its files in the Action's folder. */
+function addedRun(
   ctx,
   name,
-  { shard = () => ({}), userFile = 'playwright.config.js', shards = 3 } = {}
+  { userFile = 'playwright.config.js', shards = 3, userArgs = [] } = {}
 ) {
-  return ctx.once(`sb-run:${name}`, () => {
+  return ctx.once(`sb-added:${name}`, () => {
     const cwd = pathsProject(ctx);
     const actionDir = ctx.dir(`action-run-${name}`);
     const timings = path.join(actionDir, 'timings', 'shard-timings.json');
     fs.mkdirSync(path.dirname(timings), { recursive: true });
     fs.copyFileSync(ctx.baseline().timings, timings);
     const record = path.join(actionDir, 'records', 'run-{shard}.json');
-    const config = wrapper(ctx, `run-${name}`, {
-      userConfig: path.join(cwd, userFile),
-      options: { timings, record, workers: 1 },
-    });
-    const partition = Array.from({ length: shards }, (_, i) => {
-      const own = shard(i + 1) || {};
-      return {
-        args: [`--shard=${i + 1}/${shards}`, ...(own.args || [])],
-        env: { PSP_PSB_RECORD: record },
-      };
-    });
-    const run = ctx.runPartition({ name: `wrapper-${name}`, cwd, partition, workers: 1, config });
-    return { run, cwd, actionDir, timings };
+    // One `--add-reporter` value: the harness's reporter and the Action's, merged.
+    const injected = `--add-reporter=${HARNESS_REPORTER},${ACTION_REPORTER}`;
+    const partition = Array.from({ length: shards }, (_, i) => ({
+      args: [`--shard=${i + 1}/${shards}`, ...userArgs, injected],
+      env: actionEnv({ timings, record }),
+    }));
+    const config = path.join(cwd, userFile);
+    const run = ctx.runPartition({ name: `added-${name}`, cwd, partition, workers: 1, config });
+    return { run, cwd, actionDir, timings, config };
   });
 }
 
-function wrapperRunRow(ctx) {
-  const { run, cwd, actionDir, timings } = wrapperRun(ctx, 'balanced');
+function addedRunRow(ctx) {
+  const { run, cwd, actionDir, timings } = addedRun(ctx, 'balanced');
   const checked = checkRun(run);
   const facts = {
     ...harnessFacts(run),
@@ -616,8 +873,8 @@ function wrapperRunRow(ctx) {
     ),
   };
   return row(
-    'sb.wrapper-run',
-    "Through the resolving wrapper the fixture balances from the timings where the Action puts them, every leaf runs once, and the user's outputs land in the user's folders.",
+    'sb.add-reporter-run',
+    "With the user's config untouched and the Action's reporter added by `--add-reporter`, its options in the environment, the fixture balances from the timings where the Action puts them, every leaf runs once and `check` passes.",
     facts.harnessOk &&
       facts.strategies.every((s) => s === 'balanced') &&
       facts.timingsShaMatches &&
@@ -626,87 +883,68 @@ function wrapperRunRow(ctx) {
       facts.outputInProject &&
       facts.nothingInActionFolder,
     facts,
-    `Three shards through the wrapper: violations ${kindsText(facts.violations)}, every shard balanced from the Action's timings file (sha matches: ${facts.timingsShaMatches}), \`check\` exit ${facts.checkExit}. The user's JSON report and output folder are in the project (${facts.jsonReportInProject && facts.outputInProject}) and none in the Action's folder (${facts.nothingInActionFolder}).`
-  );
-}
-
-function cliReporter(ctx) {
-  const { run } = wrapperRun(ctx, 'cli-reporter', {
-    shard: (index) => (index === 2 ? { args: ['--reporter=list'] } : {}),
-  });
-  const checked = checkRun(run);
-  const facts = {
-    ...harnessFacts(run),
-    recordsWritten: run.records.map(Boolean),
-    planLines: run.plans.map(Boolean),
-    checkExit: checked.status,
-    namesMissing: (checked.json ? checked.json.problems : []).includes(
-      'missing records for shard 2'
-    ),
-  };
-  return row(
-    'sb.cli-reporter',
-    'A `--reporter` flag on the command line replaces the reporters of the wrapper, the injected one with them, and the aggregate check turns that into a red run.',
-    !facts.recordsWritten[1] && !facts.planLines[1] && facts.checkExit === 1 && facts.namesMissing,
-    facts,
-    `\`--reporter=list\` on shard 2: that shard logged no plan and wrote no record, the harness found ${kindsText(facts.violations)}, and \`check\` exits ${facts.checkExit} with \`missing records for shard 2\`.`
+    `Three shards: violations ${kindsText(facts.violations)}, every shard balanced from the Action's timings file (sha matches: ${facts.timingsShaMatches}) and wrote its record, \`check\` exit ${facts.checkExit}. The user's JSON report and output folder are in the project (${facts.jsonReportInProject && facts.outputInProject}) and none in the Action's folder (${facts.nothingInActionFolder}).`
   );
 }
 
 function addReporter(ctx) {
-  const cwd = pathsProject(ctx);
-  const user = path.join(cwd, 'playwright.config.js');
-  // The reporter's default timings path is relative to the config file: the user's folder.
-  fs.copyFileSync(ctx.baseline().timings, path.join(cwd, 'shard-timings.json'));
-  const injected = `--add-reporter=${HARNESS_REPORTER},${reporterPath()}`;
-  const partition = [1, 2, 3].map((i) => ({
-    args: [`--shard=${i}/3`, '--reporter=list', injected],
-  }));
-  const run = ctx.runPartition({
-    name: 'add-reporter-3',
-    cwd,
-    partition,
-    workers: 1,
-    config: user,
-  });
+  const { run, cwd, config } = addedRun(ctx, 'user-reporter', { userArgs: ['--reporter=list'] });
+  const checked = checkRun(run);
   const listed = (args) =>
     drive
       .logLines(
-        drive.playwright({ cwd, args: ['--list', `--config=${user}`, '--shard=1/3', ...args] })
-          .output
+        drive.playwright({
+          cwd,
+          args: ['--list', `--config=${config}`, '--shard=1/3', ...args],
+          env: actionEnv({ timings: addedRun(ctx, 'balanced').timings }),
+        }).output
       )
       .some((line) => drive.parsePlanLine(line));
   const facts = {
     ...harnessFacts(run),
     planLines: run.plans.map(Boolean),
-    actionLast: listed([`--add-reporter=${reporterPath()}`]),
-    userAddReporterLast: listed([`--add-reporter=${reporterPath()}`, '--add-reporter=dot']),
-    merged: listed([`--add-reporter=dot,${reporterPath()}`]),
+    recordsWritten: run.records.map(Boolean),
+    checkExit: checked.status,
+    actionOnly: listed([`--add-reporter=${ACTION_REPORTER}`]),
+    userAddReporterLast: listed([`--add-reporter=${ACTION_REPORTER}`, '--add-reporter=dot']),
+    merged: listed([`--add-reporter=dot,${ACTION_REPORTER}`]),
   };
   return row(
     'sb.add-reporter',
-    "The reporter passed with `--add-reporter` balances with the user's config untouched and survives a `--reporter` flag; a later `--add-reporter` replaces it, so the Action must merge the user's into its own value.",
+    "A user `--reporter=list` keeps the reporter the Action adds with `--add-reporter`, and a later user `--add-reporter` replaces it, so the Action merges the user's value into its own.",
     facts.harnessOk &&
       facts.planLines.every(Boolean) &&
-      facts.actionLast &&
+      facts.recordsWritten.every(Boolean) &&
+      facts.checkExit === 0 &&
+      facts.actionOnly &&
       !facts.userAddReporterLast &&
       facts.merged,
     facts,
-    `Three shards with \`--reporter=list\` and the reporter in \`--add-reporter\`: every shard logged a plan (${facts.planLines.every(Boolean)}), violations ${kindsText(facts.violations)}. A second \`--add-reporter=dot\` after it drops it (plan logged: ${facts.userAddReporterLast}); one merged value keeps it (${facts.merged}). Options cannot travel on the command line, so playwright-shard-balancer reads its timings from the default path next to the config and writes no record.`
+    `Three shards with \`--reporter=list\`: every shard logged a plan and wrote its record, violations ${kindsText(facts.violations)}, \`check\` exit ${facts.checkExit}. A second \`--add-reporter=dot\` after the Action's drops it (plan logged: ${facts.userAddReporterLast}); one merged value keeps it (${facts.merged}).`
   );
 }
 
 function tsConfig(ctx) {
-  const { run } = wrapperRun(ctx, 'ts', { userFile: 'playwright.ts.config.ts', shards: 2 });
-  const facts = { ...harnessFacts(run), strategies: strategies(run) };
+  const { run } = addedRun(ctx, 'ts', { userFile: 'playwright.ts.config.ts', shards: 2 });
+  const checked = checkRun(run);
+  const facts = { ...harnessFacts(run), strategies: strategies(run), checkExit: checked.status };
   return row(
     'sb.ts-config',
-    "A TypeScript config loads through the JavaScript wrapper with Playwright's own loader, and the run balances.",
-    facts.harnessOk && facts.strategies.every((s) => s === 'balanced'),
+    "A TypeScript config, loaded by Playwright itself, balances with the Action's reporter added by `--add-reporter`.",
+    facts.harnessOk && facts.strategies.every((s) => s === 'balanced') && facts.checkExit === 0,
     facts,
-    `\`playwright.ts.config.ts\` required by the generated \`.js\` wrapper: two shards, ${facts.strategies.join(' and ')}, violations ${kindsText(facts.violations)}.`
+    `\`playwright.ts.config.ts\` with the added reporter: two shards, ${facts.strategies.join(' and ')}, violations ${kindsText(facts.violations)}, \`check\` exit ${facts.checkExit}.`
   );
 }
+
+/** The wrapper case rows: the id of the row of each case. */
+const WRAPPER_ROWS = {
+  gitignore: 'sb.wrapper-gitignore',
+  snapshot: 'sb.wrapper-snapshot',
+  packageSetup: 'sb.wrapper-package-setup',
+  builtinReporter: 'sb.wrapper-builtin-reporter',
+  esmTopLevelAwait: 'sb.wrapper-esm-tla',
+};
 
 function shapesRows(ctx) {
   return [
@@ -718,12 +956,13 @@ function shapesRows(ctx) {
     planDamaged(ctx),
     reportHistory(ctx),
     wrapperNaive(ctx),
-    wrapperPaths(ctx),
-    wrapperRunRow(ctx),
-    cliReporter(ctx),
+    ...Object.entries(WRAPPER_ROWS).map(([name, id]) => wrapperCase(ctx, name, id)),
+    addedCases(ctx),
+    addedConfig(ctx),
+    addedRunRow(ctx),
     addReporter(ctx),
     tsConfig(ctx),
   ];
 }
 
-module.exports = { configDifferences, differences, shapesRows };
+module.exports = { ACTION_REPORTER, CASES, differences, shapesRows };

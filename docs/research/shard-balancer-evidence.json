@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-16T14:20:52.064Z",
+  "generatedAt": "2026-10-16T15:01:56.272Z",
   "group": "all",
   "versions": {
     "package": "playwright-shard-balancer@0.1.2",
@@ -40,17 +40,17 @@
         "strategies": ["balanced", "balanced"],
         "known": 52,
         "listed": 52,
-        "shardMs": [14161, 14153],
-        "slowestMs": 14161,
-        "nativeShardMs": [13986, 13983],
-        "nativeSlowestMs": 13986,
-        "imbalance": 0,
-        "nativeImbalance": 0,
-        "slowestVsNative": 0.013,
-        "nativeRerunSlowestMs": 13972,
-        "nativeSpread": 0.001
+        "shardMs": [14284, 14329],
+        "slowestMs": 14329,
+        "nativeShardMs": [14102, 14119],
+        "nativeSlowestMs": 14119,
+        "imbalance": 0.002,
+        "nativeImbalance": 0.001,
+        "slowestVsNative": 0.015,
+        "nativeRerunSlowestMs": 14069,
+        "nativeSpread": 0.004
       },
-      "finding": "One worker per shard, 52 of 52 tests known. Shards took 14161 / 14153 ms against 13986 / 13983 ms native, slowest 14161 ms against 13986 ms; harness violations none, `check` exit 0. A second native run of the same split had its slowest shard at 13972 ms."
+      "finding": "One worker per shard, 52 of 52 tests known. Shards took 14284 / 14329 ms against 14102 / 14119 ms native, slowest 14329 ms against 14119 ms; harness violations none, `check` exit 0. A second native run of the same split had its slowest shard at 14069 ms."
     },
     {
       "id": "a.balanced-3",
@@ -65,17 +65,17 @@
         "strategies": ["balanced", "balanced", "balanced"],
         "known": 52,
         "listed": 52,
-        "shardMs": [9723, 9744, 9333],
-        "slowestMs": 9744,
-        "nativeShardMs": [12387, 3941, 12468],
-        "nativeSlowestMs": 12468,
-        "imbalance": 0.015,
-        "nativeImbalance": 0.299,
-        "slowestVsNative": -0.218,
-        "nativeRerunSlowestMs": 12503,
-        "nativeSpread": 0.003
+        "shardMs": [9784, 9762, 9567],
+        "slowestMs": 9784,
+        "nativeShardMs": [12530, 4026, 12587],
+        "nativeSlowestMs": 12587,
+        "imbalance": 0.008,
+        "nativeImbalance": 0.296,
+        "slowestVsNative": -0.223,
+        "nativeRerunSlowestMs": 12566,
+        "nativeSpread": 0.002
       },
-      "finding": "One worker per shard, 52 of 52 tests known. Shards took 9723 / 9744 / 9333 ms against 12387 / 3941 / 12468 ms native, slowest 9744 ms against 12468 ms; harness violations none, `check` exit 0. A second native run of the same split had its slowest shard at 12503 ms."
+      "finding": "One worker per shard, 52 of 52 tests known. Shards took 9784 / 9762 / 9567 ms against 12530 / 4026 / 12587 ms native, slowest 9784 ms against 12587 ms; harness violations none, `check` exit 0. A second native run of the same split had its slowest shard at 12566 ms."
     },
     {
       "id": "a.repeat-each",
@@ -103,10 +103,10 @@
         "exitCodes": [0, 0, 0],
         "checkExit": 0,
         "granularity": ["auto", "auto", "auto"],
-        "slowestMs": 9739,
-        "nativeSlowestMs": 12398
+        "slowestMs": 9791,
+        "nativeSlowestMs": 12576
       },
-      "finding": "`fullyParallel`, three shards, one worker: harness violations none, records say granularity `auto`, slowest shard 9739 ms against 12398 ms native."
+      "finding": "`fullyParallel`, three shards, one worker: harness violations none, records say granularity `auto`, slowest shard 9791 ms against 12576 ms native."
     },
     {
       "id": "a.granularity-file",
@@ -119,9 +119,9 @@
         "exitCodes": [0, 0, 0],
         "splitFiles": 0,
         "granularity": ["file", "file", "file"],
-        "slowestMs": 9791
+        "slowestMs": 9790
       },
-      "finding": "`fullyParallel` with `granularity: file`, three shards: 0 files split across shards, harness violations none, slowest shard 9791 ms."
+      "finding": "`fullyParallel` with `granularity: file`, three shards: 0 files split across shards, harness violations none, slowest shard 9790 ms."
     },
     {
       "id": "a.renamed",
@@ -148,11 +148,11 @@
         "linesPerShard": [1, 1, 1],
         "samePlanSha": true,
         "sameTimingsSha": true,
-        "planSha": "0a1cdfe846e3",
-        "timingsSha": "270c5021a238",
-        "example": "shard 1/3: 1 files, 5 tests, ~9.1s (all shards 7.4s-9.1s, largest group 9.0s), timings 270c5021a238, 52/52 tests known, 1 worker(s), plan 0a1cdfe846e3"
+        "planSha": "628fd58db1c4",
+        "timingsSha": "19d46a4fb073",
+        "example": "shard 1/3: 1 files, 5 tests, ~9.1s (all shards 7.3s-9.1s, largest group 9.0s), timings 19d46a4fb073, 52/52 tests known, 1 worker(s), plan 628fd58db1c4"
       },
-      "finding": "Every shard printed 1 line, all with timings `270c5021a238` and plan `0a1cdfe846e3`, for example: `shard 1/3: 1 files, 5 tests, ~9.1s (all shards 7.4s-9.1s, largest group 9.0s), timings 270c5021a238, 52/52 tests known, 1 worker(s), plan 0a1cdfe846e3`."
+      "finding": "Every shard printed 1 line, all with timings `19d46a4fb073` and plan `628fd58db1c4`, for example: `shard 1/3: 1 files, 5 tests, ~9.1s (all shards 7.3s-9.1s, largest group 9.0s), timings 19d46a4fb073, 52/52 tests known, 1 worker(s), plan 628fd58db1c4`."
     },
     {
       "id": "a.setup-aware",
@@ -163,34 +163,34 @@
         "harnessOk": true,
         "violations": {},
         "exitCodes": [0, 0, 0],
-        "setupMs": 102,
+        "setupMs": 106,
         "shards": [
           {
             "shard": 1,
             "ranSetup": true,
             "hostsDependent": true,
-            "predictedMs": 1440,
-            "workMs": 1338
+            "predictedMs": 1442,
+            "workMs": 1336
           },
           {
             "shard": 2,
             "ranSetup": false,
             "hostsDependent": false,
-            "predictedMs": 9027,
-            "workMs": 9027
+            "predictedMs": 9031,
+            "workMs": 9031
           },
           {
             "shard": 3,
             "ranSetup": false,
             "hostsDependent": false,
-            "predictedMs": 2284,
-            "workMs": 2284
+            "predictedMs": 2312,
+            "workMs": 2312
           }
         ],
         "consistent": true,
         "setupShards": 1
       },
-      "finding": "Only `chromium` depends on setup, three shards: the shards that ran setup (1) are exactly the shards that host a `chromium` test. Each predicted time equals its work plus 102 ms of setup and teardown on those shards and its work alone on the others (true); harness violations none."
+      "finding": "Only `chromium` depends on setup, three shards: the shards that ran setup (1) are exactly the shards that host a `chromium` test. Each predicted time equals its work plus 106 ms of setup and teardown on those shards and its work alone on the others (true); harness violations none."
     },
     {
       "id": "a.repeat-collision",
@@ -218,10 +218,10 @@
         "violations": {},
         "exitCodes": [0, 0, 0],
         "identicalBytes": true,
-        "planShas": ["0a1cdfe846e3", "0a1cdfe846e3", "0a1cdfe846e3"],
-        "referencePlanSha": "0a1cdfe846e3"
+        "planShas": ["628fd58db1c4", "628fd58db1c4", "628fd58db1c4"],
+        "referencePlanSha": "628fd58db1c4"
       },
-      "finding": "Three shards, each reading its own copy of the same bytes, logged plan `0a1cdfe846e3`, the plan of the run that shared one file; harness violations none."
+      "finding": "Three shards, each reading its own copy of the same bytes, logged plan `628fd58db1c4`, the plan of the run that shared one file; harness violations none."
     },
     {
       "id": "p.workers-independent",
@@ -229,10 +229,10 @@
       "claim": "The plan does not depend on Playwright's `--workers`: the reporter packs for its own `workers` option.",
       "status": "pass",
       "facts": {
-        "planShasWorkers1": ["0a1cdfe846e3", "0a1cdfe846e3", "0a1cdfe846e3"],
-        "planShasWorkers4": ["0a1cdfe846e3", "0a1cdfe846e3", "0a1cdfe846e3"]
+        "planShasWorkers1": ["628fd58db1c4", "628fd58db1c4", "628fd58db1c4"],
+        "planShasWorkers4": ["628fd58db1c4", "628fd58db1c4", "628fd58db1c4"]
       },
-      "finding": "`--list` of the three shards with `--workers=1` and with `--workers=4` logged plan `0a1cdfe846e3`."
+      "finding": "`--list` of the three shards with `--workers=1` and with `--workers=4` logged plan `628fd58db1c4`."
     },
     {
       "id": "p.slow-clock",
@@ -240,10 +240,10 @@
       "claim": "With a clock that jumps a second on every read, every shard computes the same plan as without it.",
       "status": "pass",
       "facts": {
-        "planShas": ["0a1cdfe846e3", "0a1cdfe846e3", "0a1cdfe846e3"],
-        "slowClockPlanShas": ["0a1cdfe846e3", "0a1cdfe846e3", "0a1cdfe846e3"]
+        "planShas": ["628fd58db1c4", "628fd58db1c4", "628fd58db1c4"],
+        "slowClockPlanShas": ["628fd58db1c4", "628fd58db1c4", "628fd58db1c4"]
       },
-      "finding": "With a clock that runs one second ahead on every read, the three shards logged plan `0a1cdfe846e3`, against `0a1cdfe846e3` without it."
+      "finding": "With a clock that runs one second ahead on every read, the three shards logged plan `628fd58db1c4`, against `628fd58db1c4` without it."
     },
     {
       "id": "s.failopen-damaged",
@@ -253,8 +253,8 @@
       "facts": {
         "harnessOk": false,
         "violations": {
-          "missing": 5,
           "duplicate": 17,
+          "missing": 5,
           "serial-split": 2
         },
         "exitCodes": [0, 0, 0],
@@ -263,7 +263,7 @@
         "checkExit": 1,
         "checkNamesMixed": true
       },
-      "finding": "Shard 2 read a truncated copy and fell back to the built-in split while shards 1 and 3 balanced (balanced, builtin, balanced). Every shard exited 0 and the harness found missing 5, duplicate 17, serial-split 2. `check` exits 1 and names the mixed split, after the tests ran."
+      "finding": "Shard 2 read a truncated copy and fell back to the built-in split while shards 1 and 3 balanced (balanced, builtin, balanced). Every shard exited 0 and the harness found duplicate 17, missing 5, serial-split 2. `check` exits 1 and names the mixed split, after the tests ran."
     },
     {
       "id": "s.strict-damaged",
@@ -325,8 +325,8 @@
       "facts": {
         "harnessOk": false,
         "violations": {
-          "missing": 5,
           "duplicate": 17,
+          "missing": 5,
           "serial-split": 2
         },
         "exitCodes": [0, 0, 0],
@@ -334,7 +334,7 @@
         "checkExit": 1,
         "namesMissing": true
       },
-      "finding": "`--reporter=list` on shard 2 replaced the config's reporters, so that shard split natively and wrote no record. The shards exited 0 / 0 / 0 with missing 5, duplicate 17, serial-split 2; `check` exits 1 with `missing records for shard 2`."
+      "finding": "`--reporter=list` on shard 2 replaced the config's reporters, so that shard split natively and wrote no record. The shards exited 0 / 0 / 0 with duplicate 17, missing 5, serial-split 2; `check` exits 1 with `missing records for shard 2`."
     },
     {
       "id": "s.reporter-dropped-all",
@@ -390,9 +390,9 @@
         "exitCodes": [1, 1],
         "recordsWritten": [true, true],
         "checkExit": 1,
-        "notRun": 45
+        "notRun": 39
       },
-      "finding": "A test that fails first and `--max-failures=1`: the shards exited 1 / 1 and both wrote a record; `check` exits 1 with 45 tests that did not run."
+      "finding": "A test that fails first and `--max-failures=1`: the shards exited 1 / 1 and both wrote a record; `check` exits 1 with 39 tests that did not run."
     },
     {
       "id": "c.corpus-mismatch",
@@ -431,19 +431,19 @@
       "status": "pass",
       "facts": {
         "exitCode": 1,
-        "failedMs": 9100,
+        "failedMs": 9128,
         "outcome": "unexpected",
         "updateExit": 0,
         "before": {
-          "chromium": [1026],
-          "firefox": [1036]
+          "chromium": [1043],
+          "firefox": [1052]
         },
         "after": {
-          "chromium": [1026],
-          "firefox": [1036]
+          "chromium": [1043],
+          "firefox": [1052]
         }
       },
-      "finding": "The volatile test failed after 3000 ms on each of its attempts (9100 ms in chromium, outcome `unexpected`). After `update` its samples are 1026 ms in chromium and 1036 ms in firefox, as before."
+      "finding": "The volatile test failed after 3000 ms on each of its attempts (9128 ms in chromium, outcome `unexpected`). After `update` its samples are 1043 ms in chromium and 1052 ms in firefox, as before."
     },
     {
       "id": "h.cancelled",
@@ -456,16 +456,16 @@
         "status": "interrupted",
         "ran": false,
         "before": {
-          "chromium": [1026],
-          "firefox": [1036]
+          "chromium": [1043],
+          "firefox": [1052]
         },
         "after": {
-          "chromium": [1026],
-          "firefox": [1036]
+          "chromium": [1043],
+          "firefox": [1052]
         },
         "changedEntries": 1
       },
-      "finding": "SIGINT 300 ms into the test: exit 130, the record says `interrupted` and marks the test as not run, and `update` leaves its samples at 1026 ms in chromium. Across the whole history `update` changed 1 entry, from the tests that passed before the signal."
+      "finding": "SIGINT 300 ms into the test: exit 130, the record says `interrupted` and marks the test as not run, and `update` leaves its samples at 1043 ms in chromium. Across the whole history `update` changed 1 entry, from the tests that passed before the signal."
     },
     {
       "id": "h.faster-test",
@@ -473,10 +473,10 @@
       "claim": "From a full window, the price of a test that got faster follows it in three runs.",
       "status": "pass",
       "facts": {
-        "pricesMs": [1026, 1026, 1026, 127],
-        "samples": [1026, 1026, 122, 126, 127]
+        "pricesMs": [1043, 1043, 1043, 125],
+        "samples": [1043, 1043, 125, 123, 125]
       },
-      "finding": "The volatile test went from about one second to 100 ms, starting from a window of five samples. Its chromium price before and after each of 3 faster runs: 1026 then 1026 then 1026 then 127 ms (samples 1026, 1026, 122, 126, 127). The median of the last five drops once the fast samples are the majority."
+      "finding": "The volatile test went from about one second to 100 ms, starting from a window of five samples. Its chromium price before and after each of 3 faster runs: 1043 then 1043 then 1043 then 125 ms (samples 1043, 1043, 125, 123, 125). The median of the last five drops once the fast samples are the majority."
     },
     {
       "id": "h.flaky-slow",
@@ -488,11 +488,11 @@
         "attempts": 2,
         "sampleMs": 4005,
         "passingAttemptMs": 1002,
-        "shortWindowPriceMs": [1026, 2516],
-        "fullWindowPriceMs": [1026, 1026],
+        "shortWindowPriceMs": [1043, 2524],
+        "fullWindowPriceMs": [1043, 1043],
         "updateExits": [0, 0]
       },
-      "finding": "The first attempt failed after 3000 ms and the retry passed in 1002 ms; the record gives one sample of 4005 ms. From the one-sample history the chromium price moves from 1026 to 2516 ms; from a full window it stays at 1026 ms."
+      "finding": "The first attempt failed after 3000 ms and the retry passed in 1002 ms; the record gives one sample of 4005 ms. From the one-sample history the chromium price moves from 1043 to 2524 ms; from a full window it stays at 1043 ms."
     },
     {
       "id": "h.mixed-outcome",
@@ -515,11 +515,11 @@
       "status": "fail",
       "facts": {
         "updateExits": [0, 0, 0],
-        "priceBeforeMs": 1026,
+        "priceBeforeMs": 1043,
         "priceAfterMs": 0,
-        "samples": [1026, 1026, 0, 0, 0]
+        "samples": [1043, 1043, 0, 0, 0]
       },
-      "finding": "Three records in which the test passed in 0 ms, merged into a full window priced at 1026 ms: `update` accepts each (exit 0 / 0 / 0), the window holds 1026, 1026, 0, 0, 0 ms and the price is 0 ms."
+      "finding": "Three records in which the test passed in 0 ms, merged into a full window priced at 1043 ms: `update` accepts each (exit 0 / 0 / 0), the window holds 1043, 1043, 0, 0, 0 ms and the price is 0 ms."
     },
     {
       "id": "h.damaged-history",
@@ -611,13 +611,13 @@
       "claim": "The same inputs in the same order give the same bytes and sha with sorted keys; another order changes only the order of the `applied` list.",
       "status": "pass",
       "facts": {
-        "shas": ["7c17e53a84a8", "7c17e53a84a8", "18def51f2fdc"],
+        "shas": ["336364ed9c91", "336364ed9c91", "ed1f26333f3d"],
         "sameOrderSameBytes": true,
         "otherOrderSameBytes": false,
         "otherOrderSameEntries": true,
         "keysSorted": true
       },
-      "finding": "Two copies updated with the shard records in one order give `7c17e53a84a8` and `7c17e53a84a8`; the opposite order gives `18def51f2fdc`, with the same entries (true) and the input shas listed in the other order. A writer that sorts its inputs gets the same bytes every time."
+      "finding": "Two copies updated with the shard records in one order give `336364ed9c91` and `336364ed9c91`; the opposite order gives `ed1f26333f3d`, with the same entries (true) and the input shas listed in the other order. A writer that sorts its inputs gets the same bytes every time."
     },
     {
       "id": "h.racing-publish",
@@ -654,14 +654,14 @@
           {
             "name": "known test",
             "level": "known",
-            "packageMs": 102,
-            "oursMs": 102
+            "packageMs": 103,
+            "oursMs": 103
           },
           {
             "name": "new test in a known describe",
             "level": "describe",
-            "packageMs": 122,
-            "oursMs": 122
+            "packageMs": 123,
+            "oursMs": 123
           },
           {
             "name": "new loose test in a known file",
@@ -678,8 +678,8 @@
           {
             "name": "new project",
             "level": "suite",
-            "packageMs": 672,
-            "oursMs": 672
+            "packageMs": 673,
+            "oursMs": 673
           }
         ],
         "levels": ["known", "describe", "file", "project", "suite"],
@@ -687,7 +687,7 @@
         "levelsDiffer": true,
         "staticSkipMs": 0
       },
-      "finding": "On a suite with two describes and a loose test in one file, a second file and slower firefox tests, the four medians differ (true). The package's estimator gives 102 ms (known), 122 ms (describe), 403 ms (file), 142 ms (project), 672 ms (suite); our own medians give the same (true). A static skip costs 0 ms."
+      "finding": "On a suite with two describes and a loose test in one file, a second file and slower firefox tests, the four medians differ (true). The package's estimator gives 103 ms (known), 123 ms (describe), 403 ms (file), 142 ms (project), 673 ms (suite); our own medians give the same (true). A static skip costs 0 ms."
     },
     {
       "id": "w.plan-workers",
@@ -697,19 +697,19 @@
       "facts": {
         "harnessOk": [true, true],
         "predictedMs": [
-          [9130, 9127, 7354],
-          [9130, 9127, 3859]
+          [9123, 9123, 7335],
+          [9123, 9123, 3839]
         ],
         "testsMs": [
-          [9610, 9593, 5166],
-          [9634, 9561, 5241]
+          [9564, 9611, 5192],
+          [9578, 9571, 5188]
         ],
-        "errorPlanWorkers1": 0.174,
-        "errorPlanWorkers2": 0.12,
+        "errorPlanWorkers1": 0.17,
+        "errorPlanWorkers2": 0.118,
         "predictionsDiffer": true,
         "tolerance": 0.25
       },
-      "finding": "Three shards under `--workers=2`: the plan for one worker predicted 9130 / 9127 / 7354 ms and missed the measured 9610 / 9593 / 5166 ms by 17.4% on average; the plan for two workers predicted 9130 / 9127 / 3859 ms against 9634 / 9561 / 5241 ms, off by 12.0%."
+      "finding": "Three shards under `--workers=2`: the plan for one worker predicted 9123 / 9123 / 7335 ms and missed the measured 9564 / 9611 / 5192 ms by 17.0% on average; the plan for two workers predicted 9123 / 9123 / 3839 ms against 9578 / 9571 / 5188 ms, off by 11.8%."
     },
     {
       "id": "sim.predicted-vs-actual",
@@ -720,27 +720,27 @@
         "rows": [
           {
             "shards": 2,
-            "simulatedBuiltinMs": 12754,
-            "measuredBuiltinMs": 13776,
-            "simulatedBalancedMs": 12753,
-            "measuredBalancedMs": 13962,
-            "builtinError": 0.074,
-            "balancedError": 0.087
+            "simulatedBuiltinMs": 12745,
+            "measuredBuiltinMs": 13882,
+            "simulatedBalancedMs": 12740,
+            "measuredBalancedMs": 14140,
+            "builtinError": 0.082,
+            "balancedError": 0.099
           },
           {
             "shards": 3,
-            "simulatedBuiltinMs": 11449,
-            "measuredBuiltinMs": 12310,
-            "simulatedBalancedMs": 9130,
-            "measuredBalancedMs": 9551,
-            "builtinError": 0.07,
-            "balancedError": 0.044
+            "simulatedBuiltinMs": 11446,
+            "measuredBuiltinMs": 12375,
+            "simulatedBalancedMs": 9123,
+            "measuredBalancedMs": 9596,
+            "builtinError": 0.075,
+            "balancedError": 0.049
           }
         ],
         "tolerance": 0.25,
         "balancedNeverSlower": true
       },
-      "finding": "2 shards: built-in 12754 ms simulated against 13776 ms measured, balanced 12753 ms against 13962 ms. 3 shards: built-in 11449 ms simulated against 12310 ms measured, balanced 9130 ms against 9551 ms. The balanced prediction is at or below the built-in one at every shard count (true)."
+      "finding": "2 shards: built-in 12745 ms simulated against 13882 ms measured, balanced 12740 ms against 14140 ms. 3 shards: built-in 11446 ms simulated against 12375 ms measured, balanced 9123 ms against 9596 ms. The balanced prediction is at or below the built-in one at every shard count (true)."
     },
     {
       "id": "sim.overhead",
@@ -748,13 +748,13 @@
       "claim": "`--overhead` adds a fixed cost per shard: once to the elapsed time and once per shard to the machine time, leaving the plan alone.",
       "status": "pass",
       "facts": {
-        "elapsedMs": 9130,
-        "elapsedWithOverheadMs": 99130,
-        "machineMs": 25611,
-        "machineWithOverheadMs": 295611,
-        "balancedMs": 9130
+        "elapsedMs": 9123,
+        "elapsedWithOverheadMs": 99123,
+        "machineMs": 25581,
+        "machineWithOverheadMs": 295581,
+        "balancedMs": 9123
       },
-      "finding": "Three shards with `--overhead 90s`: elapsed 9130 ms becomes 99130 ms and machine time 25611 ms becomes 295611 ms; the balanced slowest shard stays 9130 ms."
+      "finding": "Three shards with `--overhead 90s`: elapsed 9123 ms becomes 99123 ms and machine time 25581 ms becomes 295581 ms; the balanced slowest shard stays 9123 ms."
     },
     {
       "id": "sim.couture-cast",
@@ -1063,7 +1063,7 @@
           "logLines": [
             "[flakiness.io] balancing 3 shards | [flakiness.io] duration hints: 54/54 tests (100%) | [flakiness.io] Running shard 1/3: 9.1s of work",
             "[flakiness.io] balancing 3 shards | [flakiness.io] duration hints: 54/54 tests (100%) | [flakiness.io] Running shard 2/3: 9.1s of work",
-            "[flakiness.io] balancing 3 shards | [flakiness.io] duration hints: 54/54 tests (100%) | [flakiness.io] Running shard 3/3: 7.1s of work"
+            "[flakiness.io] balancing 3 shards | [flakiness.io] duration hints: 54/54 tests (100%) | [flakiness.io] Running shard 3/3: 7.2s of work"
           ],
           "warns": false
         },
@@ -1080,7 +1080,7 @@
           "logLines": [
             "[flakiness.io] balancing 3 shards | [flakiness.io] duration hints: 54/54 tests (100%) | [flakiness.io] Running shard 1/3: 9.1s of work",
             "[flakiness.io] balancing 3 shards | [flakiness.io] duration hints: 54/54 tests (100%) | [flakiness.io] Running shard 2/3: 9.1s of work",
-            "[flakiness.io] balancing 3 shards | [flakiness.io] duration hints: 54/54 tests (100%) | [flakiness.io] Running shard 3/3: 7.2s of work"
+            "[flakiness.io] balancing 3 shards | [flakiness.io] duration hints: 54/54 tests (100%) | [flakiness.io] Running shard 3/3: 7.1s of work"
           ],
           "warns": false
         }
@@ -1119,11 +1119,11 @@
         "serialSplit": 0,
         "files": 3,
         "lines": [5, 5, 42],
-        "planSha": "ee026cacbcc0",
+        "planSha": "7ea8cecb5b02",
         "hasShardArg": false,
         "recordShards": [null, null, null]
       },
-      "finding": "`plan` wrote 3 list files (5 / 5 / 42 lines, plan `ee026cacbcc0`). Run through the harness with `--test-list` and no `--shard`: violations none, 0 serial groups split, and every record has no shard number."
+      "finding": "`plan` wrote 3 list files (5 / 5 / 42 lines, plan `7ea8cecb5b02`). Run through the harness with `--test-list` and no `--shard`: violations none, 0 serial groups split, and every record has no shard number."
     },
     {
       "id": "sa.check-list",
@@ -1241,32 +1241,247 @@
       "finding": "The JS config with a global setup script does not load through it (`Error: Cannot find module './global-setup.js'`), and the TS config loads with 7 resolved fields moved to the wrapper's folder (`rootDir`, `projects[0].testDir`, `projects[0].snapshotDir`, `projects[1].testDir`): Playwright resolves every relative path against the folder of the config file it loads."
     },
     {
-      "id": "sb.wrapper-paths",
+      "id": "sb.wrapper-gitignore",
       "group": "shape B",
-      "claim": "The resolving wrapper gives the resolved config of the user's config, apart from the config file and the appended reporter, for a JS config with relative paths of every kind and for a TS config.",
+      "claim": "The resolving wrapper keeps the meaning of the user's config where a spec in a folder `.gitignore` lists is left out when the config sets no `testDir`.",
+      "status": "fail",
+      "facts": {
+        "plain": {
+          "loads": true,
+          "files": [
+            "tests/account.spec.js",
+            "tests/cart.spec.js",
+            "tests/catalog.spec.js",
+            "tests/checkout.spec.js",
+            "tests/flaky.spec.js",
+            "tests/oversized.spec.js",
+            "tests/parameterized.spec.js",
+            "tests/serial-flow.spec.js",
+            "tests/serial-retry.spec.js"
+          ]
+        },
+        "wrapper": {
+          "loads": true,
+          "files": [
+            "ignored/skipped.spec.js",
+            "tests/account.spec.js",
+            "tests/cart.spec.js",
+            "tests/catalog.spec.js",
+            "tests/checkout.spec.js",
+            "tests/flaky.spec.js",
+            "tests/oversized.spec.js",
+            "tests/parameterized.spec.js",
+            "tests/serial-flow.spec.js",
+            "tests/serial-retry.spec.js"
+          ]
+        },
+        "same": false
+      },
+      "finding": "Plain, the run finds 9 spec files; through the wrapper it finds 10 spec files."
+    },
+    {
+      "id": "sb.wrapper-snapshot",
+      "group": "shape B",
+      "claim": "The resolving wrapper keeps the meaning of the user's config where a relative `snapshotPathTemplate` finds the snapshot next to the config.",
+      "status": "fail",
+      "facts": {
+        "plain": {
+          "loads": true,
+          "exitCode": 0,
+          "setupRan": false,
+          "error": null
+        },
+        "wrapper": {
+          "loads": true,
+          "exitCode": 1,
+          "setupRan": false,
+          "error": "Error: A snapshot doesn't exist at greeting.txt."
+        },
+        "same": false
+      },
+      "finding": "Plain, the run exits 0; through the wrapper it exits 1."
+    },
+    {
+      "id": "sb.wrapper-package-setup",
+      "group": "shape B",
+      "claim": "The resolving wrapper keeps the meaning of the user's config where a `globalSetup` given by package name runs.",
+      "status": "fail",
+      "facts": {
+        "plain": {
+          "loads": true,
+          "exitCode": 0,
+          "setupRan": true,
+          "error": null
+        },
+        "wrapper": {
+          "loads": false,
+          "exitCode": 1,
+          "setupRan": false,
+          "error": "Error: Cannot find module 'psp-global-setup'"
+        },
+        "same": false
+      },
+      "finding": "Plain, the run exits 0 after the global setup ran; through the wrapper it does not load (`Error: Cannot find module 'psp-global-setup'`)."
+    },
+    {
+      "id": "sb.wrapper-builtin-reporter",
+      "group": "shape B",
+      "claim": "The resolving wrapper keeps the meaning of the user's config where the built-in `perfetto` and `coverage` reporters load.",
+      "status": "fail",
+      "facts": {
+        "plain": {
+          "loads": true,
+          "exitCode": 0,
+          "setupRan": false,
+          "error": null
+        },
+        "wrapper": {
+          "loads": false,
+          "exitCode": 1,
+          "setupRan": false,
+          "error": "Error: Cannot find module 'perfetto'"
+        },
+        "same": false
+      },
+      "finding": "Plain, the run exits 0; through the wrapper it does not load (`Error: Cannot find module 'perfetto'`)."
+    },
+    {
+      "id": "sb.wrapper-esm-tla",
+      "group": "shape B",
+      "claim": "The resolving wrapper keeps the meaning of the user's config where an ES module config with top-level `await` loads.",
+      "status": "fail",
+      "facts": {
+        "plain": {
+          "loads": true,
+          "files": ["account.spec.js"]
+        },
+        "wrapper": {
+          "loads": false,
+          "error": "SyntaxError: await is only valid in async functions and the top level bodies of modules"
+        },
+        "same": false
+      },
+      "finding": "Plain, the run finds 1 spec file; through the wrapper it does not load (`SyntaxError: await is only valid in async functions and the top level bodies of modules`)."
+    },
+    {
+      "id": "sb.add-reporter-cases",
+      "group": "shape B",
+      "claim": "With the Action's reporter added by `--add-reporter`, each of the five configs the wrapper breaks behaves exactly as in the plain run: the gitignored spec, the relative snapshot path, the package global setup, the perfetto and coverage reporters and the ES module config with top-level await.",
+      "status": "pass",
+      "facts": {
+        "gitignore": {
+          "plain": {
+            "loads": true,
+            "files": [
+              "tests/account.spec.js",
+              "tests/cart.spec.js",
+              "tests/catalog.spec.js",
+              "tests/checkout.spec.js",
+              "tests/flaky.spec.js",
+              "tests/oversized.spec.js",
+              "tests/parameterized.spec.js",
+              "tests/serial-flow.spec.js",
+              "tests/serial-retry.spec.js"
+            ]
+          },
+          "added": {
+            "loads": true,
+            "files": [
+              "tests/account.spec.js",
+              "tests/cart.spec.js",
+              "tests/catalog.spec.js",
+              "tests/checkout.spec.js",
+              "tests/flaky.spec.js",
+              "tests/oversized.spec.js",
+              "tests/parameterized.spec.js",
+              "tests/serial-flow.spec.js",
+              "tests/serial-retry.spec.js"
+            ]
+          },
+          "same": true
+        },
+        "snapshot": {
+          "plain": {
+            "loads": true,
+            "exitCode": 0,
+            "setupRan": false,
+            "error": null
+          },
+          "added": {
+            "loads": true,
+            "exitCode": 0,
+            "setupRan": false,
+            "error": null
+          },
+          "same": true
+        },
+        "packageSetup": {
+          "plain": {
+            "loads": true,
+            "exitCode": 0,
+            "setupRan": true,
+            "error": null
+          },
+          "added": {
+            "loads": true,
+            "exitCode": 0,
+            "setupRan": true,
+            "error": null
+          },
+          "same": true
+        },
+        "builtinReporter": {
+          "plain": {
+            "loads": true,
+            "exitCode": 0,
+            "setupRan": false,
+            "error": null
+          },
+          "added": {
+            "loads": true,
+            "exitCode": 0,
+            "setupRan": false,
+            "error": null
+          },
+          "same": true
+        },
+        "esmTopLevelAwait": {
+          "plain": {
+            "loads": true,
+            "files": ["account.spec.js"]
+          },
+          "added": {
+            "loads": true,
+            "files": ["account.spec.js"]
+          },
+          "same": true
+        }
+      },
+      "finding": "Same outcome as the plain run: gitignore true, snapshot true, packageSetup true, builtinReporter true, esmTopLevelAwait true."
+    },
+    {
+      "id": "sb.add-reporter-config",
+      "group": "shape B",
+      "claim": "With the Action's reporter added by `--add-reporter`, the resolved `FullConfig` and the JSON list config equal those of the plain run apart from the added reporter, for a JS config with relative paths of every kind and for a TS config.",
       "status": "pass",
       "facts": {
         "js": {
-          "loads": true,
-          "error": null,
           "fullConfigDifferences": [],
-          "appendedLast": true,
-          "listConfigDifferences": []
+          "listConfigDifferences": [],
+          "addedLast": true
         },
         "ts": {
-          "loads": true,
-          "error": null,
           "fullConfigDifferences": [],
-          "appendedLast": true,
-          "listConfigDifferences": []
+          "listConfigDifferences": [],
+          "addedLast": true
         }
       },
-      "finding": "JS config: 0 differences in the resolved `FullConfig` and 0 in the JSON list config; TS config through the JS wrapper: 0 and 0. The appended reporter is last (true)."
+      "finding": "JS config: 0 differences in the `FullConfig` and 0 in the JSON list config; TS config: 0 and 0. The added reporter is last (true)."
     },
     {
-      "id": "sb.wrapper-run",
+      "id": "sb.add-reporter-run",
       "group": "shape B",
-      "claim": "Through the resolving wrapper the fixture balances from the timings where the Action puts them, every leaf runs once, and the user's outputs land in the user's folders.",
+      "claim": "With the user's config untouched and the Action's reporter added by `--add-reporter`, its options in the environment, the fixture balances from the timings where the Action puts them, every leaf runs once and `check` passes.",
       "status": "pass",
       "facts": {
         "harnessOk": true,
@@ -1279,56 +1494,39 @@
         "outputInProject": true,
         "nothingInActionFolder": true
       },
-      "finding": "Three shards through the wrapper: violations none, every shard balanced from the Action's timings file (sha matches: true), `check` exit 0. The user's JSON report and output folder are in the project (true) and none in the Action's folder (true)."
-    },
-    {
-      "id": "sb.cli-reporter",
-      "group": "shape B",
-      "claim": "A `--reporter` flag on the command line replaces the reporters of the wrapper, the injected one with them, and the aggregate check turns that into a red run.",
-      "status": "pass",
-      "facts": {
-        "harnessOk": false,
-        "violations": {
-          "missing": 5,
-          "duplicate": 17,
-          "serial-split": 2
-        },
-        "exitCodes": [0, 0, 0],
-        "recordsWritten": [true, false, true],
-        "planLines": [true, false, true],
-        "checkExit": 1,
-        "namesMissing": true
-      },
-      "finding": "`--reporter=list` on shard 2: that shard logged no plan and wrote no record, the harness found missing 5, duplicate 17, serial-split 2, and `check` exits 1 with `missing records for shard 2`."
+      "finding": "Three shards: violations none, every shard balanced from the Action's timings file (sha matches: true) and wrote its record, `check` exit 0. The user's JSON report and output folder are in the project (true) and none in the Action's folder (true)."
     },
     {
       "id": "sb.add-reporter",
       "group": "shape B",
-      "claim": "The reporter passed with `--add-reporter` balances with the user's config untouched and survives a `--reporter` flag; a later `--add-reporter` replaces it, so the Action must merge the user's into its own value.",
+      "claim": "A user `--reporter=list` keeps the reporter the Action adds with `--add-reporter`, and a later user `--add-reporter` replaces it, so the Action merges the user's value into its own.",
       "status": "pass",
       "facts": {
         "harnessOk": true,
         "violations": {},
         "exitCodes": [0, 0, 0],
         "planLines": [true, true, true],
-        "actionLast": true,
+        "recordsWritten": [true, true, true],
+        "checkExit": 0,
+        "actionOnly": true,
         "userAddReporterLast": false,
         "merged": true
       },
-      "finding": "Three shards with `--reporter=list` and the reporter in `--add-reporter`: every shard logged a plan (true), violations none. A second `--add-reporter=dot` after it drops it (plan logged: false); one merged value keeps it (true). Options cannot travel on the command line, so playwright-shard-balancer reads its timings from the default path next to the config and writes no record."
+      "finding": "Three shards with `--reporter=list`: every shard logged a plan and wrote its record, violations none, `check` exit 0. A second `--add-reporter=dot` after the Action's drops it (plan logged: false); one merged value keeps it (true)."
     },
     {
       "id": "sb.ts-config",
       "group": "shape B",
-      "claim": "A TypeScript config loads through the JavaScript wrapper with Playwright's own loader, and the run balances.",
+      "claim": "A TypeScript config, loaded by Playwright itself, balances with the Action's reporter added by `--add-reporter`.",
       "status": "pass",
       "facts": {
         "harnessOk": true,
         "violations": {},
         "exitCodes": [0, 0],
-        "strategies": ["balanced", "balanced"]
+        "strategies": ["balanced", "balanced"],
+        "checkExit": 0
       },
-      "finding": "`playwright.ts.config.ts` required by the generated `.js` wrapper: two shards, balanced and balanced, violations none."
+      "finding": "`playwright.ts.config.ts` with the added reporter: two shards, balanced and balanced, violations none, `check` exit 0."
     }
   ],
   "citations": [
@@ -1893,14 +2091,6 @@
       "reason": null
     },
     {
-      "source": "upstream",
-      "file": "src/reporter.ts",
-      "lines": "178",
-      "quote": "this.options.timings ?? 'shard-timings.json'",
-      "ok": true,
-      "reason": null
-    },
-    {
       "source": "playwright",
       "file": "playwright/lib/common/index.js",
       "lines": "580",
@@ -1911,8 +2101,48 @@
     {
       "source": "playwright",
       "file": "playwright/lib/common/index.js",
+      "lines": "612",
+      "quote": "!projectConfig.testDir && !config.testDir",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "playwright",
+      "file": "playwright/lib/worker/workerProcessEntry.js",
+      "lines": "1274",
+      "quote": "resolve(this._configInternal.configDir, snapshotPath)",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "playwright",
+      "file": "playwright/lib/common/index.js",
+      "lines": "693",
+      "quote": "\"perfetto\", \"coverage\"",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "playwright",
+      "file": "playwright/lib/common/index.js",
+      "lines": "694-700",
+      "quote": "return require.resolve(id, { paths: [rootDir] });",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "playwright",
+      "file": "playwright/lib/common/index.js",
       "lines": "523",
       "quote": "...configCLIOverrides.additionalReporters ?? []",
+      "ok": true,
+      "reason": null
+    },
+    {
+      "source": "upstream",
+      "file": "src/reporter.ts",
+      "lines": "178",
+      "quote": "this.options.timings ?? 'shard-timings.json'",
       "ok": true,
       "reason": null
     },
@@ -1989,5 +2219,5 @@
       "reason": null
     }
   ],
-  "durationMs": 1219663
+  "durationMs": 1207115
 }

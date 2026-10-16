@@ -1,7 +1,8 @@
 'use strict';
 
 /**
- * Shape B of the Action: a wrapper config the Action generates in a folder of its own, which loads
+ * The rejected form of shape B, kept as evidence: a wrapper config the Action would generate in a
+ * folder of its own, which loads
  * the user's config and appends a reporter, so the user's config stays as it is. Playwright
  * resolves every relative path of a config against the folder of the config file it loads, which
  * is the wrapper's folder, so the `resolved` wrapper first resolves the paths of the user config
@@ -15,7 +16,9 @@
  * config folder), `outputDir` (`test-results` next to the nearest `package.json`) and the default
  * reporter. The `naive` wrapper only appends the reporter, which is the control.
  *
- * `writeWrapper` returns the path of the generated `.js` file.
+ * `writeWrapper` returns the path of the generated `.js` file. The `sb.wrapper-*` rows show the
+ * configs whose meaning this rewrite changes; the Action adds its reporter with `--add-reporter`
+ * and leaves the user's config alone (`lib/action-reporter.mjs`).
  */
 
 const fs = require('node:fs');

@@ -342,6 +342,30 @@ const PW_CONFIG_DIR = src(
   'pathResolve(configDir, projectConfig.testDir)',
   'playwright'
 );
+const PW_GITIGNORE = src(
+  'playwright/lib/common/index.js',
+  '612',
+  '!projectConfig.testDir && !config.testDir',
+  'playwright'
+);
+const PW_BUILTIN = src(
+  'playwright/lib/common/index.js',
+  '693',
+  '"perfetto", "coverage"',
+  'playwright'
+);
+const PW_SCRIPT = src(
+  'playwright/lib/common/index.js',
+  '694-700',
+  'return require.resolve(id, { paths: [rootDir] });',
+  'playwright'
+);
+const PW_SNAPSHOT = src(
+  'playwright/lib/worker/workerProcessEntry.js',
+  '1274',
+  'resolve(this._configInternal.configDir, snapshotPath)',
+  'playwright'
+);
 const KEEP_LATEST = 'The aggregate job keeps only the latest attempt of each shard';
 
 /** Gaps the Flakiness and NSXBet qualifications named. */
@@ -928,22 +952,38 @@ const MECHANISMS = [
     s8: 'The planning step writes one list per shard for the fixture, with and without `--repeat-each 2` and with a helper-defined test, and every leaf runs once with no `--shard`.',
   },
   {
-    subject: "A reporter the Action injects without a change to the user's config",
+    subject: 'A wrapper config the Action generates around the user config',
     mechanism:
-      "The reporter reads its timings relative to the config file and its options from the config; Playwright resolves every relative path of a config against the config file's folder and appends `--add-reporter` reporters to the configured or replaced ones.",
-    sources: [TIMINGS_PATH, OPTIONS, PW_CONFIG_DIR, PW_ADD_REPORTER, HOOK_RANGE],
-    decision: 'adapt',
+      "A config file in a folder of the Action loads the user's config, resolves its relative paths against the user's folder and appends the reporter; Playwright resolves every relative path of a config against the folder of the config file it loads.",
+    sources: [PW_CONFIG_DIR, PW_GITIGNORE, PW_SNAPSHOT, PW_BUILTIN, PW_SCRIPT],
+    decision: 'reject',
     reason:
-      "A wrapper that only appends the reporter breaks the user's paths (`sb.wrapper-naive`); a wrapper that resolves them first keeps the resolved config, for a JS and a TS config (`sb.wrapper-paths`, `sb.ts-config`), and balances from the Action's timings (`sb.wrapper-run`). A `--reporter` flag drops a wrapper's reporter and the check turns that red (`sb.cli-reporter`); `--add-reporter` survives it as one merged value, with no options (`sb.add-reporter`), so our bundled reporter reads its options from the environment.",
+      'Rewriting the config changes its meaning: appending alone moves every relative path (`sb.wrapper-naive`), and resolving the paths first still turns on gitignored specs, misses a relative snapshot template, breaks a package global setup and the perfetto and coverage reporters, and cannot load an ES module config with top-level await (`sb.wrapper-gitignore`, `sb.wrapper-snapshot`, `sb.wrapper-package-setup`, `sb.wrapper-builtin-reporter`, `sb.wrapper-esm-tla`).',
     evidence: {
       'sb.wrapper-naive': 'fail',
-      'sb.wrapper-paths': 'pass',
-      'sb.wrapper-run': 'pass',
-      'sb.cli-reporter': 'pass',
+      'sb.wrapper-gitignore': 'fail',
+      'sb.wrapper-snapshot': 'fail',
+      'sb.wrapper-package-setup': 'fail',
+      'sb.wrapper-builtin-reporter': 'fail',
+      'sb.wrapper-esm-tla': 'fail',
+    },
+  },
+  {
+    subject: 'A reporter the Action adds with `--add-reporter`, its options in the environment',
+    mechanism:
+      "Playwright appends `--add-reporter` reporters to the configured reporters, or to those a `--reporter` flag gives, and loads the user's config itself; the reporter reads its timings relative to the config file and its options from the config.",
+    sources: [PW_ADD_REPORTER, TIMINGS_PATH, OPTIONS, HOOK_RANGE],
+    decision: 'adapt',
+    reason:
+      "The user's config keeps its meaning: the resolved config equals the plain run's apart from the added reporter, for a JS and a TS config (`sb.add-reporter-config`), and the five configs a wrapper breaks behave as in the plain run (`sb.add-reporter-cases`). The command line carries no reporter options, so our bundled reporter reads them from the environment; with them the fixture balances from the Action's timings and `check` passes (`sb.add-reporter-run`, `sb.ts-config`). A user `--reporter` keeps it and a later user `--add-reporter` replaces it, so the Action merges the user's value into its own (`sb.add-reporter`).",
+    evidence: {
+      'sb.add-reporter-config': 'pass',
+      'sb.add-reporter-cases': 'pass',
+      'sb.add-reporter-run': 'pass',
       'sb.add-reporter': 'pass',
       'sb.ts-config': 'pass',
     },
-    s8: "The Action balances the fixture through its own command line with the user's config untouched, a JS and a TS config, and a user `--reporter` or `--add-reporter` neither drops the reporter nor passes silently.",
+    s8: "The Action runs every shard with the user's config untouched and one `--add-reporter` value that holds the user's own added reporters and its reporter, the options in the environment, and the fixture balances under `--reporter=list` and with a TS config.",
   },
   {
     subject: 'Fork pull requests use the built-in split',
@@ -1015,7 +1055,7 @@ const INTERNALS = [
 
 /**
  * Where each take and adapt of the mechanisms works inside the Action: shape A plans in a planning
- * step and hands each shard a `--test-list` file, shape B injects a preprocess reporter into the
+ * step and hands each shard a `--test-list` file, shape B adds a preprocess reporter to the
  * user's run. `works` is whether the mechanism applies as harvested under that shape, `row` the
  * evidence row that shows it, `s8` the acceptance test under that shape.
  */
@@ -1029,7 +1069,7 @@ const SHAPES = {
     b: {
       works: true,
       row: 's.strict-damaged',
-      s8: 'With history present, a shard whose injected reporter cannot read the snapshot fails before any test.',
+      s8: 'With history present, a shard whose added reporter cannot read the snapshot fails before any test.',
     },
   },
   'One timings copy pinned per workflow run': {
@@ -1076,8 +1116,8 @@ const SHAPES = {
     },
     b: {
       works: true,
-      row: 'sb.cli-reporter',
-      s8: 'A shard whose command line drops the injected reporter fails the aggregate check.',
+      row: 'c.missing-record',
+      s8: 'A shard that writes no record, whatever its command line, fails the aggregate check.',
     },
   },
   '`simulate` for shard-count advice': {
@@ -1097,7 +1137,7 @@ const SHAPES = {
     b: {
       works: true,
       row: 'p.workers-independent',
-      s8: 'The injected reporter takes the workers input, and the plan sha is the same under any `--workers`.',
+      s8: 'The added reporter takes the workers input, and the plan sha is the same under any `--workers`.',
     },
   },
   'Setup projects priced on every shard that needs them, one sample per update': {
@@ -1168,8 +1208,8 @@ const SHAPES = {
     },
     b: {
       works: true,
-      row: 'sb.wrapper-run',
-      s8: 'The injected reporter excludes the tests of other shards through the public preprocess API.',
+      row: 'sb.add-reporter-run',
+      s8: 'The added reporter excludes the tests of other shards through the public preprocess API.',
     },
   },
   'Per-shard `--test-list` files from one planning job': {
@@ -1180,20 +1220,20 @@ const SHAPES = {
     },
     b: {
       works: false,
-      row: 'sb.wrapper-run',
+      row: 'sb.add-reporter-run',
       s8: 'Shape B plans in every shard and writes no list.',
     },
   },
-  "A reporter the Action injects without a change to the user's config": {
+  'A reporter the Action adds with `--add-reporter`, its options in the environment': {
     a: {
       works: false,
       row: 'sa.plan-run',
-      s8: "Shape A runs the user's reporters and no injected one.",
+      s8: "Shape A runs the user's reporters and no added one.",
     },
     b: {
       works: true,
-      row: 'sb.wrapper-run',
-      s8: "The injected reporter balances the fixture with the user's config untouched.",
+      row: 'sb.add-reporter-run',
+      s8: "The added reporter balances the fixture with the user's config untouched.",
     },
   },
 };
