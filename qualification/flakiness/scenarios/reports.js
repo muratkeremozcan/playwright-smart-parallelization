@@ -29,6 +29,7 @@ function redRuns(ctx) {
   const green = ctx.baseline({
     name: 'volatile-green',
     cwd: greenProject(ctx),
+    roundMs: 0,
   });
   const red = ctx.run({
     name: 'volatile-red',

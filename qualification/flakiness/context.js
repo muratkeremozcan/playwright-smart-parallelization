@@ -36,6 +36,7 @@ function createContext({ log = () => {}, source = FIXTURE } = {}) {
   const listings = new Map();
   const configs = new Map();
   const signatures = new Map();
+  const baselines = new Map();
 
   const ctx = {
     cwd: source,
@@ -178,15 +179,26 @@ function createContext({ log = () => {}, source = FIXTURE } = {}) {
     /**
      * Native sharding with the Flakiness reporter present (it writes the reports the history is
      * built from) and the timings file built from those reports. `name` keys the run, `cwd`
-     * picks the project (the fixture by default).
+     * picks the project (the fixture by default) and `roundMs` rounds the durations, none for 0.
      */
-    baseline({ name = 'native2', shards = 2, cwd = source, fullyParallel = false } = {}) {
+    baseline({
+      name = 'native2',
+      shards = 2,
+      cwd = source,
+      fullyParallel = false,
+      roundMs = HISTORY_ROUND_MS,
+    } = {}) {
+      const asked = JSON.stringify({ shards, cwd, fullyParallel, roundMs });
+      if (baselines.has(name) && baselines.get(name) !== asked) {
+        throw new Error(`baseline ${name} was asked for again with other options`);
+      }
+      baselines.set(name, asked);
       return ctx.once(`baseline:${name}`, () => {
         const run = ctx.run({ name, shards, cwd, workers: 1, fullyParallel, json: true });
         const history = drive.buildHistory({
           dir: run.dir,
           reports: drive.flakinessReports(run.partition),
-          roundMs: HISTORY_ROUND_MS,
+          roundMs,
         });
         return { ...run, history };
       });

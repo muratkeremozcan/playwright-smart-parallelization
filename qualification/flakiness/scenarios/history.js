@@ -142,7 +142,14 @@ function noneLowered(before, after, share = 0.9) {
 
 /** The volatile variants: a passing run as history, and failing runs of the same test. */
 function volatileRuns(ctx) {
-  const green = ctx.baseline({ name: 'volatile-green', cwd: greenProject(ctx) });
+  // The durations stay unrounded: equal durations in two projects are stored once by `build`,
+  // which row `8.equal-durations` covers on its own, and these rows measure the longest-duration
+  // rule on history that keeps each project apart.
+  const green = ctx.baseline({ name: 'volatile-green', cwd: greenProject(ctx), roundMs: 0 });
+  const perProject = testDurations(green.history.file, { byEnvironment: true });
+  if (perProject.get(`chromium › ${VOLATILE}`) === perProject.get(`firefox › ${VOLATILE}`)) {
+    throw new Error('the volatile test took exactly as long in both projects; run again');
+  }
   const options = {
     cwd: redProject(ctx),
     shards: 2,

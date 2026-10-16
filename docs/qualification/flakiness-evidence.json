@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-16T06:39:08.981Z",
+  "generatedAt": "2026-10-16T06:52:21.117Z",
   "group": "all",
   "versions": {
     "engine": "@flakiness/playwright@2.0.2",
@@ -703,7 +703,7 @@
       "evidence": {
         "buildExit": 0,
         "testsWithCompleteInput": 28,
-        "testsWithOneReport": 26,
+        "testsWithOneReport": 25,
         "unreadableInputExit": 1,
         "unreadableInputMessage": "cannot read report \"absent-shard-2.json\": ENOENT: no such file or directory, open 'absent-shard-2.json'"
       }
@@ -766,7 +766,7 @@
       "status": "fail",
       "evidence": {
         "exit": 0,
-        "mergedTotal": 30,
+        "mergedTotal": 29,
         "completeTotal": 58
       }
     },
@@ -798,12 +798,12 @@
       "evidence": {
         "testId": "volatile.spec.js › volatile step",
         "pricesBeforeMs": {
-          "chromium": 1050,
-          "firefox": 1050
+          "chromium": 1023,
+          "firefox": 1031
         },
         "pricesAfterMs": {
-          "chromium": 1050,
-          "firefox": 1050
+          "chromium": 1023,
+          "firefox": 1031
         }
       }
     },
@@ -816,12 +816,12 @@
       "evidence": {
         "testId": "volatile.spec.js › volatile step",
         "pricesBeforeMs": {
-          "chromium": 1050,
-          "firefox": 1050
+          "chromium": 1023,
+          "firefox": 1031
         },
         "pricesAfterMs": {
-          "chromium": 9091,
-          "firefox": 9080
+          "chromium": 9080,
+          "firefox": 9092
         }
       }
     },
@@ -834,14 +834,14 @@
       "evidence": {
         "exit": 130,
         "reportWritten": true,
-        "cancelledAttemptMs": 319,
+        "cancelledAttemptMs": 317,
         "pricesBeforeMs": {
-          "chromium": 1050,
-          "firefox": 1050
+          "chromium": 1023,
+          "firefox": 1031
         },
         "pricesAfterMs": {
-          "chromium": 1050,
-          "firefox": 1050
+          "chromium": 1023,
+          "firefox": 1031
         }
       }
     },
@@ -854,12 +854,12 @@
       "evidence": {
         "newRunMs": 125,
         "pricesBeforeMs": {
-          "chromium": 1050,
-          "firefox": 1050
+          "chromium": 1023,
+          "firefox": 1031
         },
         "pricesAfterMs": {
-          "chromium": 1050,
-          "firefox": 1050
+          "chromium": 1023,
+          "firefox": 1031
         }
       }
     },
@@ -888,11 +888,11 @@
       "title": "history rebuilt from the reports of a window of recent passing runs",
       "status": "pass",
       "evidence": {
-        "durationBeforeMs": 1050,
-        "durationInFasterWindowMs": 123,
-        "durationWithFailedRunInWindowMs": 9091,
-        "durationWithFailedRunLeftOutMs": 1037,
-        "durationWithSlowPassingRunInWindowMs": 1037
+        "durationBeforeMs": 1031,
+        "durationInFasterWindowMs": 125,
+        "durationWithFailedRunInWindowMs": 9092,
+        "durationWithFailedRunLeftOutMs": 1031,
+        "durationWithSlowPassingRunInWindowMs": 1031
       }
     },
     {
@@ -1195,7 +1195,7 @@
     "serial": 208285,
     "balance": 233352,
     "assignment": 162148,
-    "history": 160310,
+    "history": 159867,
     "privacy": 222454
   }
 }
