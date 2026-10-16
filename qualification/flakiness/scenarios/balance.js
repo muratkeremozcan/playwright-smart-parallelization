@@ -26,8 +26,8 @@ function change(candidate, native) {
 function pair(ctx, shards, fullyParallel) {
   const suffix = fullyParallel ? '-fp' : '';
   const native = figures(
-    (shards === 2 && !fullyParallel
-      ? ctx.baseline()
+    (shards === 2
+      ? ctx.baseline({ fullyParallel, name: `native2${suffix}` })
       : ctx.run({ name: `native${shards}${suffix}`, shards, workers: 1, fullyParallel })
     ).summary
   );

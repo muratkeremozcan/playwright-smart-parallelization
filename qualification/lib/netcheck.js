@@ -106,6 +106,10 @@ async function blockWorks(block) {
   const blocked = run(block.wrap);
   server.close();
   // The blocked child must have run Node and been refused, which prints the error code.
+  if (blocked.error) {
+    server.close();
+    return { open: open.status === 0, blocked: false, code: '' };
+  }
   const code = blocked.stdout.trim();
   return { open: open.status === 0, blocked: blocked.status !== 0 && /^[A-Z]+$/.test(code), code };
 }

@@ -9,7 +9,7 @@ const { coverageKinds, coverageRow } = require('../../lib/scoring');
 const { prefixProject, renamedProject, siblingsProject } = require('../../lib/variants');
 const { buildHistory, flakinessReports } = require('../drive');
 const { listShard, parsePlan } = require('../playwright');
-const { classifyListing } = require('./assignment');
+const { classifyListing, firstError } = require('./assignment');
 
 /** The plan the first shard of a run printed. */
 function planOf(run) {
@@ -100,6 +100,11 @@ function filters(ctx) {
 // One renamed test and two new tests, each in both browser projects.
 const UNHINTED_AFTER_EDIT = 6;
 
+/** Every shard listed tests: the run had something to run with no timings file. */
+function ranEverything(listed) {
+  return listed.every((shard) => shard.exitCode === 0 && (shard.leaves || []).length > 0);
+}
+
 function newTests(ctx) {
   const baseline = ctx.baseline();
   const cold = ctx.run({ name: 'cold-empty-timings', shards: 2, timings: ctx.coldTimings() });
@@ -127,6 +132,7 @@ function newTests(ctx) {
     json: true,
   });
   const plan = planOf(renamed);
+  if (!plan) throw new Error('the renamed project printed no balancing plan');
   const dir = ctx.dir('renamed-merge');
   const merged = buildHistory({
     dir,
@@ -140,6 +146,7 @@ function newTests(ctx) {
     env: { PSP_FLK_TIMINGS: merged.file, FLAKINESS_OUTPUT_DIR: dir },
   });
   const planAfter = parsePlan(after.output);
+  if (!planAfter) throw new Error('the rebuilt history printed no balancing plan');
   const found = coverageKinds(renamed.summary.kinds);
   const unknown = plan.tests - plan.hinted;
 
@@ -148,18 +155,25 @@ function newTests(ctx) {
       id: '7.cold',
       proof: 7,
       title: 'no history: the full intended suite runs',
-      status:
-        coldFound.every((kinds) => Object.keys(kinds).length === 0) &&
-        classifyListing(missing, {}) === 'fails before any test'
-          ? 'pass'
-          : 'fail',
+      status: coldFound.every((kinds) => Object.keys(kinds).length === 0) ? 'pass' : 'fail',
       evidence: {
         emptyTimings: { coverageViolations: coldFound[0], plan: planOf(cold) },
         noTimingsFile: {
           coverageViolations: coldFound[1],
           planPrinted: parsePlan(native.raw[0].output) !== null,
         },
-        missingTimingsFile: { exits: missing.map((shard) => shard.exitCode) },
+      },
+    },
+    {
+      id: '7.missing-timings-file',
+      proof: 7,
+      title: 'the first run: shardBalancing names a timings file that does not exist yet',
+      status: ranEverything(missing) ? 'pass' : 'fail',
+      evidence: {
+        exits: missing.map((shard) => shard.exitCode),
+        testsListedPerShard: missing.map((shard) => (shard.leaves || []).length),
+        message: firstError(missing[0].output),
+        failsBeforeAnyTest: classifyListing(missing, {}) === 'fails before any test',
       },
     },
     {

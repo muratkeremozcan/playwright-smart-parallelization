@@ -24,9 +24,9 @@ function tableRows(first) {
     .filter((line) => line.startsWith('|'))
     .map((line) =>
       line
-        .split('|')
+        .split(/(?<!\\)\|/)
         .slice(1, -1)
-        .map((cell) => cell.trim())
+        .map((cell) => cell.trim().replaceAll('\\|', '|'))
     )
     .filter((cells) => first.test(cells[0]));
 }
@@ -93,6 +93,14 @@ describe('the document', () => {
       assert.ok(normalizeTable(DOC).includes(normalizeTable(render(EVIDENCE))));
     });
   }
+
+  test('gives every row table line exactly three cells', () => {
+    const rows = DOC.split('\n').filter((line) => /^\| `[^`]+` \|/.test(line));
+    assert.ok(rows.length > 0);
+    for (const line of rows) {
+      assert.strictEqual(line.split(/(?<!\\)\|/).length - 2, 3, line.slice(0, 60));
+    }
+  });
 
   test('gives every proof the question the proofs ask', () => {
     const rows = tableRows(/^P[1-8]$/);

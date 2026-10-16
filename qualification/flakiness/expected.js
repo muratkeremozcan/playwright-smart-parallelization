@@ -9,6 +9,8 @@
  * `fail` is a reproduced failure. Only rows about the engine decide a proof or an extra case.
  */
 
+const { verdictFor } = require('../lib/evidence');
+
 const EXPECTED_ROWS = {
   '1.balanced': 'pass',
   '1.repeat-each': 'pass',
@@ -44,6 +46,7 @@ const EXPECTED_ROWS = {
   '6.missing-blob': 'fail',
   '6.missing-shard-report': 'fail',
   '7.cold': 'pass',
+  '7.missing-timings-file': 'fail',
   '7.new-renamed': 'pass',
   '8.damaged-history': 'pass',
   '8.failed-run': 'pass',
@@ -67,7 +70,7 @@ const EXPECTED_PROOFS = {
   4: 'pass',
   5: 'fail',
   6: 'fail',
-  7: 'pass',
+  7: 'fail',
   8: 'fail',
 };
 
@@ -79,6 +82,7 @@ const ROW_SUBJECTS = {
   '8.window-rebuild': 'integration',
 };
 
-const VERDICT = 'qualifies with named gaps';
+// Derived from the proof results by the rule in `qualification/lib/evidence.js`.
+const VERDICT = verdictFor(EXPECTED_PROOFS);
 
 module.exports = { EXPECTED_EXTRAS, EXPECTED_PROOFS, EXPECTED_ROWS, ROW_SUBJECTS, VERDICT };

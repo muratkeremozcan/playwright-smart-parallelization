@@ -116,7 +116,7 @@ function mapDurations(file, change, output = file) {
   const report = JSON.parse(fs.readFileSync(file, 'utf8'));
   const visit = (suite) => {
     for (const test of suite.tests || []) {
-      for (const attempt of test.attempts) attempt.duration = change(attempt.duration);
+      for (const attempt of test.attempts || []) attempt.duration = change(attempt.duration);
     }
     (suite.suites || []).forEach(visit);
   };
@@ -136,23 +136,34 @@ function scaleDurations(file, factor, output) {
 }
 
 /**
- * The duration of every test in a report or timings file, summed over its attempts, keyed by
- * `environment › file › titles › test`.
+ * The duration of every test in a report or timings file: the attempts of a run summed per
+ * environment (the project), keyed by `file › titles › test`, and the longest environment taken,
+ * as the reporter prices a test. A timings file written by `build` stores one attempt for a test
+ * whose environments took equally long, so only the longest is reliable there. With
+ * `byEnvironment` the key starts with the environment, which is exact for a report a shard wrote.
  */
-function testDurations(file) {
+function testDurations(file, { byEnvironment = false } = {}) {
   const report = JSON.parse(fs.readFileSync(file, 'utf8'));
-  const durations = new Map();
+  const perEnvironment = new Map();
   const visit = (suite, titles) => {
     for (const test of suite.tests || []) {
-      for (const attempt of test.attempts) {
-        const environment = report.environments[attempt.environmentIdx ?? 0].name;
+      for (const attempt of test.attempts || []) {
+        const environment = report.environments[attempt.environmentIdx ?? 0]?.name;
+        if (!environment)
+          throw new Error(`${file}: an attempt names an environment that is not listed`);
         const key = [environment, ...titles, test.title].join(' › ');
-        durations.set(key, (durations.get(key) || 0) + (attempt.duration || 0));
+        perEnvironment.set(key, (perEnvironment.get(key) || 0) + (attempt.duration || 0));
       }
     }
     for (const child of suite.suites || []) visit(child, [...titles, child.title]);
   };
   for (const suite of report.suites || []) visit(suite, [suite.title]);
+  if (byEnvironment) return perEnvironment;
+  const durations = new Map();
+  for (const [key, duration] of perEnvironment) {
+    const test = key.split(' › ').slice(1).join(' › ');
+    durations.set(test, Math.max(durations.get(test) || 0, duration));
+  }
   return durations;
 }
 

@@ -3,8 +3,8 @@
 /**
  * CAP-6: the plan and timing steps make no outbound connection. Three checks:
  *
- *   guard-control  the preload in `qualification/lib/net-guard.js` records and refuses every kind of attempt, so an
- *                  empty log means something.
+ *   guard-control  the preload in `qualification/lib/net-guard.js` records and refuses every kind
+ *                  of attempt, so an empty log means something.
  *   plan-timing    `assign`, `extract-timing` and `merge-timing` run under the guard and attempt
  *                  nothing.
  *   os-block       the same steps run under an OS-level network block (macOS `sandbox-exec`,

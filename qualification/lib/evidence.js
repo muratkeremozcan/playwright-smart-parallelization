@@ -84,6 +84,20 @@ function mergeEvidence(parts) {
   };
 }
 
+/**
+ * The verdict a set of proof results supports. Exactly-once coverage and serial integrity (proofs
+ * 1 and 2) are the semantics of Playwright sharding itself, so an engine that fails either does
+ * not qualify. An engine that passes both and fails any other proof qualifies with named gaps,
+ * which the document must name. An engine that passes every proof qualifies.
+ */
+function verdictFor(proofs) {
+  const failed = Object.entries(proofs)
+    .filter(([, status]) => status === 'fail')
+    .map(([number]) => Number(number));
+  if (failed.some((number) => number === 1 || number === 2)) return 'does not qualify';
+  return failed.length > 0 ? 'qualifies with named gaps' : 'qualifies';
+}
+
 module.exports = {
   EXTRAS,
   PROOFS,
@@ -91,4 +105,5 @@ module.exports = {
   proofStatus,
   summarizeExtras,
   summarizeProofs,
+  verdictFor,
 };

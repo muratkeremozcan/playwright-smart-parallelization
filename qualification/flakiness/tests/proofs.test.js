@@ -166,6 +166,7 @@ describe('proof 4: one assignment', () => {
     assert.strictEqual(applied.balancedDiffersFromNative, true);
     assert.strictEqual(applied.reporterWithoutTimingsEqualsPlainNative, true);
     assert.strictEqual(row('4.list-matches-run').sameAsRun, true);
+    assert.ok(row('4.list-matches-run').leavesPerShard.every((count) => count > 0));
   });
 });
 
@@ -278,13 +279,20 @@ describe('proof 6: exit codes, retries and artifacts', () => {
 });
 
 describe('proof 7: no history, new and renamed tests', () => {
-  test('with no history the whole suite runs, and a missing timings file fails every shard', () => {
+  test('with no history the whole suite runs, with an empty timings file or none', () => {
     const cold = row('7.cold');
     assert.deepStrictEqual(cold.emptyTimings.coverageViolations, {});
     assert.strictEqual(cold.emptyTimings.plan.hinted, 0);
     assert.deepStrictEqual(cold.noTimingsFile.coverageViolations, {});
     assert.strictEqual(cold.noTimingsFile.planPrinted, false);
-    assert.deepStrictEqual(cold.missingTimingsFile.exits, [1, 1]);
+  });
+
+  test('the first run, with a timings file that does not exist yet, fails every shard', () => {
+    const first = row('7.missing-timings-file');
+    assert.deepStrictEqual(first.exits, [1, 1]);
+    assert.deepStrictEqual(first.testsListedPerShard, [0, 0]);
+    assert.strictEqual(first.failsBeforeAnyTest, true);
+    assert.match(first.message, /cannot read shardBalancing\.timingsFile/);
   });
 
   test('a renamed test and a new file run, are visible as estimates, and enter history', () => {
@@ -325,6 +333,7 @@ describe('proof 8: history', () => {
     assert.ok(windowed.durationInFasterWindowMs < windowed.durationBeforeMs / 5);
     assert.ok(windowed.durationWithFailedRunInWindowMs > windowed.durationBeforeMs * 5);
     assert.ok(windowed.durationWithFailedRunLeftOutMs <= windowed.durationBeforeMs * 1.05);
+    assert.ok(windowed.durationWithSlowPassingRunInWindowMs >= windowed.durationBeforeMs * 0.95);
   });
 
   test('two runs publishing in the opposite order lose updates, and the file names no run', () => {
@@ -412,7 +421,9 @@ describe('footprint', () => {
       evidence.footprint;
     assert.ok(install.packages >= 1);
     assert.strictEqual(playwright.runs, 5);
-    assert.ok(playwright.plain.wallMs > 0 && playwright.reporter.wallMs > 0);
+    for (const side of [playwright.plain, playwright.reporter]) {
+      assert.ok(side.wallMinMs <= side.wallMs && side.wallMs <= side.wallMaxMs);
+    }
     assert.ok(playwright.reporter.mainRssKb > 0 && playwright.plain.mainRssKb > 0);
     assert.ok(timingsCommand.peakRssKb.buildOne > timingsCommand.peakRssKb.bareNode);
     assert.ok(artifactBytes.flakinessFolder >= artifactBytes.flakinessReport);

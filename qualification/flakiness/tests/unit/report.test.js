@@ -28,8 +28,22 @@ const evidence = {
     playwright: {
       runs: 5,
       workers: 4,
-      plain: { wallMs: 9000, afterTestsMs: 700, mainRssKb: 102400, workerRssKb: 81920 },
-      reporter: { wallMs: 9450, afterTestsMs: 1100, mainRssKb: 122880, workerRssKb: 81920 },
+      plain: {
+        wallMs: 9000,
+        wallMinMs: 8800,
+        wallMaxMs: 9300,
+        afterTestsMs: 700,
+        mainRssKb: 102400,
+        workerRssKb: 81920,
+      },
+      reporter: {
+        wallMs: 9450,
+        wallMinMs: 9100,
+        wallMaxMs: 9900,
+        afterTestsMs: 1100,
+        mainRssKb: 122880,
+        workerRssKb: 81920,
+      },
     },
     timingsCommand: {
       runtimeMs: { help: 60, buildOne: 120, buildMerge: 130 },
@@ -85,6 +99,11 @@ describe('renderFootprint', () => {
 
   test('shows the overhead of the reporter against the plain run', () => {
     assert.match(text, /Reporter overhead per run \| 450 ms \(\+5\.0%\)/);
+  });
+
+  test('shows the spread of the run times next to their medians', () => {
+    assert.match(text, /Playwright run, plain native \| 9000 ms \(8800 to 9300\)/);
+    assert.match(text, /Playwright run, with the reporter \| 9450 ms \(9100 to 9900\)/);
   });
 
   test('shows memory in MiB and artifact sizes in KiB', () => {

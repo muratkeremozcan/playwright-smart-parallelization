@@ -35,6 +35,7 @@ function createContext({ log = () => {}, source = FIXTURE } = {}) {
   const memo = new Map();
   const listings = new Map();
   const configs = new Map();
+  const signatures = new Map();
 
   const ctx = {
     cwd: source,
@@ -141,6 +142,12 @@ function createContext({ log = () => {}, source = FIXTURE } = {}) {
      * Returns the harness result with the partition, listing and a summary. Memoized by `name`.
      */
     runPartition(options) {
+      // A name stands for one execution: the same name with other options is a bug in the caller.
+      const signature = JSON.stringify({ ...options, name: undefined });
+      if (signatures.has(options.name) && signatures.get(options.name) !== signature) {
+        throw new Error(`run ${options.name} was asked for again with other options`);
+      }
+      signatures.set(options.name, signature);
       return ctx.once(`run:${options.name}`, () => {
         log(`run ${options.name}`);
         const {

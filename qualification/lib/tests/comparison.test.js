@@ -9,6 +9,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const {
   renderBalance,
+  renderCounts,
   renderDifferences,
   renderFootprint,
   renderResults,
@@ -87,6 +88,13 @@ const flakiness = {
 };
 
 describe('renderResults', () => {
+  test('names the proof the other engine has no result for', () => {
+    assert.throws(
+      () => renderResults(nsx, { ...flakiness, proofs: [], extras: [] }),
+      /no result for 1/
+    );
+  });
+
   test('puts the result of each engine next to each proof and extra case', () => {
     assert.strictEqual(
       renderResults(nsx, flakiness),
@@ -95,6 +103,36 @@ describe('renderResults', () => {
         '| --- | --- | --- | --- |',
         '| P1 | One | fail | pass |',
         '| X1 | Damaged | fail | pass |',
+      ].join('\n')
+    );
+  });
+});
+
+describe('renderCounts', () => {
+  test('counts the engine rows of each proof and case, with the failed ones in brackets', () => {
+    const rows = (proof, statuses, subject) =>
+      statuses.map((status, index) => ({ id: `${proof}.${index}`, proof, status, subject }));
+    const counted = renderCounts(
+      {
+        proofs: [{ number: 1 }],
+        extras: [{ id: 'x1' }],
+        rows: [...rows(1, ['pass', 'fail', 'fail']), ...rows('x1', ['fail'])],
+      },
+      {
+        rows: [
+          ...rows(1, ['pass']),
+          ...rows(1, ['fail'], 'integration'),
+          ...rows('x1', ['pass', 'pass']),
+        ],
+      }
+    );
+    assert.strictEqual(
+      counted,
+      [
+        '| Proof | NSXBet rows (failed) | Flakiness rows (failed) |',
+        '| --- | --- | --- |',
+        '| P1 | 3 (2) | 1 (0) |',
+        '| X1 | 1 (1) | 2 (0) |',
       ].join('\n')
     );
   });
@@ -132,6 +170,10 @@ describe('renderBalance', () => {
     assert.match(lines[5], /\| \+2\.0% \| 5\.0% \| none \| 50 \|$/);
   });
 
+  test('refuses a different number of shard counts', () => {
+    assert.throws(() => renderBalance(nsx, { ...flakiness, balance: [] }), /other shard counts/);
+  });
+
   test('refuses tables that list other shard counts', () => {
     const other = { ...flakiness, balance: [{ ...flakiness.balance[0], shards: 3 }] };
     assert.throws(() => renderBalance(nsx, other), /other shard counts/);
@@ -158,6 +200,7 @@ describe('renderFootprint', () => {
 describe('the document', () => {
   for (const [name, render] of [
     ['results', renderResults],
+    ['counts', renderCounts],
     ['differences', renderDifferences],
     ['balance', renderBalance],
     ['footprint', renderFootprint],

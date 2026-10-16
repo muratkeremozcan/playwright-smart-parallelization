@@ -7,12 +7,12 @@
  * `shardBalancing` pointing at a local timings file. The run is steered by environment variables,
  * so one generated config serves every shard of every check:
  *
- *   PSP_FLK_TIMINGS  path of the timings file; unset leaves Playwright's native sharding in place
- *   PSP_FLK_PLAIN    `1` leaves the Flakiness reporter out (the plain native baseline)
- *   PSP_FLK_UPLOAD   `1` leaves `disableUpload` off (the control of the network check)
+ *   PSP_FLK_TIMINGS   path of the timings file; unset leaves Playwright's native sharding in place
+ *   PSP_FLK_PLAIN     `1` leaves the Flakiness reporter out (the plain native baseline)
+ *   PSP_FLK_UPLOAD    `1` leaves `disableUpload` off (the control of the network check)
  *   PSP_FLK_REPORTER  reporter file to load instead of the installed one (a modified copy)
- *   PSP_FLK_EXTRA    comma-separated Playwright reporters to run beside the Flakiness reporter
- *                    (`json`, `blob`), configured through their own environment variables
+ *   PSP_FLK_EXTRA     comma-separated Playwright reporters to run beside the Flakiness reporter
+ *                     (`json`, `blob`), configured through their own environment variables
  *   FLAKINESS_OUTPUT_DIR  where the reporter writes its report (read by the package itself)
  */
 

@@ -84,8 +84,14 @@ function renderFootprint(evidence) {
       ['Packages installed (engine and dependencies)', String(install.packages)],
       ['`node_modules` size', mib(install.nodeModulesBytes)],
       ['Engine package size', mib(install.enginePackageBytes)],
-      ['Playwright run, plain native', `${plain.wallMs} ms`],
-      ['Playwright run, with the reporter', `${reporter.wallMs} ms`],
+      [
+        'Playwright run, plain native',
+        `${plain.wallMs} ms (${plain.wallMinMs} to ${plain.wallMaxMs})`,
+      ],
+      [
+        'Playwright run, with the reporter',
+        `${reporter.wallMs} ms (${reporter.wallMinMs} to ${reporter.wallMaxMs})`,
+      ],
       ['Reporter overhead per run', `${overhead} ms (${signedPercent(overhead / plain.wallMs)})`],
       ['After the last test, plain native', `${plain.afterTestsMs} ms`],
       ['After the last test, with the reporter', `${reporter.afterTestsMs} ms`],

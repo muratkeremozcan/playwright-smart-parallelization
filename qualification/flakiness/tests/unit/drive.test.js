@@ -129,16 +129,48 @@ describe('durations', () => {
     ['chromium', 'b.spec.js', 'two', [5]],
   ];
 
-  test('testDurations sums the attempts of a test per environment', () => {
+  test('testDurations with byEnvironment sums the attempts of a test per environment', () => {
     const file = write(tempDir(), 'r.json', report(tests));
     assert.deepStrictEqual(
-      [...drive.testDurations(file)],
+      [...drive.testDurations(file, { byEnvironment: true })],
       [
         ['chromium › a.spec.js › one', 120],
         ['firefox › a.spec.js › one', 60],
         ['chromium › b.spec.js › two', 5],
       ]
     );
+  });
+
+  test('testDurations takes the longest environment of a test, as the reporter prices it', () => {
+    const file = write(tempDir(), 'r.json', report(tests));
+    assert.deepStrictEqual(
+      [...drive.testDurations(file)],
+      [
+        ['a.spec.js › one', 120],
+        ['b.spec.js › two', 5],
+      ]
+    );
+  });
+
+  test('testDurations finds a test that build stored once for environments of equal duration', () => {
+    const dir = tempDir();
+    const input = write(
+      dir,
+      'in.json',
+      report([
+        ['chromium', 'a.spec.js', 'one', [100]],
+        ['firefox', 'a.spec.js', 'one', [100]],
+      ])
+    );
+    const { file } = drive.buildHistory({ dir, reports: [input] });
+    assert.strictEqual(drive.testDurations(file).get('a.spec.js › one'), 100);
+  });
+
+  test('testDurations refuses an attempt of an environment the file does not list', () => {
+    const dir = tempDir();
+    const broken = report(tests);
+    broken.suites[0].tests[0].attempts[0].environmentIdx = 9;
+    assert.throws(() => drive.testDurations(write(dir, 'b.json', broken)), /not listed/);
   });
 
   test('roundDurations rounds each attempt to a multiple of the step, in place', () => {
@@ -155,8 +187,8 @@ describe('durations', () => {
     const dir = tempDir();
     const file = write(dir, 'r.json', report(tests));
     const copy = drive.scaleDurations(file, 1.5, path.join(dir, 'scaled.json'));
-    assert.strictEqual(drive.testDurations(copy).get('chromium › a.spec.js › one'), 180);
-    assert.strictEqual(drive.testDurations(file).get('chromium › a.spec.js › one'), 120);
+    assert.strictEqual(drive.testDurations(copy).get('a.spec.js › one'), 180);
+    assert.strictEqual(drive.testDurations(file).get('a.spec.js › one'), 120);
   });
 
   test('mapDurations passes every attempt through the function', () => {
@@ -178,7 +210,7 @@ describe('buildHistory', () => {
     const first = write(dir, 'first.json', report([['chromium', 'a.spec.js', 'one', [100, 20]]]));
     const second = write(dir, 'second.json', report([['chromium', 'a.spec.js', 'one', [90]]]));
     const { file } = drive.buildHistory({ dir, reports: [first, second] });
-    assert.strictEqual(drive.testDurations(file).get('chromium › a.spec.js › one'), 120);
+    assert.strictEqual(drive.testDurations(file).get('a.spec.js › one'), 120);
   });
 
   test('never lowers an entry: an earlier timings file is an input like a report', () => {
@@ -192,14 +224,14 @@ describe('buildHistory', () => {
       existing: first.file,
       reports: [fast],
     });
-    assert.strictEqual(drive.testDurations(file).get('chromium › a.spec.js › one'), 1000);
+    assert.strictEqual(drive.testDurations(file).get('a.spec.js › one'), 1000);
   });
 
   test('rounds the durations when asked', () => {
     const dir = tempDir();
     const input = write(dir, 'in.json', report([['chromium', 'a.spec.js', 'one', [126]]]));
     const { file } = drive.buildHistory({ dir, reports: [input], roundMs: 50 });
-    assert.strictEqual(drive.testDurations(file).get('chromium › a.spec.js › one'), 150);
+    assert.strictEqual(drive.testDurations(file).get('a.spec.js › one'), 150);
   });
 
   test('throws with the command error when an input cannot be read', () => {

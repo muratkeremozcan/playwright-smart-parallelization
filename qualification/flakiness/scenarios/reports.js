@@ -92,7 +92,10 @@ function reportProofs(ctx) {
   const engineTotal = sum(engineStats);
 
   const reports = flakinessReports(red.partition);
-  const reported = reports.reduce((total, file) => total + testDurations(file).size, 0);
+  const reported = reports.reduce(
+    (total, file) => total + testDurations(file, { byEnvironment: true }).size,
+    0
+  );
   const executed = red.raw.reduce((total, shard) => total + (shard.leaves || []).length, 0);
   const held = reportAttachments(red.partition);
 

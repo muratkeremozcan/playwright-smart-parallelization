@@ -4,6 +4,8 @@ Verdict: does not qualify.
 
 `@nsxbet/playwright-orchestrator` assigns single tests from historical durations. It has no notion of a Playwright project, a serial group or a repeat, and its timing history has no guard. Driven the way its README describes, it runs tests in more than one shard and splits serial groups, and it splits them under every file-affinity setting it offers (proofs 1 and 2). Its `merge-timing` accepts a missing shard artifact with exit code 0 (proof 6), and it replaces history from failed and cancelled runs and from a damaged history file (proof 8). A delayed run overwrites a newer one (case X2). A shim, `qualification/nsxbet/shim.js`, closes the failures of proofs 1 and 2 on the fixture (rows `1.grouped-repeat-each` and `2.grouped-*`). The failures of proofs 6 and 8 have no shim, because they happen inside `merge-timing` and `extract-timing`.
 
+The verdict follows a rule: an engine that fails proof 1 or proof 2, the exactly-once and serial semantics of Playwright sharding itself, does not qualify; an engine that passes both and fails another proof qualifies with named gaps; an engine that passes every proof qualifies. A test derives the verdict from the proof results.
+
 The rows below come from `npm run qualify:nsxbet`. The tests in `qualification/nsxbet/tests` assert every result in this document, and `tests/unit/docs.test.js` fails when the verdict, a proof result, a row result or a generated table disagrees with the evidence.
 
 ## Resolved versions

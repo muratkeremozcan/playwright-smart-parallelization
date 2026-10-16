@@ -64,10 +64,13 @@ function playwrightRun(ctx, { label, plain }) {
     }
   );
   const wallMs = Number(process.hrtime.bigint() - started) / 1e6;
-  if (result.status !== 0) throw new Error(`footprint run ${label} failed: ${result.stderr}`);
+  if (result.status !== 0) {
+    throw new Error(`footprint run ${label} failed: ${result.stderr}${result.stdout.slice(-2000)}`);
+  }
   const peaks = readLines(rssLog);
   const main = peaks.filter((entry) => !entry.ipc);
   const workers = peaks.filter((entry) => entry.ipc);
+  if (workers.length === 0) throw new Error(`${label}: no worker process logged`);
   if (main.length !== 1) throw new Error(`${label}: ${main.length} Playwright processes`);
   return {
     wallMs,
@@ -91,6 +94,8 @@ function runtimeAndMemory(ctx) {
   const med = (runs, pick) => Math.round(median(runs.map(pick)));
   const summary = (runs) => ({
     wallMs: med(runs, (run) => run.wallMs),
+    wallMinMs: Math.round(Math.min(...runs.map((run) => run.wallMs))),
+    wallMaxMs: Math.round(Math.max(...runs.map((run) => run.wallMs))),
     afterTestsMs: med(runs, (run) => run.wallMs - run.testMs),
     mainRssKb: med(runs, (run) => run.mainRssKb),
     workerRssKb: med(runs, (run) => run.workerRssKb),
@@ -138,14 +143,22 @@ function footprint(ctx) {
   const reportFile = path.join(measured.last.reportDir, 'report.json');
   const report = readJson(reportFile);
   const [oneReport] = flakinessReports(baseline.partition);
+  if (!oneReport) throw new Error('the baseline wrote no Flakiness report');
   const timings = baseline.history.file;
   const built = path.join(dir, 'built.json');
+  const builtMerged = path.join(dir, 'built-merged.json');
   buildTimings({ inputs: [oneReport], output: built });
   const guarded = spawnsOf(guardedRun(ctx, { label: 'guard' }).entries);
 
   const help = commandFigures(dir, 'help', ['--help']);
   const buildOne = commandFigures(dir, 'build-one', ['build', oneReport, '-o', built]);
-  const buildMerge = commandFigures(dir, 'build-merge', ['build', timings, oneReport, '-o', built]);
+  const buildMerge = commandFigures(dir, 'build-merge', [
+    'build',
+    timings,
+    oneReport,
+    '-o',
+    builtMerged,
+  ]);
 
   return {
     install: {

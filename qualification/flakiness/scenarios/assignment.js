@@ -146,7 +146,7 @@ function listMatchesRun(ctx) {
     status: JSON.stringify(ran) === JSON.stringify(planned) && cleanRun(run) ? 'pass' : 'fail',
     evidence: {
       leavesPerShard: ran.map((keys) => keys.length),
-      sameAsRun: ran.length === planned.length,
+      sameAsRun: JSON.stringify(ran) === JSON.stringify(planned),
     },
   };
 }
@@ -276,10 +276,12 @@ function damagedTiming(ctx) {
 /** The project is not a git repository: the reporter reads the commit before it plans. */
 function noGitRepository(ctx) {
   const cwd = copyProject(ctx.cwd, ctx.dir('no-git'));
+  // The ceiling stops git from finding a repository above the copy.
   const { listed, kinds } = listAll(ctx, {
     timings: ctx.baseline().history.file,
     shards: 2,
     cwd,
+    env: { GIT_CEILING_DIRECTORIES: path.dirname(cwd) },
   });
   const outcome = classifyListing(listed, kinds);
   return {

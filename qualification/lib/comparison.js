@@ -22,10 +22,29 @@ function renderResults(nsx, flakiness) {
   const rows = results(nsx).map((entry) => {
     const key = entry.number ?? entry.id;
     const other = flakinessById.get(key);
+    if (!other) throw new Error(`the Flakiness evidence has no result for ${key}`);
     const label = typeof key === 'number' ? `P${key}` : key.toUpperCase();
     return [label, entry.title, entry.status, other.status];
   });
   return table(['Proof', 'What the proof asks', 'NSXBet', 'Flakiness'], rows);
+}
+
+/**
+ * How many rows each engine ran for each proof and case, and how many of them failed. The
+ * engines run different batteries, so the counts show what a result rests on.
+ */
+function renderCounts(nsx, flakiness) {
+  const own = (evidence, key) =>
+    evidence.rows.filter(
+      (row) => String(row.proof) === String(key) && (row.subject || 'engine') === 'engine'
+    );
+  const cell = (rows) => `${rows.length} (${rows.filter((row) => row.status === 'fail').length})`;
+  const rows = [...nsx.proofs.map((p) => p.number), ...nsx.extras.map((x) => x.id)].map((key) => [
+    typeof key === 'number' ? `P${key}` : key.toUpperCase(),
+    cell(own(nsx, key)),
+    cell(own(flakiness, key)),
+  ]);
+  return table(['Proof', 'NSXBet rows (failed)', 'Flakiness rows (failed)'], rows);
 }
 
 /** The rows both engines have under one id that ended differently. */
@@ -39,6 +58,9 @@ function renderDifferences(nsx, flakiness) {
 
 /** Slowest shard against native sharding, for each engine and shard count. */
 function renderBalance(nsx, flakiness) {
+  if (nsx.balance.length !== flakiness.balance.length) {
+    throw new Error('the balance tables list other shard counts');
+  }
   const rows = nsx.balance.flatMap((entry, index) => {
     const other = flakiness.balance[index];
     if (other.shards !== entry.shards)
@@ -127,4 +149,10 @@ function auditResult(evidence, id) {
   return `${row.status}; mutation control ${control.status}`;
 }
 
-module.exports = { renderBalance, renderDifferences, renderFootprint, renderResults };
+module.exports = {
+  renderBalance,
+  renderCounts,
+  renderDifferences,
+  renderFootprint,
+  renderResults,
+};

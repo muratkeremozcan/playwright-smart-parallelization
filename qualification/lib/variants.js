@@ -148,6 +148,7 @@ function prefixProject(ctx) {
 function renamedProject(ctx) {
   return ctx.once('variant:renamed', () => {
     const cart = fs.readFileSync(path.join(ctx.cwd, 'tests', 'cart.spec.js'), 'utf8');
+    if (!cart.includes("'adds an item'")) throw new Error('cart.spec.js has no test to rename');
     return ctx.copy('variant-renamed', {
       'tests/cart.spec.js': cart.replace("'adds an item'", "'adds one item'"),
       'tests/wishlist.spec.js': NEW_FEATURE,

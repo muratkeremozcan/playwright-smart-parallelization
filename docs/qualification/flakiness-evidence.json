@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-16T05:56:43.835Z",
+  "generatedAt": "2026-10-16T06:21:15.396Z",
   "group": "all",
   "versions": {
     "engine": "@flakiness/playwright@2.0.2",
@@ -169,10 +169,20 @@
         "noTimingsFile": {
           "coverageViolations": {},
           "planPrinted": false
-        },
-        "missingTimingsFile": {
-          "exits": [1, 1]
         }
+      }
+    },
+    {
+      "subject": "engine",
+      "id": "7.missing-timings-file",
+      "proof": 7,
+      "title": "the first run: shardBalancing names a timings file that does not exist yet",
+      "status": "fail",
+      "evidence": {
+        "exits": [1, 1],
+        "testsListedPerShard": [0, 0],
+        "message": "Error: [flakiness.io] failed to generate balanced shard: cannot read shardBalancing.timingsFile \"absent.json\": ENOENT: no such file or directory, open 'absent.json'",
+        "failsBeforeAnyTest": true
       }
     },
     {
@@ -373,7 +383,7 @@
           "shards": 3,
           "hinted": 54,
           "tests": 54,
-          "loads": "1=9.1s, 2=9.1s, 3=7.1s",
+          "loads": "1=9.1s, 2=9.1s, 3=7.2s",
           "balancePercent": 93,
           "runningShard": {
             "current": 1,
@@ -390,7 +400,7 @@
       "title": "--list of a shard shows the tests the shard runs",
       "status": "pass",
       "evidence": {
-        "leavesPerShard": [27, 25],
+        "leavesPerShard": [29, 23],
         "sameAsRun": true
       }
     },
@@ -404,7 +414,7 @@
         "balancedDiffersFromNative": true,
         "reporterWithoutTimingsEqualsPlainNative": true,
         "nativeLeavesPerShard": [26, 26],
-        "balancedLeavesPerShard": [27, 25]
+        "balancedLeavesPerShard": [29, 23]
       }
     },
     {
@@ -617,8 +627,8 @@
       "status": "fail",
       "evidence": {
         "coverageViolations": {
-          "missing": 15,
-          "duplicate": 12
+          "missing": 10,
+          "duplicate": 13
         },
         "exits": [0, 0],
         "planLinesDiffer": true
@@ -632,8 +642,8 @@
       "status": "fail",
       "evidence": {
         "coverageViolations": {
-          "missing": 14,
-          "duplicate": 15
+          "missing": 8,
+          "duplicate": 11
         },
         "exits": [0, 0],
         "planPrintedPerShard": [true, false]
@@ -661,10 +671,10 @@
       "status": "pass",
       "evidence": {
         "exits": [0, 1],
-        "leavesRunPerShard": [29, 0],
+        "leavesRunPerShard": [31, 0],
         "kinds": {
           "shard-failed": 1,
-          "missing": 25
+          "missing": 23
         },
         "message": "Error: [flakiness.io] failed to generate balanced shard: cannot parse shardBalancing.timingsFile \"damaged.json\" as JSON: Expected property name or '}' in JSON at position 300 (line 11 column 5)"
       }
@@ -677,8 +687,8 @@
       "status": "fail",
       "evidence": {
         "buildExit": 0,
-        "testsWithCompleteInput": 46,
-        "testsWithOneReport": 27,
+        "testsWithCompleteInput": 28,
+        "testsWithOneReport": 26,
         "unreadableInputExit": 1,
         "unreadableInputMessage": "cannot read report \"absent-shard-2.json\": ENOENT: no such file or directory, open 'absent-shard-2.json'"
       }
@@ -741,7 +751,7 @@
       "status": "fail",
       "evidence": {
         "exit": 0,
-        "mergedTotal": 26,
+        "mergedTotal": 30,
         "completeTotal": 58
       }
     },
@@ -771,7 +781,7 @@
       "title": "a run where the volatile test fails at once is merged into history",
       "status": "pass",
       "evidence": {
-        "testId": "chromium › volatile.spec.js › volatile step",
+        "testId": "volatile.spec.js › volatile step",
         "durationBeforeMs": 1050,
         "durationAfterMs": 1050
       }
@@ -783,9 +793,9 @@
       "title": "a run where the volatile test fails after 3000 ms is merged into history",
       "status": "fail",
       "evidence": {
-        "testId": "chromium › volatile.spec.js › volatile step",
+        "testId": "volatile.spec.js › volatile step",
         "durationBeforeMs": 1050,
-        "durationAfterMs": 9085
+        "durationAfterMs": 9105
       }
     },
     {
@@ -797,7 +807,7 @@
       "evidence": {
         "exit": 130,
         "reportWritten": true,
-        "cancelledAttemptMs": 317,
+        "cancelledAttemptMs": 320,
         "durationBeforeMs": 1050,
         "durationAfterMs": 1050
       }
@@ -809,7 +819,7 @@
       "title": "a test that now takes 100 ms instead of a second is merged into history",
       "status": "fail",
       "evidence": {
-        "newRunMs": 123,
+        "newRunMs": 122,
         "durationBeforeMs": 1050,
         "durationAfterMs": 1050
       }
@@ -823,8 +833,9 @@
       "evidence": {
         "durationBeforeMs": 1050,
         "durationInFasterWindowMs": 122,
-        "durationWithFailedRunInWindowMs": 9085,
-        "durationWithFailedRunLeftOutMs": 1025
+        "durationWithFailedRunInWindowMs": 9105,
+        "durationWithFailedRunLeftOutMs": 1027,
+        "durationWithSlowPassingRunInWindowMs": 1027
       }
     },
     {
@@ -834,8 +845,8 @@
       "title": "two runs merge into the same base and publish in the opposite order",
       "status": "fail",
       "evidence": {
-        "testsInHistory": 46,
-        "updatesLost": 53,
+        "testsInHistory": 28,
+        "updatesLost": 28,
         "startTimestamp": 0,
         "carriesRunIdentity": false,
         "topLevelKeys": [
@@ -976,7 +987,7 @@
     {
       "number": 7,
       "title": "A run with no history is complete, new tests are kept",
-      "status": "pass"
+      "status": "fail"
     },
     {
       "number": 8,
@@ -1000,67 +1011,67 @@
     {
       "shards": 2,
       "native": {
-        "durationsMs": [13864, 13906],
+        "durationsMs": [13923, 13854],
         "leaves": [26, 26],
-        "slowestMs": 13906,
-        "imbalance": 0.0015124234785740007,
+        "slowestMs": 13923,
+        "imbalance": 0.0024840695539475105,
         "violations": {}
       },
       "engine": {
-        "durationsMs": [14101, 14130],
-        "leaves": [26, 26],
-        "slowestMs": 14130,
-        "imbalance": 0.0010272395593496511,
+        "durationsMs": [14039, 14020],
+        "leaves": [27, 25],
+        "slowestMs": 14039,
+        "imbalance": 0.0006771445881891728,
         "violations": {},
-        "slowestVsNative": 0.01610815475334388
+        "slowestVsNative": 0.008331537743302449
       },
       "nativeParallel": {
-        "durationsMs": [13832, 13893],
+        "durationsMs": [13904, 13826],
         "leaves": [26, 26],
-        "slowestMs": 13893,
-        "imbalance": 0.002200180342651037,
+        "slowestMs": 13904,
+        "imbalance": 0.00281283808150018,
         "violations": {}
       },
       "engineParallel": {
-        "durationsMs": [14110, 14119],
-        "leaves": [25, 27],
-        "slowestMs": 14119,
-        "imbalance": 0.0003188210705303057,
+        "durationsMs": [14090, 14046],
+        "leaves": [26, 26],
+        "slowestMs": 14090,
+        "imbalance": 0.0015638328120557293,
         "violations": {},
-        "slowestVsNative": 0.016267184913265672
+        "slowestVsNative": 0.013377445339470656
       }
     },
     {
       "shards": 3,
       "native": {
-        "durationsMs": [12307, 3857, 12385],
+        "durationsMs": [12266, 3836, 12419],
         "leaves": [18, 17, 17],
-        "slowestMs": 12385,
-        "imbalance": 0.30144663560895296,
+        "slowestMs": 12419,
+        "imbalance": 0.3063006205953508,
         "violations": {}
       },
       "engine": {
-        "durationsMs": [9770, 9736, 9114],
+        "durationsMs": [9749, 9859, 9179],
         "leaves": [5, 5, 42],
-        "slowestMs": 9770,
-        "imbalance": 0.02410901467505241,
+        "slowestMs": 9859,
+        "imbalance": 0.02744294299510202,
         "violations": {},
-        "slowestVsNative": -0.2111425111021397
+        "slowestVsNative": -0.20613575972300507
       },
       "nativeParallel": {
-        "durationsMs": [12302, 3811, 12413],
+        "durationsMs": [12326, 3858, 12369],
         "leaves": [18, 17, 17],
-        "slowestMs": 12413,
-        "imbalance": 0.3054406506345089,
+        "slowestMs": 12369,
+        "imbalance": 0.29958323118411384,
         "violations": {}
       },
       "engineParallel": {
-        "durationsMs": [9753, 9724, 9131],
+        "durationsMs": [9774, 9793, 9110],
         "leaves": [5, 5, 42],
-        "slowestMs": 9753,
-        "imbalance": 0.022755872483221477,
+        "slowestMs": 9793,
+        "imbalance": 0.024479548069881788,
         "violations": {},
-        "slowestVsNative": -0.2142914686216064
+        "slowestVsNative": -0.2082625919637804
       }
     }
   ],
@@ -1074,36 +1085,40 @@
       "runs": 5,
       "workers": 4,
       "plain": {
-        "wallMs": 11946,
-        "afterTestsMs": 202,
-        "mainRssKb": 171280,
-        "workerRssKb": 179680
+        "wallMs": 12001,
+        "wallMinMs": 11945,
+        "wallMaxMs": 12010,
+        "afterTestsMs": 207,
+        "mainRssKb": 171024,
+        "workerRssKb": 179360
       },
       "reporter": {
-        "wallMs": 12025,
-        "afterTestsMs": 271,
-        "mainRssKb": 177264,
-        "workerRssKb": 179792
+        "wallMs": 12045,
+        "wallMinMs": 12015,
+        "wallMaxMs": 12085,
+        "afterTestsMs": 275,
+        "mainRssKb": 177152,
+        "workerRssKb": 179296
       }
     },
     "timingsCommand": {
       "runtimeMs": {
-        "help": 35,
+        "help": 34,
         "buildOne": 36,
-        "buildMerge": 36
+        "buildMerge": 40
       },
       "peakRssKb": {
-        "bareNode": 38592,
-        "help": 56800,
-        "buildOne": 57296,
-        "buildMerge": 57296
+        "bareNode": 38560,
+        "help": 56832,
+        "buildOne": 57232,
+        "buildMerge": 57376
       }
     },
     "artifactBytes": {
-      "flakinessReport": 38241,
-      "flakinessFolder": 40144,
+      "flakinessReport": 38243,
+      "flakinessFolder": 40146,
       "playwrightJsonReport": 91296,
-      "timingsFile": 9265
+      "timingsFile": 7451
     },
     "reportContent": {
       "sourceFiles": 12,
@@ -1117,13 +1132,13 @@
       "sw_vers": 16
     }
   },
-  "durationMs": 232998,
+  "durationMs": 233352,
   "legsMs": {
-    "coverage": 203577,
-    "serial": 208004,
-    "balance": 232998,
-    "assignment": 162780,
-    "history": 160229,
-    "privacy": 222035
+    "coverage": 204043,
+    "serial": 208194,
+    "balance": 233352,
+    "assignment": 171654,
+    "history": 159885,
+    "privacy": 222697
   }
 }

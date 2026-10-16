@@ -18,8 +18,8 @@ const { buildHistory, flakinessReports, scaleDurations, testDurations } = requir
 const CANCEL_AFTER_MS = 300;
 const SLOW_FAILURE_MS = 3000;
 const FASTER_MS = 100;
-// The volatile test in the chromium project, as `testDurations` keys it.
-const VOLATILE = 'chromium › volatile.spec.js › volatile step';
+// The volatile test, as `testDurations` keys it.
+const VOLATILE = 'volatile.spec.js › volatile step';
 
 /** The first line of a stderr text with each path reduced to its file name. */
 function message(stderr) {
@@ -28,7 +28,16 @@ function message(stderr) {
 
 /** Reports of the engine's two-shard run with history: the observations of one complete run. */
 function runReports(ctx) {
-  return flakinessReports(ctx.balancedRun(2).partition);
+  const reports = flakinessReports(ctx.balancedRun(2).partition);
+  if (reports.length === 0) throw new Error('no shard of the balanced run wrote a report');
+  return reports;
+}
+
+/** The duration of the volatile test in a report or timings file; throws when it is not there. */
+function volatileMs(file) {
+  const duration = testDurations(file).get(VOLATILE);
+  if (duration === undefined) throw new Error(`${path.basename(file)} has no volatile test`);
+  return duration;
 }
 
 function reportAndHistory(ctx, name) {
@@ -102,8 +111,8 @@ function mergedVolatile(ctx, { name, run, history }) {
     existing: history,
   });
   return {
-    before: testDurations(history).get(VOLATILE),
-    after: testDurations(merged.file).get(VOLATILE),
+    before: volatileMs(history),
+    after: volatileMs(merged.file),
   };
 }
 
@@ -180,10 +189,19 @@ function cancelledRun(ctx) {
     name: 'cancelled',
     env: { PSP_CANCEL_AFTER_MS: String(CANCEL_AFTER_MS) },
   });
-  const cancelled = testDurations(run.report).get(VOLATILE);
+  if (!fs.existsSync(run.report)) {
+    return {
+      id: '8.cancelled-run',
+      proof: 8,
+      title: `a run cancelled with SIGINT ${CANCEL_AFTER_MS} ms into a test is merged into history`,
+      status: 'fail',
+      evidence: { exit: run.exit, reportWritten: false },
+    };
+  }
+  const cancelled = volatileMs(run.report);
   const merged = buildHistory({ dir: run.dir, reports: [run.report], existing: history });
-  const before = testDurations(history).get(VOLATILE);
-  const after = testDurations(merged.file).get(VOLATILE);
+  const before = volatileMs(history);
+  const after = volatileMs(merged.file);
   return {
     id: '8.cancelled-run',
     proof: 8,
@@ -204,15 +222,15 @@ function fasterTest(ctx) {
   const history = volatileRuns(ctx).green.history.file;
   const run = singleRun(ctx, { name: 'faster', env: { PSP_VOLATILE_MS: String(FASTER_MS) } });
   const merged = buildHistory({ dir: run.dir, reports: [run.report], existing: history });
-  const before = testDurations(history).get(VOLATILE);
-  const after = testDurations(merged.file).get(VOLATILE);
+  const before = volatileMs(history);
+  const after = volatileMs(merged.file);
   return {
     id: '8.faster-test',
     proof: 8,
     title: `a test that now takes ${FASTER_MS} ms instead of a second is merged into history`,
     status: after < before * 0.9 ? 'pass' : 'fail',
     evidence: {
-      newRunMs: testDurations(run.report).get(VOLATILE),
+      newRunMs: volatileMs(run.report),
       durationBeforeMs: before,
       durationAfterMs: after,
     },
@@ -222,7 +240,8 @@ function fasterTest(ctx) {
 /**
  * Integration: history rebuilt from the reports of a window of recent passing runs, instead of
  * folded into the previous timings file. A faster test shows its new duration once the slow
- * observation leaves the window, and a failed run left out of the window changes nothing.
+ * observation leaves the window, a failed run left out of the window changes nothing, and a slow
+ * passing run still inside the window holds the entry up until it leaves.
  */
 function windowRebuild(ctx) {
   const { green, slow } = volatileRuns(ctx);
@@ -232,7 +251,7 @@ function windowRebuild(ctx) {
     name: 'window-faster',
     env: { PSP_VOLATILE_MS: String(FASTER_MS) },
   });
-  const before = testDurations(green.history.file).get(VOLATILE);
+  const before = volatileMs(green.history.file);
   const windowed = buildHistory({ dir, name: 'windowed', reports: [faster.report] });
   const withFailure = buildHistory({
     dir,
@@ -240,21 +259,34 @@ function windowRebuild(ctx) {
     reports: [...greenReports, ...flakinessReports(slow.partition)],
   });
   const withoutFailure = buildHistory({ dir, name: 'without-failure', reports: greenReports });
-  const after = testDurations(windowed.file).get(VOLATILE);
-  const failed = testDurations(withFailure.file).get(VOLATILE);
-  const kept = testDurations(withoutFailure.file).get(VOLATILE);
+  // A window of the two latest runs: the faster run and the slower passing run before it.
+  const slowPassing = buildHistory({
+    dir,
+    name: 'slow-passing',
+    reports: [faster.report, ...greenReports],
+  });
+  const after = volatileMs(windowed.file);
+  const failed = volatileMs(withFailure.file);
+  const kept = volatileMs(withoutFailure.file);
+  const inside = volatileMs(slowPassing.file);
   return {
     id: '8.window-rebuild',
     proof: 8,
     subject: 'integration',
     title: 'history rebuilt from the reports of a window of recent passing runs',
     status:
-      after < before * 0.9 && failed > before * 1.5 && kept <= before * 1.05 ? 'pass' : 'fail',
+      after < before * 0.9 &&
+      failed > before * 1.5 &&
+      kept <= before * 1.05 &&
+      inside >= before * 0.95
+        ? 'pass'
+        : 'fail',
     evidence: {
       durationBeforeMs: before,
       durationInFasterWindowMs: after,
       durationWithFailedRunInWindowMs: failed,
       durationWithFailedRunLeftOutMs: kept,
+      durationWithSlowPassingRunInWindowMs: inside,
     },
   };
 }

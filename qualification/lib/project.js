@@ -38,7 +38,11 @@ function copyProject(source, dir, edits = {}, { git = false } = {}) {
 function commitAll(dir) {
   // No trailing slash: the copy links node_modules, and a slash only matches a directory.
   fs.writeFileSync(path.join(dir, '.gitignore'), 'node_modules\n');
-  const identity = ['-c', 'user.name=psp', '-c', 'user.email=psp@example.invalid'];
+  // A signing key, a hook or a prompt of the developer's own git setup must not reach the fixture.
+  const identity = [
+    ...['-c', 'user.name=psp', '-c', 'user.email=psp@example.invalid'],
+    ...['-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null'],
+  ];
   for (const args of [
     ['init', '-q'],
     ['add', '-A'],
