@@ -48,6 +48,7 @@ A pain to solve. Native Playwright `--shard` splits tests by count, so shards fi
 - Flakiness with `disableUpload: true` still generates reports and samples CPU/RAM. Treat it as heavier than timing-only until measured.
 - The `cypress-split` pairwise-averaging merger is order-dependent for three or more observations and is not transplanted. History uses a bounded observation window.
 - Timing data stays in the consuming repo's own Actions storage; no third-party service or gist. Untrusted PR code gets no write credentials.
+- Users install no new package and add no reporter to their Playwright config for balancing. Everything ships inside the GitHub Action; any reporter or planner it needs is bundled in the Action and injected by it.
 - Engine floors: Flakiness balanced mode needs Playwright 1.62+, NSXBet needs 1.56+.
 
 ## Non-goals
