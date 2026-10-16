@@ -1,6 +1,6 @@
 /**
  * The planner: the ported partition search and setup-aware balance, the estimator hierarchy and
- * the units. The plan must be deterministic, never predicted slower than Playwright's own split,
+ * the units. The plan must be deterministic, predicted at most as slow as Playwright's own split,
  * and must price setup only on the shards that host a test needing it.
  */
 

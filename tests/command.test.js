@@ -52,6 +52,7 @@ describe('assertSupported', () => {
     '--last-failed',
     '--only-changed',
     '--list',
+    '--no-deps',
     '--',
   ]) {
     test(`refuses ${arg}`, () =>

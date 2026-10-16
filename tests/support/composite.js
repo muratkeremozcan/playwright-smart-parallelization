@@ -138,6 +138,29 @@ const USES = {
   },
 };
 
+const STATUS_FUNCTION = /\b(always|success|failure|cancelled)\(\)/;
+
+/**
+ * The host environment without what a runner sets for its own job: run inside a CI job, the model
+ * must not see that job's event, ref or runner.
+ */
+const hostEnv = () =>
+  Object.fromEntries(
+    Object.entries(process.env).filter(([name]) => !/^(GITHUB_|RUNNER_|ACTIONS_|PSP_)/.test(name))
+  );
+
+/** A push to the default branch, the event of a run that publishes under `publish-history: auto`. */
+function pushEvent(dir) {
+  const file = path.join(dir, 'event.json');
+  if (!fs.existsSync(file)) {
+    fs.writeFileSync(
+      file,
+      JSON.stringify({ ref: 'refs/heads/main', repository: { default_branch: 'main' } })
+    );
+  }
+  return file;
+}
+
 /** Evaluates a GitHub expression body against `ctx`. Supports what action.yml uses. */
 function evaluate(expression, ctx) {
   const tokens = expression.match(
@@ -221,7 +244,12 @@ function runAction({ inputs = {}, env = {}, world, workspace, hooks = {} }) {
   const steps = [];
   try {
     ACTION.runs.steps.forEach((step, index) => {
-      const condition = step.if ? evaluate(step.if, ctx) : !ctx.failed;
+      // Like the runner, an `if:` without a status function also requires success().
+      const condition = !step.if
+        ? !ctx.failed
+        : STATUS_FUNCTION.test(step.if)
+          ? evaluate(step.if, ctx)
+          : !ctx.failed && evaluate(step.if, ctx);
       const record = {
         id: step.id || `step-${index}`,
         name: step.name,
@@ -254,12 +282,14 @@ function runAction({ inputs = {}, env = {}, world, workspace, hooks = {} }) {
             encoding: 'utf8',
             maxBuffer: 256 * 1024 * 1024,
             env: {
-              ...process.env,
+              ...hostEnv(),
               GITHUB_RUN_ID: '1000',
               GITHUB_RUN_ATTEMPT: '1',
               GITHUB_SHA: 'c0ffee',
               GITHUB_REPOSITORY: 'owner/repo',
               GITHUB_EVENT_NAME: 'push',
+              GITHUB_REF: 'refs/heads/main',
+              GITHUB_EVENT_PATH: pushEvent(temp),
               RUNNER_OS: 'Linux',
               RUNNER_ARCH: 'X64',
               RUNNER_NAME: 'local',

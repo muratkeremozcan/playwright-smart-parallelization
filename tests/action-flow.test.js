@@ -164,6 +164,16 @@ describe('cold start, warm run, failed shard and rollback', () => {
     assert.deepStrictEqual(newest(ctx.world, cold.plan.key), before);
   });
 
+  test('rollback: a failed shard fails finish through its status record', () => {
+    const off = pipeline(ctx, 105, {
+      inputs: { enabled: 'false' },
+      env: { PSP_FIXTURE_FAIL: 'adds an item' },
+    });
+    assert.ok(off.shards.some((s) => s.outcome === 'failure'));
+    assert.strictEqual(off.finish.outcome, 'failure');
+    assert.match(off.finish.summary, /shard \d exited with 1/);
+  });
+
   test('rollback: enabled false runs plain --shard, no reporter, no plan line, no history write', () => {
     const before = newest(ctx.world, cold.plan.key);
     const off = pipeline(ctx, 104, { inputs: { enabled: 'false' } });
@@ -172,7 +182,14 @@ describe('cold start, warm run, failed shard and rollback', () => {
       assert.strictEqual(s.outcome, 'success');
       assert.doesNotMatch(s.stdout, /--add-reporter|plan [0-9a-f]{12}/);
     }
-    assert.ok(![...ctx.world.artifacts.keys()].some((n) => n.includes('-104-')));
+    const uploaded = [...ctx.world.artifacts].filter(([n]) => n.includes('-104-'));
+    assert.strictEqual(uploaded.length, 2, 'one status record per shard');
+    for (const [, files] of uploaded) {
+      assert.strictEqual(
+        JSON.parse(files['record.json'].toString()).schema,
+        'playwright-smart-parallelization/status'
+      );
+    }
     assert.strictEqual(off.finish.outcome, 'success');
     assert.deepStrictEqual(newest(ctx.world, cold.plan.key), before);
   });
@@ -226,7 +243,7 @@ describe('finish against one recorded run', () => {
     assert.deepStrictEqual(parseHistory(entry.text).runs, [150, 160, 201]);
   });
 
-  test('a key not readable yet: the next attempt moves past it', () => {
+  test('a key not readable yet: the next attempt tries the same key again', () => {
     const ctx = fresh();
     const hooks = {
       before: (step, world) => {
@@ -236,8 +253,9 @@ describe('finish against one recorded run', () => {
     };
     const f = finish(ctx, 201, plan, {}, hooks);
     assert.strictEqual(f.outcome, 'success', f.stdout);
-    assert.match(f.stdout, /not readable yet/);
-    assert.ok(newest(ctx.world, key()).key.endsWith('-2'));
+    assert.match(f.stdout, /not readable yet.*tried again/);
+    assert.ok(newest(ctx.world, key()).key.endsWith('-1'));
+    assert.deepStrictEqual(parseHistory(newest(ctx.world, key()).text).runs, [201]);
   });
 
   test('every attempt lost: finish fails loud and the history keeps its bytes', () => {
@@ -263,17 +281,79 @@ describe('finish against one recorded run', () => {
     }
   });
 
-  test('a damaged newest entry: prepare falls back to native, publish fails and saves nothing', () => {
+  test('a damaged newest entry: native for the run, finish heals it and fails once', () => {
     const ctx = fresh();
     cacheSave(ctx.world, `${cachePrefix(key())}1`, { 'history.json': Buffer.from('{"schema":') });
     const p = prepare(ctx, 201);
     assert.strictEqual(p.outputs.mode, 'native');
     assert.match(p.stdout, /::warning.*history unusable/);
-    const keys = [...ctx.world.cache.keys()];
-    const f = finish(ctx, 201, plan);
+    const f = finish(ctx, 201, p.outputs.plan);
     assert.strictEqual(f.outcome, 'failure');
-    assert.match(f.stdout, /not valid JSON/);
-    assert.deepStrictEqual([...ctx.world.cache.keys()], keys);
+    assert.match(f.stdout, /not valid JSON.*published over it/);
+    const healed = newest(ctx.world, key());
+    assert.ok(healed.key.endsWith('-2'));
+    assert.deepStrictEqual(parseHistory(healed.text).runs, [201]);
+    const next = prepare(ctx, 202);
+    assert.strictEqual(next.outputs.mode, 'balanced');
+    assert.strictEqual(JSON.parse(next.outputs.plan).seq, 2);
+  });
+
+  test('a fork pull request balances from the base history it can read', () => {
+    const ctx = fresh();
+    seed(ctx.world, 1, [150]);
+    const event = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'psp-event-')), 'event.json');
+    fs.writeFileSync(
+      event,
+      JSON.stringify({ pull_request: { head: { repo: { full_name: 'someone/fork' } } } })
+    );
+    const p = prepare(
+      ctx,
+      201,
+      {},
+      { GITHUB_EVENT_NAME: 'pull_request', GITHUB_EVENT_PATH: event }
+    );
+    const pinned = JSON.parse(p.outputs.plan);
+    assert.strictEqual(pinned.mode, 'balanced');
+    const bytes = ctx.world.cache.get(`${cachePrefix(key())}1`).files['history.json'];
+    assert.strictEqual(pinned.sha, sha256(bytes));
+    assert.strictEqual(pinned.seq, 1);
+  });
+
+  test('the host job event never leaks into the model: a CI pull request still publishes here', () => {
+    const ctx = fresh();
+    const event = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'psp-event-')), 'event.json');
+    fs.writeFileSync(
+      event,
+      JSON.stringify({ pull_request: { head: { repo: { full_name: 'o/r' } } } })
+    );
+    const saved = { path: process.env.GITHUB_EVENT_PATH, name: process.env.GITHUB_EVENT_NAME };
+    process.env.GITHUB_EVENT_PATH = event;
+    process.env.GITHUB_EVENT_NAME = 'pull_request';
+    try {
+      assert.strictEqual(finish(ctx, 201, plan).outcome, 'success');
+      assert.ok(newest(ctx.world, key()));
+    } finally {
+      for (const [name, value] of [
+        ['GITHUB_EVENT_PATH', saved.path],
+        ['GITHUB_EVENT_NAME', saved.name],
+      ]) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
+    }
+  });
+
+  test('after a re-run of all jobs, a shard that never ran again fails finish', () => {
+    const ctx = fresh();
+    const again = prepare(ctx, 201, {}, { GITHUB_RUN_ATTEMPT: '2' });
+    assert.strictEqual(JSON.parse(again.outputs.plan).attempt, 2);
+    assert.strictEqual(
+      shard(ctx, 201, again.outputs.plan, 2, { GITHUB_RUN_ATTEMPT: '2' }).outcome,
+      'success'
+    );
+    const f = finish(ctx, 201, again.outputs.plan, { GITHUB_RUN_ATTEMPT: '2' });
+    assert.strictEqual(f.outcome, 'failure');
+    assert.match(f.summary, /no record for shard 1/);
   });
 
   test('a missing record fails finish before any history write', () => {

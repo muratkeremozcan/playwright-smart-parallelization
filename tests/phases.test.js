@@ -14,7 +14,7 @@ const prepare = require('../lib/prepare');
 const run = require('../lib/run');
 const finish = require('../lib/finish');
 const store = require('../lib/store');
-const { fetchJobs, overheadFrom, simulate } = require('../lib/summary');
+const { fetchJobs, markdown, overheadFrom, simulate } = require('../lib/summary');
 const { applyRun, emptyHistory, serializeHistory } = require('../lib/history');
 const { CACHE_PATH, HISTORY_FILE, cacheKey, fingerprint } = require('../lib/identity');
 const { testKey } = require('../lib/plan/estimate');
@@ -97,6 +97,7 @@ describe('inputs', () => {
     assert.throws(() => prepareInputs(inputs({ workers: 'x' }), j.env), /workers input/);
     assert.throws(() => prepareInputs(inputs({ enabled: 'yes' }), j.env), /enabled input/);
     assert.throws(() => workingDirectory('../x', j.ws), /outside the workspace/);
+    assert.strictEqual(workingDirectory('..e2e', j.ws), '..e2e');
     assert.throws(
       () => prepareInputs(inputs({ command: 'npx playwright test --shard=1/2' }), j.env),
       /--shard/
@@ -120,7 +121,9 @@ describe('prepare decides the mode of the whole run', () => {
 
   test('Playwright 1.62 has no --add-reporter: disabled; 1.63 restores history', () => {
     const old = job({ version: '1.62.0' });
-    assert.match(planOf(prepare.plan({ inputs: inputs(), env: old.env })).reason, /below 1\.63\.0/);
+    const oldPlan = planOf(prepare.plan({ inputs: inputs(), env: old.env }));
+    assert.strictEqual(oldPlan.mode, 'disabled');
+    assert.match(oldPlan.reason, /below 1\.63\.0/);
     const ok = job({ version: '1.63.0' });
     assert.strictEqual(prepare.key({ inputs: inputs(), env: ok.env }).outputs.restore, 'true');
   });
@@ -128,10 +131,17 @@ describe('prepare decides the mode of the whole run', () => {
   test('no Playwright version found: disabled', () => {
     const j = job();
     fs.rmSync(path.join(j.app, 'package-lock.json'));
-    assert.match(
-      planOf(prepare.plan({ inputs: inputs(), env: j.env })).reason,
-      /no Playwright version/
-    );
+    const plan = planOf(prepare.plan({ inputs: inputs(), env: j.env }));
+    assert.strictEqual(plan.mode, 'disabled');
+    assert.match(plan.reason, /no Playwright version/);
+  });
+
+  test("Yarn Plug'n'Play in or above the working directory: disabled", () => {
+    const j = job();
+    fs.writeFileSync(path.join(j.ws, '.pnp.cjs'), '');
+    const plan = planOf(prepare.plan({ inputs: inputs(), env: j.env }));
+    assert.strictEqual(plan.mode, 'disabled');
+    assert.match(plan.reason, /Plug'n'Play/);
   });
 
   test('no history: native', () => {
@@ -139,6 +149,8 @@ describe('prepare decides the mode of the whole run', () => {
     const plan = planOf(prepare.plan({ inputs: inputs(), env: j.env }));
     assert.strictEqual(plan.mode, 'native');
     assert.strictEqual(plan.reason, 'no history yet');
+    assert.strictEqual(plan.seq, null, 'no entry pinned, so finish may start a chain');
+    assert.strictEqual(plan.attempt, 1);
     assert.strictEqual(plan.fingerprint, fingerprint(plan.key, plan.playwright));
   });
 
@@ -149,6 +161,7 @@ describe('prepare decides the mode of the whole run', () => {
     const result = prepare.plan({ inputs: inputs(), env: restore(j, first, history) });
     const plan = planOf(result);
     assert.strictEqual(plan.mode, 'balanced');
+    assert.strictEqual(plan.seq, 4, 'the pinned entry');
     assert.strictEqual(plan.sha, sha256(serializeHistory(history)));
     assert.strictEqual(
       fs.readFileSync(path.join(result.outputs['snapshot-dir'], HISTORY_FILE), 'utf8'),
@@ -247,7 +260,11 @@ describe('run checks everything before Playwright starts', () => {
   test('disabled: the plain command with --shard and the workers, no reporter', () => {
     const { j, plan } = planned('disabled');
     const setup = run.setup({ inputs: { plan, shard: '3' }, env: j.env });
-    assert.strictEqual(setup.outputs.record, 'false');
+    assert.strictEqual(
+      setup.outputs.record,
+      'true',
+      'a status record stands in for the run record'
+    );
     assert.deepStrictEqual(run.command({ inputs: { plan, shard: '3' }, env: j.env }).argv, [
       'npx',
       'playwright',
@@ -305,28 +322,52 @@ describe('run checks everything before Playwright starts', () => {
 });
 
 describe('finish', () => {
-  test('trusts pushes and same-repository pull requests, never forks or pull_request_target', () => {
+  test('publish-history: auto publishes from the default branch, true also from same-repo refs', () => {
     const event = (payload) => {
       const file = path.join(tmp('psp-event-'), 'event.json');
       fs.writeFileSync(file, JSON.stringify(payload));
       return file;
     };
-    const base = { GITHUB_REPOSITORY: 'o/r', GITHUB_EVENT_NAME: 'push' };
-    assert.ok(finish.trust({ ...base, GITHUB_EVENT_PATH: event({}) }).trusted);
-    const pr = (full) => ({
-      ...base,
-      GITHUB_EVENT_NAME: 'pull_request',
-      GITHUB_EVENT_PATH: event({ pull_request: { head: { repo: full && { full_name: full } } } }),
+    const repository = { default_branch: 'main' };
+    const push = (ref) => ({
+      GITHUB_REPOSITORY: 'o/r',
+      GITHUB_EVENT_NAME: 'push',
+      GITHUB_REF: ref,
+      GITHUB_EVENT_PATH: event({ repository }),
     });
-    assert.ok(finish.trust(pr('o/r')).trusted);
-    assert.strictEqual(finish.trust(pr('fork/r')).trusted, false);
-    assert.strictEqual(finish.trust(pr(null)).trusted, false);
+    const pr = (full) => ({
+      GITHUB_REPOSITORY: 'o/r',
+      GITHUB_EVENT_NAME: 'pull_request',
+      GITHUB_REF: 'refs/pull/1/merge',
+      GITHUB_EVENT_PATH: event({
+        repository,
+        pull_request: { head: { repo: full && { full_name: full } } },
+      }),
+    });
+    const trusted = (env, mode) => finish.trust(env, mode).trusted;
+    assert.ok(trusted(push('refs/heads/main'), 'auto'));
+    assert.strictEqual(trusted(push('refs/heads/feature'), 'auto'), false);
+    assert.strictEqual(trusted(pr('o/r'), 'auto'), false);
+    assert.ok(trusted(push('refs/heads/feature'), 'true'));
+    assert.ok(trusted(pr('o/r'), 'true'));
+    assert.strictEqual(trusted(push('refs/heads/main'), 'false'), false);
+    for (const mode of ['auto', 'true']) {
+      assert.strictEqual(trusted(pr('fork/r'), mode), false);
+      assert.strictEqual(trusted(pr(null), mode), false);
+      assert.strictEqual(
+        trusted({ ...push('refs/heads/main'), GITHUB_EVENT_NAME: 'pull_request_target' }, mode),
+        false
+      );
+    }
     assert.strictEqual(
-      finish.trust({ ...base, GITHUB_EVENT_NAME: 'pull_request_target' }).trusted,
+      trusted({ ...push('refs/heads/main'), GITHUB_EVENT_PATH: event({}) }, 'auto'),
       false
     );
     assert.strictEqual(
-      finish.trust({ ...base, GITHUB_EVENT_PATH: path.join(tmp('x'), 'missing.json') }).trusted,
+      trusted(
+        { ...push('refs/heads/main'), GITHUB_EVENT_PATH: path.join(tmp('x'), 'missing.json') },
+        'true'
+      ),
       false
     );
   });
@@ -435,16 +476,45 @@ describe('the compare-and-swap steps', () => {
     assert.strictEqual(state.status, 'already');
   });
 
-  test('a damaged entry stops the publish', () => {
-    const state = store.newState({ key, run: runOf(1) });
-    assert.throws(
-      () => store.write(state, { matchedKey: cacheKey(key, 1), text: '{' }),
-      /not valid JSON/
-    );
+  test('a damaged newest entry is an error, counts as seen, and this run is published over it', () => {
+    const state = store.newState({ key, run: runOf(7), pinned: 1 });
+    const written = store.write(state, { matchedKey: cacheKey(key, 1), text: '{' });
+    assert.strictEqual(written.key, cacheKey(key, 2));
+    assert.deepStrictEqual(JSON.parse(written.text).runs, [7]);
+    assert.match(state.errors[0], /not valid JSON/);
+    store.verify(state, { text: written.text });
+    assert.strictEqual(state.status, 'published');
     assert.throws(
       () => store.write(state, { matchedKey: 'psp-history-v1-other-1', text: entry(1) }),
-      /not an entry/
+      /outside this history/
     );
+  });
+
+  test('the next key is above the entry prepare pinned', () => {
+    const state = store.newState({ key, run: runOf(7), pinned: 6 });
+    assert.strictEqual(
+      store.write(state, { matchedKey: cacheKey(key, 2), text: entry(1) }).key,
+      cacheKey(key, 7)
+    );
+  });
+
+  test('a prefix read that misses after prepare pinned an entry publishes nothing', () => {
+    const state = store.newState({ key, run: runOf(7), pinned: 3 });
+    assert.strictEqual(store.write(state, { matchedKey: '', text: null }).save, false);
+    assert.strictEqual(state.status, 'unavailable');
+  });
+
+  test('a key another writer is still uploading is tried again, never skipped', () => {
+    const state = store.newState({ key, run: runOf(7), pinned: 1 });
+    const first = store.write(state, { matchedKey: cacheKey(key, 1), text: entry(1) });
+    assert.deepStrictEqual(store.verify(state, { text: null }), { retry: true });
+    const second = store.write(state, { matchedKey: cacheKey(key, 1), text: entry(1) });
+    assert.strictEqual(second.key, first.key);
+    // The other writer finished: its entry joins the merge and the next attempt moves on.
+    assert.deepStrictEqual(store.verify(state, { text: entry(2) }), { retry: true });
+    const third = store.write(state, { matchedKey: cacheKey(key, 1), text: entry(1) });
+    assert.strictEqual(third.key, cacheKey(key, 3));
+    assert.deepStrictEqual(JSON.parse(third.text).runs, [1, 2, 7]);
   });
 
   test(`after ${store.ATTEMPTS} lost attempts the store reports failure`, () => {
@@ -455,14 +525,16 @@ describe('the compare-and-swap steps', () => {
       assert.strictEqual(retry, i < store.ATTEMPTS);
     }
     assert.strictEqual(state.status, 'failed');
+    assert.deepStrictEqual(state.attempted, [1, 1, 1], 'the pending key is retried each time');
   });
 });
 
 describe('summary', () => {
-  const record = (shard, runner, wallMs) => ({
+  const record = (shard, runner, wallMs, startedAt = '2026-10-16T00:00:10Z') => ({
     shard: { current: shard, total: 2 },
     run: { id: 1, attempt: 1 },
     runner,
+    startedAt,
     wallMs,
     projects: { chromium: [] },
     phases: {},
@@ -506,6 +578,42 @@ describe('summary', () => {
     ];
     assert.strictEqual(overheadFrom([record(1, 'a', 10000), record(2, 'b', 20000)], jobs), 75000);
     assert.strictEqual(overheadFrom([record(1, 'zzz', 10000)], jobs), null);
+    // A persistent runner keeps its name: only the job that contains the run in time matches.
+    const later = [
+      { ...jobs[0], started_at: '2026-10-16T01:00:00Z', completed_at: '2026-10-16T01:05:00Z' },
+      jobs[0],
+    ];
+    assert.strictEqual(overheadFrom([record(1, 'a', 10000)], later), 50000);
+    assert.strictEqual(overheadFrom([record(1, 'a', 10000, '2026-10-16T02:00:00Z')], jobs), null);
+  });
+
+  test('the table, slowest shard, spread and imbalance from known records', () => {
+    const plan = { mode: 'balanced', total: 2, reason: 'history entry x', sha: 'a'.repeat(64) };
+    const records = [
+      {
+        ...record(1, 'a', 4000),
+        predictedMs: [3000, 3500],
+        testsMs: 3800,
+        status: 'passed',
+        planSha: 'b'.repeat(64),
+      },
+      {
+        ...record(2, 'b', 6000),
+        predictedMs: [3000, 3500],
+        testsMs: 5900,
+        status: 'passed',
+        planSha: 'b'.repeat(64),
+      },
+    ];
+    const text = markdown({ plan, check: { ok: true, problems: [], records } });
+    assert.match(text, /^### Playwright Smart Parallelization: ok/);
+    assert.match(text, /\| 1 \| 1 \| 3 \| 3\.0s \| 4\.0s \| 3\.8s \| passed \|/);
+    assert.match(text, /\| 2 \| 1 \| 3 \| 3\.5s \| 6\.0s \| 5\.9s \| passed \|/);
+    assert.match(
+      text,
+      /Slowest shard 2 at 6\.0s, spread 2\.0s, imbalance 20\.0% \(slowest over the mean\)\./
+    );
+    assert.match(text, /Plan `bbbbbbbbbbbb`\./);
   });
 
   test('reads the jobs API and reports why it could not', async () => {

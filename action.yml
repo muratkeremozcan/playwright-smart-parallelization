@@ -53,9 +53,12 @@ inputs:
     required: false
     default: 'blob-report'
   publish-history:
-    description: 'finish: false never writes the history.'
+    description: |
+      finish: auto publishes the history from the repository's default branch only; true also from
+      same-repository branches and pull requests, which write into their own cache scope; false never.
+      Fork pull requests and pull_request_target never publish.
     required: false
-    default: 'true'
+    default: 'auto'
   github-token:
     description: 'finish: reads the jobs API to measure the per-shard overhead for the summary.'
     required: false
@@ -286,7 +289,7 @@ runs:
     # compare-and-swap, attempt 1 of 3
     - name: History, attempt 1, restore the newest entry
       id: cas1-read
-      if: steps.finish-check.outputs.publish == 'true'
+      if: "!cancelled() && steps.finish-check.outputs.publish == 'true'"
       uses: actions/cache/restore@v6
       with:
         path: .psp/history
@@ -294,7 +297,7 @@ runs:
         restore-keys: ${{ steps.finish-check.outputs.prefix }}
     - name: History, attempt 1, merge and write
       id: cas1-write
-      if: steps.finish-check.outputs.publish == 'true'
+      if: "!cancelled() && steps.finish-check.outputs.publish == 'true'"
       shell: bash
       run: node "$GITHUB_ACTION_PATH/main.js" store-write
       env:
@@ -313,13 +316,13 @@ runs:
         PSP_STATE_DIR: ${{ steps.finish-setup.outputs.state-dir }}
         PSP_MATCHED_KEY: ${{ steps.cas1-read.outputs.cache-matched-key }}
     - name: History, attempt 1, save
-      if: steps.cas1-write.outputs.save == 'true'
+      if: "!cancelled() && steps.cas1-write.outputs.save == 'true'"
       uses: actions/cache/save@v6
       with:
         path: .psp/history
         key: ${{ steps.cas1-write.outputs.key }}
     - name: History, attempt 1, clear
-      if: steps.cas1-write.outputs.save == 'true'
+      if: "!cancelled() && steps.cas1-write.outputs.save == 'true'"
       shell: bash
       run: node "$GITHUB_ACTION_PATH/main.js" store-clear
       env:
@@ -337,14 +340,14 @@ runs:
         PSP_INPUT_BLOB_REPORT: ${{ inputs.blob-report }}
     - name: History, attempt 1, read the key back
       id: cas1-check
-      if: steps.cas1-write.outputs.save == 'true'
+      if: "!cancelled() && steps.cas1-write.outputs.save == 'true'"
       uses: actions/cache/restore@v6
       with:
         path: .psp/history
         key: ${{ steps.cas1-write.outputs.key }}
     - name: History, attempt 1, verify
       id: cas1-verify
-      if: steps.cas1-write.outputs.save == 'true'
+      if: "!cancelled() && steps.cas1-write.outputs.save == 'true'"
       shell: bash
       run: node "$GITHUB_ACTION_PATH/main.js" store-verify
       env:
@@ -365,7 +368,7 @@ runs:
     # compare-and-swap, attempt 2 of 3
     - name: History, attempt 2, restore the newest entry
       id: cas2-read
-      if: steps.cas1-verify.outputs.retry == 'true'
+      if: "!cancelled() && steps.cas1-verify.outputs.retry == 'true'"
       uses: actions/cache/restore@v6
       with:
         path: .psp/history
@@ -373,7 +376,7 @@ runs:
         restore-keys: ${{ steps.finish-check.outputs.prefix }}
     - name: History, attempt 2, merge and write
       id: cas2-write
-      if: steps.cas1-verify.outputs.retry == 'true'
+      if: "!cancelled() && steps.cas1-verify.outputs.retry == 'true'"
       shell: bash
       run: node "$GITHUB_ACTION_PATH/main.js" store-write
       env:
@@ -392,13 +395,13 @@ runs:
         PSP_STATE_DIR: ${{ steps.finish-setup.outputs.state-dir }}
         PSP_MATCHED_KEY: ${{ steps.cas2-read.outputs.cache-matched-key }}
     - name: History, attempt 2, save
-      if: steps.cas2-write.outputs.save == 'true'
+      if: "!cancelled() && steps.cas2-write.outputs.save == 'true'"
       uses: actions/cache/save@v6
       with:
         path: .psp/history
         key: ${{ steps.cas2-write.outputs.key }}
     - name: History, attempt 2, clear
-      if: steps.cas2-write.outputs.save == 'true'
+      if: "!cancelled() && steps.cas2-write.outputs.save == 'true'"
       shell: bash
       run: node "$GITHUB_ACTION_PATH/main.js" store-clear
       env:
@@ -416,14 +419,14 @@ runs:
         PSP_INPUT_BLOB_REPORT: ${{ inputs.blob-report }}
     - name: History, attempt 2, read the key back
       id: cas2-check
-      if: steps.cas2-write.outputs.save == 'true'
+      if: "!cancelled() && steps.cas2-write.outputs.save == 'true'"
       uses: actions/cache/restore@v6
       with:
         path: .psp/history
         key: ${{ steps.cas2-write.outputs.key }}
     - name: History, attempt 2, verify
       id: cas2-verify
-      if: steps.cas2-write.outputs.save == 'true'
+      if: "!cancelled() && steps.cas2-write.outputs.save == 'true'"
       shell: bash
       run: node "$GITHUB_ACTION_PATH/main.js" store-verify
       env:
@@ -444,7 +447,7 @@ runs:
     # compare-and-swap, attempt 3 of 3
     - name: History, attempt 3, restore the newest entry
       id: cas3-read
-      if: steps.cas2-verify.outputs.retry == 'true'
+      if: "!cancelled() && steps.cas2-verify.outputs.retry == 'true'"
       uses: actions/cache/restore@v6
       with:
         path: .psp/history
@@ -452,7 +455,7 @@ runs:
         restore-keys: ${{ steps.finish-check.outputs.prefix }}
     - name: History, attempt 3, merge and write
       id: cas3-write
-      if: steps.cas2-verify.outputs.retry == 'true'
+      if: "!cancelled() && steps.cas2-verify.outputs.retry == 'true'"
       shell: bash
       run: node "$GITHUB_ACTION_PATH/main.js" store-write
       env:
@@ -471,13 +474,13 @@ runs:
         PSP_STATE_DIR: ${{ steps.finish-setup.outputs.state-dir }}
         PSP_MATCHED_KEY: ${{ steps.cas3-read.outputs.cache-matched-key }}
     - name: History, attempt 3, save
-      if: steps.cas3-write.outputs.save == 'true'
+      if: "!cancelled() && steps.cas3-write.outputs.save == 'true'"
       uses: actions/cache/save@v6
       with:
         path: .psp/history
         key: ${{ steps.cas3-write.outputs.key }}
     - name: History, attempt 3, clear
-      if: steps.cas3-write.outputs.save == 'true'
+      if: "!cancelled() && steps.cas3-write.outputs.save == 'true'"
       shell: bash
       run: node "$GITHUB_ACTION_PATH/main.js" store-clear
       env:
@@ -495,14 +498,14 @@ runs:
         PSP_INPUT_BLOB_REPORT: ${{ inputs.blob-report }}
     - name: History, attempt 3, read the key back
       id: cas3-check
-      if: steps.cas3-write.outputs.save == 'true'
+      if: "!cancelled() && steps.cas3-write.outputs.save == 'true'"
       uses: actions/cache/restore@v6
       with:
         path: .psp/history
         key: ${{ steps.cas3-write.outputs.key }}
     - name: History, attempt 3, verify
       id: cas3-verify
-      if: steps.cas3-write.outputs.save == 'true'
+      if: "!cancelled() && steps.cas3-write.outputs.save == 'true'"
       shell: bash
       run: node "$GITHUB_ACTION_PATH/main.js" store-verify
       env:

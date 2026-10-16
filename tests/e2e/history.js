@@ -4,6 +4,8 @@
  * Helpers of the end-to-end jobs in `.github/workflows/e2e-pipeline.yml`, run against the real
  * Actions cache folder of the Action (`.psp/history`):
  *
+ *   node tests/e2e/history.js key              print the cache prefix prepare computes from the
+ *                                              PSP_INPUT_* inputs, to seed a history before prepare
  *   node tests/e2e/history.js seed KEY RUN_ID   write a valid history of one synthetic run
  *   node tests/e2e/history.js expect-runs ID... fail unless the restored history holds these runs
  */
@@ -11,7 +13,8 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { applyRun, emptyHistory, parseHistory, serializeHistory } = require('../../lib/history');
-const { CACHE_PATH, HISTORY_FILE } = require('../../lib/identity');
+const { CACHE_PATH, HISTORY_FILE, cachePrefix } = require('../../lib/identity');
+const { prepareInputs, readInputs } = require('../../lib/inputs');
 const { testKey } = require('../../lib/plan/estimate');
 
 const file = path.join(process.env.GITHUB_WORKSPACE || process.cwd(), CACHE_PATH, HISTORY_FILE);
@@ -42,7 +45,10 @@ function expectRuns(ids) {
 }
 
 const [command, ...args] = process.argv.slice(2);
-if (command === 'seed') seed(args[0], args[1]);
+if (command === 'key') {
+  const { key } = prepareInputs({ ...readInputs(), shards: '1', enabled: 'true' }, process.env);
+  process.stdout.write(`key=${key}\nprefix=${cachePrefix(key)}\n`);
+} else if (command === 'seed') seed(args[0], args[1]);
 else if (command === 'expect-runs') expectRuns(args);
 else {
   process.stdout.write(`::error::unknown command ${command}\n`);

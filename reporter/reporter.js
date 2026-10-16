@@ -82,23 +82,25 @@ const projectsOf = (config) =>
   }));
 
 /**
- * Unnamed or duplicate project names have no stable identity in the history or the plan, so they
- * are refused before any test runs.
+ * A project's name keys its tests in the history and the plan. One unnamed project, such as the
+ * implicit project of a config without `projects`, has the stable identity `''`. Two projects with
+ * one name, unnamed ones included, have none, so they are refused before any test runs.
  */
 function assertNamedProjects(projects) {
-  const seen = new Set();
+  const byName = new Map();
   projects.forEach((project, index) => {
-    if (!project.name) {
-      throw new Error(
-        `${PREFIX} project ${index + 1} of the config has no name; every project needs a unique ` +
-          'name, which keys its tests in the timing history'
-      );
-    }
-    if (seen.has(project.name)) {
-      throw new Error(`${PREFIX} two projects are named ${JSON.stringify(project.name)}`);
-    }
-    seen.add(project.name);
+    const name = project.name || '';
+    if (!byName.has(name)) byName.set(name, []);
+    byName.get(name).push(index + 1);
   });
+  for (const [name, indexes] of byName) {
+    if (indexes.length < 2) continue;
+    throw new Error(
+      name
+        ? `${PREFIX} projects ${indexes.join(' and ')} of the config are both named ${JSON.stringify(name)}; every project needs a unique name, which keys its tests in the timing history`
+        : `${PREFIX} projects ${indexes.join(' and ')} of the config have no name; give them unique names, which key their tests in the timing history`
+    );
+  }
 }
 
 /** The identity of a test: `{ id, key, project, file, repeat, label, staticSkip }`. */
@@ -240,7 +242,7 @@ class SmartParallelizationReporter {
     } catch (error) {
       throw new Error(
         `${PREFIX} ${label}: ${error.message}; balanced mode is strict, so this shard stops ` +
-          'before any test rather than split the suite differently from the other shards',
+          'before any test and every shard keeps one plan',
         { cause: error }
       );
     }
@@ -331,6 +333,7 @@ class SmartParallelizationReporter {
     const record = {
       ...this.record,
       status: result.status,
+      startedAt: result.startTime ? new Date(result.startTime).toISOString() : null,
       wallMs: Math.round(result.duration),
       testsMs: this.lastEnd > this.firstStart ? Math.round(this.lastEnd - this.firstStart) : 0,
       tests,

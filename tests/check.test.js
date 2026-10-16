@@ -5,7 +5,14 @@
 
 const { test, describe } = require('node:test');
 const assert = require('node:assert');
-const { RECORD_SCHEMA, checkRun, latestAttempts, validateRecord } = require('../lib/check');
+const {
+  RECORD_SCHEMA,
+  STATUS_SCHEMA,
+  checkRun,
+  checkStatuses,
+  latestAttempts,
+  validateRecord,
+} = require('../lib/check');
 
 const SHA = 'a'.repeat(64);
 const plan = { mode: 'balanced', total: 2, sha: SHA, runId: 7, fingerprint: 'fp' };
@@ -163,6 +170,41 @@ test('a re-run shard counts its latest attempt only', () => {
   const result = checkRun(plan, [record(1, ['a', 'b']), stale, rerun]);
   assert.deepStrictEqual(result.problems, []);
   assert.strictEqual(latestAttempts([stale, rerun]).latest[0].run.attempt, 2);
+  assert.strictEqual(latestAttempts([rerun, stale]).latest[0].run.attempt, 2, 'in either order');
+  assert.deepStrictEqual(checkRun(plan, [rerun, record(1, ['a', 'b']), stale]).problems, []);
+});
+
+test('after a re-run of all jobs, a record of an earlier attempt covers nothing', () => {
+  const again = { ...plan, attempt: 2 };
+  const result = checkRun(again, [
+    record(1, ['a', 'b'], { run: { id: 7, attempt: 1 } }),
+    record(2, ['c'], { run: { id: 7, attempt: 2 } }),
+  ]);
+  assert.match(result.problems.join('\n'), /no record for shard 1/);
+});
+
+describe('a disabled run', () => {
+  const status = (shard, exitCode, attempt = 1) => ({
+    schema: STATUS_SCHEMA,
+    version: 1,
+    run: { id: 7, attempt },
+    shard: { current: shard, total: 2 },
+    exitCode,
+  });
+  const off = { mode: 'disabled', total: 2, runId: 7, attempt: 1 };
+
+  test('passes when every shard exited 0', () => {
+    assert.ok(checkStatuses(off, [status(1, 0), status(2, 0)]).ok);
+  });
+
+  test('fails on a failed or missing shard, and keeps the latest attempt', () => {
+    assert.match(
+      checkStatuses(off, [status(1, 0), status(2, 1)]).problems.join(),
+      /shard 2 exited with 1/
+    );
+    assert.match(checkStatuses(off, [status(1, 0)]).problems.join(), /no status for shard 2/);
+    assert.ok(checkStatuses(off, [status(1, 0), status(2, 1), status(2, 0, 2)]).ok);
+  });
 });
 
 test('validateRecord refuses something that is not a record', () => {

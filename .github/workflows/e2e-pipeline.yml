@@ -1,9 +1,16 @@
 # One pipeline of the Action on the consumer fixture, the way a consumer wires it: a prepare job,
 # a shard matrix and a finish job, each using the Action from this checkout. The caller sets the
 # scenario and what it expects: the mode prepare chooses, the outcome of finish and what happens
-# to the newest history entry. `race` seeds the cache so this run's finish loses its first key to
-# another writer: an entry under key 2 created before an entry under key 1, so the newest entry
-# by prefix is key 1 and the writer's first choice, key 2, is taken.
+# to the newest history entry.
+#
+# `seed` saves a history of a synthetic run 1 before prepare, so prepare balances and a publish
+# that should not happen, or one that should and does not, changes the newest entry. `race` seeds
+# after prepare so this run's finish loses its first key to another writer: an entry under key 2
+# created before an entry under key 1, so the newest entry by prefix is key 1 and the writer's
+# first choice, key 2, is taken.
+#
+# A re-run reuses the history key, which is keyed on the run id only, so a leg that expects to
+# publish accepts finding its run already in the history on a later attempt.
 name: E2E pipeline
 
 on:
@@ -19,6 +26,9 @@ on:
         description: A title the fixture fails on every attempt, empty for none.
         type: string
         default: ''
+      seed:
+        type: boolean
+        default: false
       race:
         type: boolean
         default: false
@@ -37,8 +47,35 @@ permissions:
   contents: read
   actions: read
 
+env:
+  COMMAND: npx playwright test --reporter=blob
+  WORKING_DIRECTORY: fixtures/consumer
+
 jobs:
+  seed:
+    if: inputs.seed && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - id: key
+        env:
+          PSP_INPUT_COMMAND: ${{ env.COMMAND }}
+          PSP_INPUT_WORKING_DIRECTORY: ${{ env.WORKING_DIRECTORY }}
+          PSP_INPUT_HISTORY_KEY: ${{ inputs.history-key }}
+        run: node tests/e2e/history.js key >> "$GITHUB_OUTPUT"
+      - name: Write the history of run 1
+        run: node tests/e2e/history.js seed "${{ steps.key.outputs.key }}" 1
+      - uses: actions/cache/save@v6
+        with:
+          path: .psp/history
+          key: ${{ steps.key.outputs.prefix }}1
+
   prepare:
+    needs: seed
+    if: ${{ !cancelled() && needs.seed.result != 'failure' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -56,8 +93,8 @@ jobs:
         with:
           phase: prepare
           shards: 3
-          command: npx playwright test --reporter=blob
-          working-directory: fixtures/consumer
+          command: ${{ env.COMMAND }}
+          working-directory: ${{ env.WORKING_DIRECTORY }}
           history-key: ${{ inputs.history-key }}
           enabled: ${{ inputs.enabled }}
 
@@ -78,14 +115,16 @@ jobs:
         env:
           MODE: ${{ steps.psp.outputs.mode }}
           EXPECTED: ${{ inputs.expect-mode }}
+          ATTEMPT: ${{ github.run_attempt }}
         run: |
-          if [ "$MODE" != "$EXPECTED" ]; then
+          # On a re-run, a leg that started cold finds the history its first attempt published.
+          if [ "$MODE" != "$EXPECTED" ] && ! { [ "$ATTEMPT" -gt 1 ] && [ "$EXPECTED" = native ] && [ "$MODE" = balanced ]; }; then
             echo "::error::prepare chose $MODE, expected $EXPECTED"
             exit 1
           fi
 
   seed-taken-key:
-    if: inputs.race
+    if: inputs.race && github.run_attempt == 1
     needs: prepare
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -103,7 +142,7 @@ jobs:
           key: ${{ needs.prepare.outputs.prefix }}2
 
   seed-newest:
-    if: inputs.race
+    if: inputs.race && github.run_attempt == 1
     needs: [prepare, seed-taken-key]
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -157,7 +196,7 @@ jobs:
       - name: Install the consumer fixture
         working-directory: fixtures/consumer
         run: npm ci
-      # A shard that fails on purpose is expected to fail; finish asserts what it does about it.
+      # A shard that fails on purpose is contained here; finish asserts what it does about it.
       - uses: ./
         continue-on-error: ${{ inputs.fail-test != '' }}
         with:
@@ -165,9 +204,10 @@ jobs:
           plan: ${{ needs.prepare.outputs.plan }}
           shard: ${{ matrix.shard }}
 
+  # Gated the way a consumer gates it: finish runs whatever the shards did.
   finish:
     needs: [prepare, test, seed-newest]
-    if: ${{ !cancelled() && needs.prepare.result == 'success' && needs.test.result == 'success' && needs.seed-newest.result != 'failure' }}
+    if: ${{ !cancelled() && needs.prepare.result == 'success' && needs.seed-newest.result != 'failure' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -175,12 +215,14 @@ jobs:
         with:
           persist-credentials: false
 
+      # The pull requests of this repository publish into their own cache scope.
       - id: finish
         uses: ./
         continue-on-error: true
         with:
           phase: finish
           plan: ${{ needs.prepare.outputs.plan }}
+          publish-history: 'true'
 
       - name: Require the finish outcome
         env:
@@ -205,17 +247,26 @@ jobs:
           AFTER: ${{ steps.after.outputs.cache-matched-key }}
           PREFIX: ${{ needs.prepare.outputs.prefix }}
           EXPECTED: ${{ inputs.expect-history }}
+          SEEDED: ${{ inputs.seed }}
           RUN_ID: ${{ github.run_id }}
+          ATTEMPT: ${{ github.run_attempt }}
         run: |
           echo "newest entry before: ${BEFORE:-none}, after: ${AFTER:-none}"
+          runs="$RUN_ID"
+          [ "$SEEDED" = true ] && runs="1 $RUN_ID"
           case "$EXPECTED" in
             unchanged) [ "$AFTER" = "$BEFORE" ] || { echo "::error::the history changed"; exit 1; } ;;
             changed)
-              [ -n "$AFTER" ] && [ "$AFTER" != "$BEFORE" ] || { echo "::error::nothing was published"; exit 1; }
-              node tests/e2e/history.js expect-runs "$RUN_ID" ;;
+              [ -n "$AFTER" ] || { echo "::error::nothing was published"; exit 1; }
+              if [ "$ATTEMPT" = 1 ] && [ "$AFTER" = "$BEFORE" ]; then echo "::error::nothing was published"; exit 1; fi
+              node tests/e2e/history.js expect-runs $runs ;;
             race)
-              [ "$AFTER" = "${PREFIX}3" ] || { echo "::error::expected ${PREFIX}3, got $AFTER"; exit 1; }
-              node tests/e2e/history.js expect-runs 1 2 "$RUN_ID" ;;
+              if [ "$ATTEMPT" = 1 ]; then
+                [ "$AFTER" = "${PREFIX}3" ] || { echo "::error::expected ${PREFIX}3, got $AFTER"; exit 1; }
+                node tests/e2e/history.js expect-runs 1 2 "$RUN_ID"
+              else
+                node tests/e2e/history.js expect-runs "$RUN_ID"
+              fi ;;
             *) echo "::error::unknown expectation $EXPECTED"; exit 1 ;;
           esac
 
@@ -228,4 +279,4 @@ jobs:
         run: |
           name="playwright-report-$(jq -r '.key[0:12]' <<< "$PLAN")-$RUN_ID"
           count=$(gh api "repos/$REPO/actions/runs/$RUN_ID/artifacts?name=$name" --jq .total_count)
-          [ "$count" = 1 ] || { echo "::error::no merged report artifact $name"; exit 1; }
+          [ "$count" -ge 1 ] || { echo "::error::no merged report artifact $name"; exit 1; }

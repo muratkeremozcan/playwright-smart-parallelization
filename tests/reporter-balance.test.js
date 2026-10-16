@@ -107,7 +107,7 @@ describe('balanced mode from the history', () => {
     }
   });
 
-  test('splits by duration, not by count: the predicted shards are even', () => {
+  test('splits by duration: the predicted shards are even', () => {
     const predicted = balanced.records[0].predictedMs;
     const spread = Math.max(...predicted) - Math.min(...predicted);
     assert.ok(spread <= Math.max(...predicted) * 0.25, `predicted ${predicted}`);
@@ -125,6 +125,27 @@ describe('balanced mode from the history', () => {
 });
 
 describe('balanced mode under other selections', () => {
+  test('a project that needs no setup: a shard hosting only its tests runs no setup', () => {
+    // Setup priced high, so the plan keeps the shards that need it few.
+    const tests = { ...history.tests };
+    for (const key of Object.keys(tests)) {
+      if (JSON.parse(key)[0] === 'setup') tests[key] = { ...tests[key], samples: [[101, 8000]] };
+    }
+    const snapshot = writeSnapshot({ ...history, tests });
+    const recordDir = tempDir('psp-records-');
+    const run = runQualified(
+      { config: 'setup-free.config.js', forward: FORWARD, workers: 1 },
+      actionPartition({ total: 3, mode: 'balanced', snapshot, recordDir })
+    );
+    assert.deepStrictEqual(run.violations, []);
+    const setupRuns = run.shards.map((s) => s.leaves.filter((l) => l.project === 'setup').length);
+    run.shards.forEach((shard, i) => {
+      const needsSetup = shard.leaves.some((l) => l.project === 'chromium');
+      assert.strictEqual(setupRuns[i], needsSetup ? 1 : 0, `shard ${i + 1}`);
+    });
+    assert.ok(setupRuns.includes(0), `setup runs per shard: ${setupRuns}`);
+  });
+
   test('--repeat-each 2: every copy runs once and the check counts each copy apart', () => {
     const snapshot = writeSnapshot(history);
     const recordDir = tempDir('psp-records-');

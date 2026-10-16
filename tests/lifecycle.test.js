@@ -150,7 +150,8 @@ describe('lifecycle, native and balanced', () => {
     assert.ok(flaky.length > 0);
     for (const t of flaky) {
       assert.strictEqual(t.outcome, 'flaky');
-      assert.ok(t.sample_ms > 0 && t.sample_ms < 1000, `sample ${t.sample_ms}`);
+      // The failed attempt slept 600 ms and the passing one 30 ms.
+      assert.ok(t.sample_ms > 0 && t.sample_ms < 300, `sample ${t.sample_ms}`);
     }
   });
 });

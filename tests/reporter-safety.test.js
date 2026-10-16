@@ -95,15 +95,61 @@ describe('a shard with other snapshot bytes stops before any test', () => {
   });
 });
 
-test('an unnamed project is refused before any test', () => {
+test('two unnamed projects are refused before any test', () => {
   const recordDir = tempDir('psp-records-');
   const [shard] = runPartition(
     { cwd: FIXTURE, config: 'unnamed.config.js', workers: 1 },
     actionPartition({ total: 1, mode: 'native', recordDir })
   );
   assert.strictEqual(shard.exitCode, 1);
-  assert.match(shard.output, /project 1 of the config has no name/);
+  assert.match(shard.output, /projects 1 and 2 of the config have no name/);
   assert.strictEqual(executed(shard), 0);
+});
+
+test("one unnamed project, a config without projects, keeps the identity '' and balances", () => {
+  // The harness refuses unnamed projects, so the shards run with the Action's reporter alone.
+  const cli = require.resolve('@playwright/test/cli', { paths: [FIXTURE] });
+  const shards = (mode, snapshot, recordDir) =>
+    actionPartition({ total: 2, mode, snapshot, recordDir }).map((shard) =>
+      spawnSync(
+        process.execPath,
+        [
+          cli,
+          'test',
+          '--config=no-projects.config.js',
+          ...FORWARD,
+          '--workers=1',
+          shard.args[0],
+          `--add-reporter=${REPORTER}`,
+        ],
+        { cwd: FIXTURE, encoding: 'utf8', env: { ...process.env, ...shard.env } }
+      )
+    );
+  const nativeDir = tempDir('psp-records-');
+  assert.deepStrictEqual(
+    shards('native', null, nativeDir).map((r) => r.status),
+    [0, 0]
+  );
+  const records = readRecords(nativeDir);
+  assert.deepStrictEqual(checkRun(planOf({ mode: 'native', total: 2 }), records).problems, []);
+  const history = publish(records);
+  assert.ok(Object.keys(history.tests).every((key) => JSON.parse(key)[0] === ''));
+  const snapshot = writeSnapshot(history);
+  const balancedDir = tempDir('psp-records-');
+  const runs = shards('balanced', snapshot, balancedDir);
+  assert.deepStrictEqual(
+    runs.map((r) => r.status),
+    [0, 0]
+  );
+  assert.deepStrictEqual(
+    planLines(runs.map((r) => ({ output: r.stdout }))).map((l) => l.length),
+    [1, 1]
+  );
+  const result = checkRun(
+    planOf({ mode: 'balanced', total: 2, sha: snapshot.sha }),
+    readRecords(balancedDir)
+  );
+  assert.deepStrictEqual(result.problems, []);
 });
 
 test('a shard stopped by --max-failures fails the check and names the tests that did not run', () => {

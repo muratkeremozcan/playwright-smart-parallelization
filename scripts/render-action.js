@@ -82,9 +82,12 @@ inputs:
     required: false
     default: 'blob-report'
   publish-history:
-    description: 'finish: false never writes the history.'
+    description: |
+      finish: auto publishes the history from the repository's default branch only; true also from
+      same-repository branches and pull requests, which write into their own cache scope; false never.
+      Fork pull requests and pull_request_target never publish.
     required: false
-    default: 'true'
+    default: 'auto'
   github-token:
     description: 'finish: reads the jobs API to measure the per-shard overhead for the summary.'
     required: false
@@ -227,10 +230,12 @@ const stateEnv = (extra) => ({
   ...extra,
 });
 for (let k = 1; k <= ATTEMPTS; k++) {
+  // `!cancelled()` keeps a failed step before the history write (a failed report merge, say) from
+  // skipping it through the implicit success() of an `if:`.
   const go =
     k === 1
-      ? "steps.finish-check.outputs.publish == 'true'"
-      : `steps.cas${k - 1}-verify.outputs.retry == 'true'`;
+      ? `"!cancelled() && steps.finish-check.outputs.publish == 'true'"`
+      : `"!cancelled() && steps.cas${k - 1}-verify.outputs.retry == 'true'"`;
   add(`    # compare-and-swap, attempt ${k} of ${ATTEMPTS}
     - name: History, attempt ${k}, restore the newest entry
       id: cas${k}-read
@@ -248,27 +253,27 @@ for (let k = 1; k <= ATTEMPTS; k++) {
       env:
 ${envBlock(8, stateEnv({ PSP_MATCHED_KEY: `\${{ steps.cas${k}-read.outputs.cache-matched-key }}` }))}
     - name: History, attempt ${k}, save
-      if: steps.cas${k}-write.outputs.save == 'true'
+      if: "!cancelled() && steps.cas${k}-write.outputs.save == 'true'"
       uses: actions/cache/save@v6
       with:
         path: ${CACHE_PATH}
         key: \${{ steps.cas${k}-write.outputs.key }}
     - name: History, attempt ${k}, clear
-      if: steps.cas${k}-write.outputs.save == 'true'
+      if: "!cancelled() && steps.cas${k}-write.outputs.save == 'true'"
       shell: bash
       run: ${node('store-clear')}
       env:
 ${envBlock(8)}
     - name: History, attempt ${k}, read the key back
       id: cas${k}-check
-      if: steps.cas${k}-write.outputs.save == 'true'
+      if: "!cancelled() && steps.cas${k}-write.outputs.save == 'true'"
       uses: actions/cache/restore@v6
       with:
         path: ${CACHE_PATH}
         key: \${{ steps.cas${k}-write.outputs.key }}
     - name: History, attempt ${k}, verify
       id: cas${k}-verify
-      if: steps.cas${k}-write.outputs.save == 'true'
+      if: "!cancelled() && steps.cas${k}-write.outputs.save == 'true'"
       shell: bash
       run: ${node('store-verify')}
       env:

@@ -1,8 +1,9 @@
 # Every gate the repository defines runs here: lint, format, unit tests and the public-repo check.
 # The `e2e` jobs run the Action from this checkout on the consumer fixture, each a full pipeline of
 # prepare, a three-shard matrix and finish against this repository's own Actions cache: a cold
-# start publishes the first history, the warm run balances from it, a failed shard and the rollback
-# switch leave it as it was, and a race makes finish lose its first key to another writer.
+# start publishes the first history, a seeded history balances and publishes, a failed shard and
+# the rollback switch leave a seeded history as it was, and a race makes finish lose its first key
+# to another writer.
 name: Test
 
 on:
@@ -55,30 +56,34 @@ jobs:
       - name: Public repo check
         run: npm run check:public
 
+  # Every leg has its own history key, keyed on the run id so a re-run finds it again. The legs
+  # run only where the Action's trust rule lets them write: never for a fork pull request.
   e2e-cold:
     name: e2e, cold start
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     uses: ./.github/workflows/e2e-pipeline.yml
     with:
-      history-key: e2e-${{ github.run_id }}-${{ github.run_attempt }}
+      history-key: e2e-cold-${{ github.run_id }}
       expect-mode: native
       expect-history: changed
 
-  # Same run id as the cold start, so finish finds the run already in the history and writes nothing.
-  e2e-warm:
-    name: e2e, warm
-    needs: e2e-cold
+  e2e-balanced:
+    name: e2e, balanced publish
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     uses: ./.github/workflows/e2e-pipeline.yml
     with:
-      history-key: e2e-${{ github.run_id }}-${{ github.run_attempt }}
+      history-key: e2e-balanced-${{ github.run_id }}
+      seed: true
       expect-mode: balanced
-      expect-history: unchanged
+      expect-history: changed
 
   e2e-failed:
     name: e2e, failed shard
-    needs: e2e-warm
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     uses: ./.github/workflows/e2e-pipeline.yml
     with:
-      history-key: e2e-${{ github.run_id }}-${{ github.run_attempt }}
+      history-key: e2e-failed-${{ github.run_id }}
+      seed: true
       fail-test: adds an item
       expect-mode: balanced
       expect-finish: failure
@@ -86,19 +91,21 @@ jobs:
 
   e2e-rollback:
     name: e2e, rollback
-    needs: e2e-warm
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     uses: ./.github/workflows/e2e-pipeline.yml
     with:
-      history-key: e2e-${{ github.run_id }}-${{ github.run_attempt }}
+      history-key: e2e-rollback-${{ github.run_id }}
+      seed: true
       enabled: 'false'
       expect-mode: disabled
       expect-history: unchanged
 
   e2e-race:
     name: e2e, racing writers
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     uses: ./.github/workflows/e2e-pipeline.yml
     with:
-      history-key: e2e-race-${{ github.run_id }}-${{ github.run_attempt }}
+      history-key: e2e-race-${{ github.run_id }}
       race: true
       expect-mode: native
       expect-history: race
