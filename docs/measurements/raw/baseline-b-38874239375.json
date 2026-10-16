@@ -1,0 +1,2268 @@
+{
+  "schema": 1,
+  "label": "baseline-b",
+  "pair": 4,
+  "labelNote": "main with @playwright/test floated to latest, lockfile updated",
+  "repo": {
+    "owner": "muratkeremozcan",
+    "name": "couture-cast"
+  },
+  "workflow": ".github/workflows/pr-pw-e2e-local.yml",
+  "testStep": "Run Playwright local suite",
+  "facts": {
+    "command": "npm run test:pw-local -- --shard=N/2 --reporter=blob",
+    "fullyParallel": true,
+    "source": "playwright/config/base.config.ts and .github/workflows/pr-pw-e2e-local.yml",
+    "concurrency": "one group per workflow and branch, cancel-in-progress"
+  },
+  "serialSuites": [
+    {
+      "file": "planner.spec.ts",
+      "suite": "Story 5.5 premium 7-day planner, seeded active subscriber (serial journey)"
+    },
+    {
+      "file": "premium-theme-switcher.spec.ts",
+      "suite": "Story 5.3 premium theme switcher, seeded active subscriber (serial write journey)"
+    },
+    {
+      "file": "palette-advisor.spec.ts",
+      "suite": "Story 5.4 palette advisor, seeded active subscriber (serial write journey)"
+    }
+  ],
+  "run": {
+    "id": 38874239375,
+    "number": 472,
+    "attempt": 1,
+    "event": "workflow_dispatch",
+    "branch": "psp/baseline-latest",
+    "sha": "7e2552614e4e96890d71017274506e6e4a8e5042",
+    "status": "completed",
+    "conclusion": "cancelled",
+    "createdAt": "2026-10-16T08:31:15Z",
+    "startedAt": "2026-10-16T08:31:15Z",
+    "updatedAt": "2026-10-16T08:48:34Z",
+    "url": "https://github.com/muratkeremozcan/couture-cast/actions/runs/38874239375"
+  },
+  "jobs": [
+    {
+      "id": 116885318266,
+      "name": "vars",
+      "status": "completed",
+      "conclusion": "success",
+      "createdAt": "2026-10-16T08:31:17Z",
+      "startedAt": "2026-10-16T08:31:18Z",
+      "completedAt": "2026-10-16T08:31:21Z",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runnerGroup": "GitHub Actions",
+      "runner": {
+        "runnerVersion": "2.337.0",
+        "image": "ubuntu-24.04",
+        "imageVersion": "20261012.334.1",
+        "os": "Ubuntu",
+        "osVersion": "24.04.5",
+        "region": "centralus"
+      },
+      "failureNote": null,
+      "steps": [
+        {
+          "number": 1,
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-16T08:31:19Z",
+          "completedAt": "2026-10-16T08:31:19Z"
+        },
+        {
+          "number": 2,
+          "name": "Check for SKIP_BURN_IN label (PRs only)",
+          "status": "completed",
+          "conclusion": "skipped",
+          "startedAt": "2026-10-16T08:31:19Z",
+          "completedAt": "2026-10-16T08:31:19Z"
+        },
+        {
+          "number": 3,
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-16T08:31:19Z",
+          "completedAt": "2026-10-16T08:31:19Z"
+        }
+      ]
+    },
+    {
+      "id": 116885347528,
+      "name": "pw-e2e (1, 2)",
+      "status": "completed",
+      "conclusion": "success",
+      "createdAt": "2026-10-16T08:31:21Z",
+      "startedAt": "2026-10-16T08:31:23Z",
+      "completedAt": "2026-10-16T08:38:49Z",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runnerGroup": "GitHub Actions",
+      "runner": {
+        "runnerVersion": "2.337.0",
+        "image": "ubuntu-24.04",
+        "imageVersion": "20261012.334.1",
+        "os": "Ubuntu",
+        "osVersion": "24.04.5",
+        "region": "eastus"
+      },
+      "failureNote": null,
+      "steps": [
+        {
+          "number": 1,
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-16T08:31:24Z",
+          "completedAt": "2026-10-16T08:31:24Z"
+        },
+        {
+          "number": 2,
+          "name": "Initialize containers",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-16T08:31:24Z",
+          "completedAt": "2026-10-16T08:31:42Z"
+        },
+        {
+          "number": 3,
+          "name": "Checkout repository",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-16T08:31:42Z",
+          "completedAt": "2026-10-16T08:31:44Z"
+        },
+        {
+          "number": 4,
+          "name": "Record git SHA",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-16T08:31:44Z",
+          "completedAt": "2026-10-16T08:31:44Z"
+        },
+        {
+          "number": 5,
+          "name": "Export expected SHA",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-16T08:31:44Z",
+          "completedAt": "2026-10-16T08:31:44Z"
+        },
+        {
+          "number": 6,
+          "name": "Setup Node environment",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-16T08:31:44Z",
+          "completedAt": "2026-10-16T08:33:08Z"
+        },
+        {
+          "number": 7,
+          "name": "Cache Playwright browsers",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-16T08:33:08Z",
+          "completedAt": "2026-10-16T08:33:25Z"
+        },
+        {
+          "number": 8,
+          "name": "Start local Supabase services",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-16T08:33:25Z",
+          "completedAt": "2026-10-16T08:35:56Z"
+        },
+        {
+          "number": 9,
+          "name": "Reset local Playwright database",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-16T08:35:56Z",
+          "completedAt": "2026-10-16T08:36:12Z"
+        },
+        {
+          "number": 10,
+          "name": "Build web app",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-16T08:36:12Z",
+          "completedAt": "2026-10-16T08:36:46Z"
+        },
+        {
+          "number": 11,
+          "name": "Install Playwright Chromium only",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-16T08:36:46Z",
+          "completedAt": "2026-10-16T08:36:47Z"
+        },
+        {
+          "number": 12,
+          "name": "Run Playwright local suite",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-16T08:36:47Z",
+          "completedAt": "2026-10-16T08:38:32Z"
+        },
+        {
+          "number": 13,
+          "name": "Copy trace files to blob-report",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-16T08:38:32Z",
+          "completedAt": "2026-10-16T08:38:32Z"
+        },
+        {
+          "number": 14,
+          "name": "Upload Playwright artifacts (shard)",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-16T08:38:32Z",
+          "completedAt": "2026-10-16T08:38:33Z"
+        },
+        {
+          "number": 25,
+          "name": "Post Cache Playwright browsers",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-16T08:38:33Z",
+          "completedAt": "2026-10-16T08:38:47Z"
+        },
+        {
+          "number": 26,
+          "name": "Post Setup Node environment",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-16T08:38:47Z",
+          "completedAt": "2026-10-16T08:38:47Z"
+        },
+        {
+          "number": 27,
+          "name": "Post Checkout repository",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-16T08:38:47Z",
+          "completedAt": "2026-10-16T08:38:47Z"
+        },
+        {
+          "number": 28,
+          "name": "Stop containers",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-16T08:38:47Z",
+          "completedAt": "2026-10-16T08:38:47Z"
+        },
+        {
+          "number": 29,
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-16T08:38:47Z",
+          "completedAt": "2026-10-16T08:38:48Z"
+        }
+      ]
+    },
+    {
+      "id": 116885347592,
+      "name": "pw-e2e (2, 2)",
+      "status": "completed",
+      "conclusion": "cancelled",
+      "createdAt": "2026-10-16T08:31:21Z",
+      "startedAt": "2026-10-16T08:31:23Z",
+      "completedAt": "2026-10-16T08:46:40Z",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runnerGroup": "GitHub Actions",
+      "runner": {
+        "runnerVersion": "2.337.0",
+        "image": "ubuntu-24.04",
+        "imageVersion": "20261012.334.1",
+        "os": "Ubuntu",
+        "osVersion": "24.04.5",
+        "region": "northcentralus"
+      },
+      "failureNote": "postgres-meta Error toomanyrequests: Data limit exceeded",
+      "steps": [
+        {
+          "number": 1,
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-16T08:31:24Z",
+          "completedAt": "2026-10-16T08:31:25Z"
+        },
+        {
+          "number": 2,
+          "name": "Initialize containers",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-16T08:31:25Z",
+          "completedAt": "2026-10-16T08:31:42Z"
+        },
+        {
+          "number": 3,
+          "name": "Checkout repository",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-16T08:31:42Z",
+          "completedAt": "2026-10-16T08:31:44Z"
+        },
+        {
+          "number": 4,
+          "name": "Record git SHA",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-16T08:31:44Z",
+          "completedAt": "2026-10-16T08:31:44Z"
+        },
+        {
+          "number": 5,
+          "name": "Export expected SHA",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-16T08:31:44Z",
+          "completedAt": "2026-10-16T08:31:44Z"
+        },
+        {
+          "number": 6,
+          "name": "Setup Node environment",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-16T08:31:44Z",
+          "completedAt": "2026-10-16T08:32:58Z"
+        },
+        {
+          "number": 7,
+          "name": "Cache Playwright browsers",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-16T08:32:58Z",
+          "completedAt": "2026-10-16T08:33:13Z"
+        },
+        {
+          "number": 8,
+          "name": "Start local Supabase services",
+          "status": "completed",
+          "conclusion": "cancelled",
+          "startedAt": "2026-10-16T08:33:13Z",
+          "completedAt": "2026-10-16T08:46:37Z"
+        },
+        {
+          "number": 9,
+          "name": "Reset local Playwright database",
+          "status": "completed",
+          "conclusion": "skipped",
+          "startedAt": "2026-10-16T08:46:37Z",
+          "completedAt": "2026-10-16T08:46:37Z"
+        },
+        {
+          "number": 10,
+          "name": "Build web app",
+          "status": "completed",
+          "conclusion": "skipped",
+          "startedAt": "2026-10-16T08:46:37Z",
+          "completedAt": "2026-10-16T08:46:37Z"
+        },
+        {
+          "number": 11,
+          "name": "Install Playwright Chromium only",
+          "status": "completed",
+          "conclusion": "skipped",
+          "startedAt": "2026-10-16T08:46:37Z",
+          "completedAt": "2026-10-16T08:46:37Z"
+        },
+        {
+          "number": 12,
+          "name": "Run Playwright local suite",
+          "status": "completed",
+          "conclusion": "skipped",
+          "startedAt": "2026-10-16T08:46:37Z",
+          "completedAt": "2026-10-16T08:46:37Z"
+        },
+        {
+          "number": 13,
+          "name": "Copy trace files to blob-report",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-16T08:46:37Z",
+          "completedAt": "2026-10-16T08:46:37Z"
+        },
+        {
+          "number": 14,
+          "name": "Upload Playwright artifacts (shard)",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-16T08:46:37Z",
+          "completedAt": "2026-10-16T08:46:37Z"
+        },
+        {
+          "number": 25,
+          "name": "Post Cache Playwright browsers",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-16T08:46:37Z",
+          "completedAt": "2026-10-16T08:46:37Z"
+        },
+        {
+          "number": 26,
+          "name": "Post Setup Node environment",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-16T08:46:37Z",
+          "completedAt": "2026-10-16T08:46:37Z"
+        },
+        {
+          "number": 27,
+          "name": "Post Checkout repository",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-16T08:46:37Z",
+          "completedAt": "2026-10-16T08:46:37Z"
+        },
+        {
+          "number": 28,
+          "name": "Stop containers",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-16T08:46:37Z",
+          "completedAt": "2026-10-16T08:46:37Z"
+        },
+        {
+          "number": 29,
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-16T08:46:37Z",
+          "completedAt": "2026-10-16T08:46:37Z"
+        }
+      ]
+    },
+    {
+      "id": 116885349844,
+      "name": "burn-in",
+      "status": "completed",
+      "conclusion": "skipped",
+      "createdAt": "2026-10-16T08:31:22Z",
+      "startedAt": "2026-10-16T08:31:22Z",
+      "completedAt": "2026-10-16T08:31:21Z",
+      "labels": [],
+      "runnerGroup": null,
+      "runner": null,
+      "failureNote": null,
+      "steps": []
+    },
+    {
+      "id": 116890925847,
+      "name": "merge-reports",
+      "status": "completed",
+      "conclusion": "success",
+      "createdAt": "2026-10-16T08:46:41Z",
+      "startedAt": "2026-10-16T08:46:43Z",
+      "completedAt": "2026-10-16T08:48:33Z",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runnerGroup": "GitHub Actions",
+      "runner": {
+        "runnerVersion": "2.337.0",
+        "image": "ubuntu-24.04",
+        "imageVersion": "20261012.334.1",
+        "os": "Ubuntu",
+        "osVersion": "24.04.5",
+        "region": "northcentralus"
+      },
+      "failureNote": null,
+      "steps": [
+        {
+          "number": 1,
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-16T08:46:43Z",
+          "completedAt": "2026-10-16T08:46:44Z"
+        },
+        {
+          "number": 2,
+          "name": "Checkout repository",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-16T08:46:44Z",
+          "completedAt": "2026-10-16T08:46:46Z"
+        },
+        {
+          "number": 3,
+          "name": "Setup Node environment",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-16T08:46:46Z",
+          "completedAt": "2026-10-16T08:48:27Z"
+        },
+        {
+          "number": 4,
+          "name": "Merge, upload, and comment",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-16T08:48:27Z",
+          "completedAt": "2026-10-16T08:48:31Z"
+        },
+        {
+          "number": 7,
+          "name": "Post Setup Node environment",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-16T08:48:31Z",
+          "completedAt": "2026-10-16T08:48:31Z"
+        },
+        {
+          "number": 8,
+          "name": "Post Checkout repository",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-16T08:48:31Z",
+          "completedAt": "2026-10-16T08:48:32Z"
+        },
+        {
+          "number": 9,
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-16T08:48:32Z",
+          "completedAt": "2026-10-16T08:48:32Z"
+        }
+      ]
+    }
+  ],
+  "shards": [
+    {
+      "index": 1,
+      "total": 2,
+      "jobId": 116885347528,
+      "blob": {
+        "playwrightVersion": "1.64.1",
+        "node": "24.21",
+        "shard": {
+          "current": 1,
+          "total": 2
+        },
+        "workers": 1,
+        "projects": [
+          {
+            "name": "chromium",
+            "retries": 2,
+            "repeatEach": 1,
+            "dependencies": []
+          }
+        ],
+        "run": {
+          "startTime": 1792139831014,
+          "duration": 81076.64799999999
+        },
+        "tests": [
+          {
+            "id": "036a5971446795e64620-22eb2ef0c6809a599cb7",
+            "project": "chromium",
+            "file": "accessibility-hardening.spec.ts",
+            "titlePath": [
+              "accessibility-hardening.spec.ts",
+              "Story 3.8 route audit matrix"
+            ],
+            "title": "axe and landmark contract: / at desktop",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 1269,
+                "startTime": 1792139879928,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "036a5971446795e64620-79c187b6528cb51e26ef",
+            "project": "chromium",
+            "file": "accessibility-hardening.spec.ts",
+            "titlePath": [
+              "accessibility-hardening.spec.ts",
+              "Story 3.8 route audit matrix"
+            ],
+            "title": "axe and landmark contract: / at mobile",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 1080,
+                "startTime": 1792139881434,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "036a5971446795e64620-2dfab3aeb412cbc98ce0",
+            "project": "chromium",
+            "file": "accessibility-hardening.spec.ts",
+            "titlePath": [
+              "accessibility-hardening.spec.ts",
+              "Story 3.8 route audit matrix"
+            ],
+            "title": "axe and landmark contract: /community at desktop",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 795,
+                "startTime": 1792139882526,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "036a5971446795e64620-ec592d9c6069b7d97c03",
+            "project": "chromium",
+            "file": "accessibility-hardening.spec.ts",
+            "titlePath": [
+              "accessibility-hardening.spec.ts",
+              "Story 3.8 route audit matrix"
+            ],
+            "title": "axe and landmark contract: /community at mobile",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 819,
+                "startTime": 1792139883334,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "036a5971446795e64620-419f788db1aeaeaa78e2",
+            "project": "chromium",
+            "file": "accessibility-hardening.spec.ts",
+            "titlePath": [
+              "accessibility-hardening.spec.ts",
+              "Story 3.8 route audit matrix"
+            ],
+            "title": "axe and landmark contract: /wardrobe at desktop",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 903,
+                "startTime": 1792139884165,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "036a5971446795e64620-65670339c7c01a55d7e0",
+            "project": "chromium",
+            "file": "accessibility-hardening.spec.ts",
+            "titlePath": [
+              "accessibility-hardening.spec.ts",
+              "Story 3.8 route audit matrix"
+            ],
+            "title": "axe and landmark contract: /wardrobe at mobile",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 879,
+                "startTime": 1792139885079,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "036a5971446795e64620-9eb57fe529f30be1fb81",
+            "project": "chromium",
+            "file": "accessibility-hardening.spec.ts",
+            "titlePath": [
+              "accessibility-hardening.spec.ts",
+              "Story 3.8 route audit matrix"
+            ],
+            "title": "axe and landmark contract: /settings at desktop",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 910,
+                "startTime": 1792139885971,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "036a5971446795e64620-80768b14475d83deca3a",
+            "project": "chromium",
+            "file": "accessibility-hardening.spec.ts",
+            "titlePath": [
+              "accessibility-hardening.spec.ts",
+              "Story 3.8 route audit matrix"
+            ],
+            "title": "axe and landmark contract: /settings at mobile",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 952,
+                "startTime": 1792139886892,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "036a5971446795e64620-a02a44f27edab0d1680f",
+            "project": "chromium",
+            "file": "accessibility-hardening.spec.ts",
+            "titlePath": [
+              "accessibility-hardening.spec.ts",
+              "Story 3.8 route audit matrix"
+            ],
+            "title": "axe and landmark contract: /palette at desktop",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 816,
+                "startTime": 1792139887856,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "036a5971446795e64620-13876b501f83b7d0a4ce",
+            "project": "chromium",
+            "file": "accessibility-hardening.spec.ts",
+            "titlePath": [
+              "accessibility-hardening.spec.ts",
+              "Story 3.8 route audit matrix"
+            ],
+            "title": "axe and landmark contract: /palette at mobile",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 807,
+                "startTime": 1792139888684,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "036a5971446795e64620-31af83a9243130f62b7f",
+            "project": "chromium",
+            "file": "accessibility-hardening.spec.ts",
+            "titlePath": [
+              "accessibility-hardening.spec.ts",
+              "Story 3.8 route audit matrix"
+            ],
+            "title": "axe and landmark contract: /signup",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 819,
+                "startTime": 1792139889501,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "036a5971446795e64620-04e237f72afd9af517b2",
+            "project": "chromium",
+            "file": "accessibility-hardening.spec.ts",
+            "titlePath": [
+              "accessibility-hardening.spec.ts",
+              "Story 3.8 route audit matrix"
+            ],
+            "title": "axe and landmark contract: /guardian/accept",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 852,
+                "startTime": 1792139890329,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "036a5971446795e64620-2ac744ebfe2354752aee",
+            "project": "chromium",
+            "file": "accessibility-hardening.spec.ts",
+            "titlePath": [
+              "accessibility-hardening.spec.ts",
+              "Story 3.8 route audit matrix"
+            ],
+            "title": "axe and landmark contract: /guardian/dashboard",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 827,
+                "startTime": 1792139891190,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "036a5971446795e64620-c9045e3fc0fcffbd884b",
+            "project": "chromium",
+            "file": "accessibility-hardening.spec.ts",
+            "titlePath": [
+              "accessibility-hardening.spec.ts",
+              "Story 3.8 route audit matrix"
+            ],
+            "title": "axe and landmark contract: /teen/dashboard",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 792,
+                "startTime": 1792139892027,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "036a5971446795e64620-631cc1987ebeabcd76ef",
+            "project": "chromium",
+            "file": "accessibility-hardening.spec.ts",
+            "titlePath": [
+              "accessibility-hardening.spec.ts",
+              "Story 3.8 interaction states"
+            ],
+            "title": "skip link activation and forward plus reverse order",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 438,
+                "startTime": 1792139892829,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "036a5971446795e64620-b756adf6353b9443d5d5",
+            "project": "chromium",
+            "file": "accessibility-hardening.spec.ts",
+            "titlePath": [
+              "accessibility-hardening.spec.ts",
+              "Story 3.8 interaction states"
+            ],
+            "title": "chip keys preserve button semantics and Tab exits the group",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 542,
+                "startTime": 1792139893278,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "036a5971446795e64620-3796f95e6b710468a7b6",
+            "project": "chromium",
+            "file": "accessibility-hardening.spec.ts",
+            "titlePath": [
+              "accessibility-hardening.spec.ts",
+              "Story 3.8 interaction states"
+            ],
+            "title": "selected chips and an information banner pass axe",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 1159,
+                "startTime": 1792139893831,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "036a5971446795e64620-00cd1e13e48a7043e94f",
+            "project": "chromium",
+            "file": "accessibility-hardening.spec.ts",
+            "titlePath": [
+              "accessibility-hardening.spec.ts",
+              "Story 3.8 interaction states"
+            ],
+            "title": "severe alert and community deep-link targets receive programmatic focus",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 1079,
+                "startTime": 1792139895003,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "036a5971446795e64620-758e094e03bf202161d1",
+            "project": "chromium",
+            "file": "accessibility-hardening.spec.ts",
+            "titlePath": [
+              "accessibility-hardening.spec.ts",
+              "Story 3.8 interaction states"
+            ],
+            "title": "client validation error passes axe with alert semantics",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 915,
+                "startTime": 1792139896093,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "036a5971446795e64620-fff3ca00e789d2555983",
+            "project": "chromium",
+            "file": "accessibility-hardening.spec.ts",
+            "titlePath": [
+              "accessibility-hardening.spec.ts",
+              "Story 3.8 interaction states"
+            ],
+            "title": "successful feedback state passes axe with status semantics",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 877,
+                "startTime": 1792139897019,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "036a5971446795e64620-89da4105d4768e8290a1",
+            "project": "chromium",
+            "file": "accessibility-hardening.spec.ts",
+            "titlePath": [
+              "accessibility-hardening.spec.ts",
+              "Story 3.8 interaction states"
+            ],
+            "title": "baseline route inventory has no production web modal",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 1928,
+                "startTime": 1792139897908,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "036a5971446795e64620-3074f3cdf7ef719a6304",
+            "project": "chromium",
+            "file": "accessibility-hardening.spec.ts",
+            "titlePath": [
+              "accessibility-hardening.spec.ts",
+              "Story 3.8 interaction states"
+            ],
+            "title": "reduced motion and forced colors preserve immediate visible focus",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 616,
+                "startTime": 1792139899849,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "036a5971446795e64620-2ae6aaac4e33cd4a30c8",
+            "project": "chromium",
+            "file": "accessibility-hardening.spec.ts",
+            "titlePath": [
+              "accessibility-hardening.spec.ts",
+              "Story 3.8 interaction states"
+            ],
+            "title": "rendered light, dark, gold, and alert focus outlines meet 3:1",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 703,
+                "startTime": 1792139900479,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "343280e6622d01414144-f7282a0bf4caf9ed994d",
+            "project": "chromium",
+            "file": "api/api-health.spec.ts",
+            "titlePath": [
+              "api/api-health.spec.ts",
+              "API smoke"
+            ],
+            "title": "root endpoint responds with hello message",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 136,
+                "startTime": 1792139901194,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "a5f52ea03933c9425b01-347ccb951bbd7cc28ed7",
+            "project": "chromium",
+            "file": "api/auth-moderation-security.spec.ts",
+            "titlePath": [
+              "api/auth-moderation-security.spec.ts",
+              "Auth and moderation endpoint security contracts",
+              "/api/v1/auth/guardian-consent"
+            ],
+            "title": "[P0] returns 401 when auth headers are missing",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 126,
+                "startTime": 1792139901373,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "a5f52ea03933c9425b01-eb91c28ae024cb046257",
+            "project": "chromium",
+            "file": "api/auth-moderation-security.spec.ts",
+            "titlePath": [
+              "api/auth-moderation-security.spec.ts",
+              "Auth and moderation endpoint security contracts",
+              "/api/v1/auth/guardian-consent"
+            ],
+            "title": "[P0] returns 403 for wrong role",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 108,
+                "startTime": 1792139901512,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "a5f52ea03933c9425b01-54caaefbadb0e170010a",
+            "project": "chromium",
+            "file": "api/auth-moderation-security.spec.ts",
+            "titlePath": [
+              "api/auth-moderation-security.spec.ts",
+              "Auth and moderation endpoint security contracts",
+              "/api/v1/auth/guardian-consent"
+            ],
+            "title": "[P0] returns 403 for mismatched actor identity",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 98,
+                "startTime": 1792139901632,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "a5f52ea03933c9425b01-09ef3fae679c26504926",
+            "project": "chromium",
+            "file": "api/auth-moderation-security.spec.ts",
+            "titlePath": [
+              "api/auth-moderation-security.spec.ts",
+              "Auth and moderation endpoint security contracts",
+              "/api/v1/auth/guardian-consent"
+            ],
+            "title": "[P0] returns 200 for authorized request",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 90,
+                "startTime": 1792139901741,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "a5f52ea03933c9425b01-e573b39899f6d487989c",
+            "project": "chromium",
+            "file": "api/auth-moderation-security.spec.ts",
+            "titlePath": [
+              "api/auth-moderation-security.spec.ts",
+              "Auth and moderation endpoint security contracts",
+              "/api/v1/moderation/actions"
+            ],
+            "title": "[P0] returns 401 when auth headers are missing",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 93,
+                "startTime": 1792139901840,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "a5f52ea03933c9425b01-d47504d4465879e262f2",
+            "project": "chromium",
+            "file": "api/auth-moderation-security.spec.ts",
+            "titlePath": [
+              "api/auth-moderation-security.spec.ts",
+              "Auth and moderation endpoint security contracts",
+              "/api/v1/moderation/actions"
+            ],
+            "title": "[P0] returns 403 for wrong role",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 90,
+                "startTime": 1792139901943,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "a5f52ea03933c9425b01-cd79415b284326006440",
+            "project": "chromium",
+            "file": "api/auth-moderation-security.spec.ts",
+            "titlePath": [
+              "api/auth-moderation-security.spec.ts",
+              "Auth and moderation endpoint security contracts",
+              "/api/v1/moderation/actions"
+            ],
+            "title": "[P0] returns 403 for mismatched actor identity",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 89,
+                "startTime": 1792139902042,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "a5f52ea03933c9425b01-51f16e04e18a63af316f",
+            "project": "chromium",
+            "file": "api/auth-moderation-security.spec.ts",
+            "titlePath": [
+              "api/auth-moderation-security.spec.ts",
+              "Auth and moderation endpoint security contracts",
+              "/api/v1/moderation/actions"
+            ],
+            "title": "[P0] returns 200 for authorized request",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 91,
+                "startTime": 1792139902142,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "71ba34604637b6abd86d-f2c332a0783f74c2c73a",
+            "project": "chromium",
+            "file": "api/auth-signup-age-gate.spec.ts",
+            "titlePath": [
+              "api/auth-signup-age-gate.spec.ts",
+              "Signup age-gate API contracts"
+            ],
+            "title": "[P0] returns 403 for children younger than thirteen",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 87,
+                "startTime": 1792139902244,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "71ba34604637b6abd86d-be5c5cee03f322d78de7",
+            "project": "chromium",
+            "file": "api/auth-signup-age-gate.spec.ts",
+            "titlePath": [
+              "api/auth-signup-age-gate.spec.ts",
+              "Signup age-gate API contracts"
+            ],
+            "title": "[P0] returns pending guardian consent for ages thirteen through fifteen",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 90,
+                "startTime": 1792139902341,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "71ba34604637b6abd86d-4639820a53f1c42e04d1",
+            "project": "chromium",
+            "file": "api/auth-signup-age-gate.spec.ts",
+            "titlePath": [
+              "api/auth-signup-age-gate.spec.ts",
+              "Signup age-gate API contracts"
+            ],
+            "title": "[P0] returns active status for users sixteen and older",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 91,
+                "startTime": 1792139902439,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "71ba34604637b6abd86d-472f3bd597cbe7bc6d31",
+            "project": "chromium",
+            "file": "api/auth-signup-age-gate.spec.ts",
+            "titlePath": [
+              "api/auth-signup-age-gate.spec.ts",
+              "Signup age-gate API contracts"
+            ],
+            "title": "[P1] returns 400 when the email is already registered",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 105,
+                "startTime": 1792139902542,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "5914625f00cd092ed1fd-f6288abbf934dd9a4525",
+            "project": "chromium",
+            "file": "api/comfort-preferences.spec.ts",
+            "titlePath": [
+              "api/comfort-preferences.spec.ts",
+              "Comfort Preferences API – user personalized comfort settings"
+            ],
+            "title": "[P1] unauthenticated request returns 401",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 118,
+                "startTime": 1792139902658,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "5914625f00cd092ed1fd-28c64e0fa4a4917b26e9",
+            "project": "chromium",
+            "file": "api/comfort-preferences.spec.ts",
+            "titlePath": [
+              "api/comfort-preferences.spec.ts",
+              "Comfort Preferences API – user personalized comfort settings"
+            ],
+            "title": "[P1] CRUD comfort preferences returns valid responses",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 312,
+                "startTime": 1792139902997,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "be769019422510772f42-f92aff5d5bfd99d56e9e",
+            "project": "chromium",
+            "file": "api/commerce-affiliate.api.spec.ts",
+            "titlePath": [
+              "api/commerce-affiliate.api.spec.ts",
+              "Story 5.1 affiliate commerce API"
+            ],
+            "title": "[P0] 5.1-E2E-API-01 returns one disclosed, deterministic offer for an eligible user",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 181,
+                "startTime": 1792139903336,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "be769019422510772f42-50361b85593de6cbb86c",
+            "project": "chromium",
+            "file": "api/commerce-affiliate.api.spec.ts",
+            "titlePath": [
+              "api/commerce-affiliate.api.spec.ts",
+              "Story 5.1 affiliate commerce API"
+            ],
+            "title": "[P0] 5.1-E2E-API-02 returns a null block for every scenario once the user opts out",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 173,
+                "startTime": 1792139903526,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "be769019422510772f42-dfbeae818304678a4cd5",
+            "project": "chromium",
+            "file": "api/commerce-affiliate.api.spec.ts",
+            "titlePath": [
+              "api/commerce-affiliate.api.spec.ts",
+              "Story 5.1 affiliate commerce API"
+            ],
+            "title": "[P1] 5.1-E2E-API-03 keeps the preference endpoints answering and the value round tripping",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 114,
+                "startTime": 1792139903707,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "be769019422510772f42-ca68e115c01262b9ab5d",
+            "project": "chromium",
+            "file": "api/commerce-affiliate.api.spec.ts",
+            "titlePath": [
+              "api/commerce-affiliate.api.spec.ts",
+              "Story 5.1 affiliate commerce API"
+            ],
+            "title": "[P0] 5.1-E2E-API-04 mints one attributed click on the partner host and dedupes a double tap",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 136,
+                "startTime": 1792139903830,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "be769019422510772f42-792f2d14b779adbe17a5",
+            "project": "chromium",
+            "file": "api/commerce-affiliate.api.spec.ts",
+            "titlePath": [
+              "api/commerce-affiliate.api.spec.ts",
+              "Story 5.1 affiliate commerce API"
+            ],
+            "title": "[P1] 5.1-E2E-API-05 refuses a click for an opted-out user and for an unknown offer",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 146,
+                "startTime": 1792139903976,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "be769019422510772f42-83de28c5714dea0850d3",
+            "project": "chromium",
+            "file": "api/commerce-affiliate.api.spec.ts",
+            "titlePath": [
+              "api/commerce-affiliate.api.spec.ts",
+              "Story 5.1 affiliate commerce API"
+            ],
+            "title": "[P1] 5.1-E2E-API-06 records a signed conversion, ignores a replay, and accepts an unknown token",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 148,
+                "startTime": 1792139904132,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "be769019422510772f42-e3a3dac54afb1da8bd20",
+            "project": "chromium",
+            "file": "api/commerce-affiliate.api.spec.ts",
+            "titlePath": [
+              "api/commerce-affiliate.api.spec.ts",
+              "Story 5.1 affiliate commerce API"
+            ],
+            "title": "[P1] 5.1-E2E-API-07 rejects every malformed signature with one indistinguishable 401",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 148,
+                "startTime": 1792139904289,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "be769019422510772f42-d075f80635c24f25d07e",
+            "project": "chromium",
+            "file": "api/commerce-affiliate.api.spec.ts",
+            "titlePath": [
+              "api/commerce-affiliate.api.spec.ts",
+              "Story 5.1 affiliate commerce API"
+            ],
+            "title": "[P2] 5.1-E2E-API-08 rejects a validly signed but malformed body with 400",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 105,
+                "startTime": 1792139904446,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "4b94925c5f895c1ca866-92ae4fc3b54c79eba167",
+            "project": "chromium",
+            "file": "api/community-feed.api.spec.ts",
+            "titlePath": [
+              "api/community-feed.api.spec.ts",
+              "6.1 community feed HTTP contract"
+            ],
+            "title": "6.1-API-01 serves the documented feed envelope and nothing beyond it",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 210,
+                "startTime": 1792139904610,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "4b94925c5f895c1ca866-66a19ae34aea7a4cfda5",
+            "project": "chromium",
+            "file": "api/community-feed.api.spec.ts",
+            "titlePath": [
+              "api/community-feed.api.spec.ts",
+              "6.1 community feed HTTP contract"
+            ],
+            "title": "6.1-API-02 rejects a mode the enum does not define",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 162,
+                "startTime": 1792139904828,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "4b94925c5f895c1ca866-f565c2880eec01a2ce1f",
+            "project": "chromium",
+            "file": "api/community-feed.api.spec.ts",
+            "titlePath": [
+              "api/community-feed.api.spec.ts",
+              "6.1 community feed HTTP contract"
+            ],
+            "title": "6.1-API-03 rejects a malformed cursor with the stable message",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 163,
+                "startTime": 1792139904999,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "4b94925c5f895c1ca866-ee63bfddba7de96bdbf9",
+            "project": "chromium",
+            "file": "api/community-feed.api.spec.ts",
+            "titlePath": [
+              "api/community-feed.api.spec.ts",
+              "6.1 community feed HTTP contract"
+            ],
+            "title": "6.1-API-04 rejects a well-formed cursor presented under another mode",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 168,
+                "startTime": 1792139905175,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "4b94925c5f895c1ca866-3353d4a6848475a9a469",
+            "project": "chromium",
+            "file": "api/community-feed.api.spec.ts",
+            "titlePath": [
+              "api/community-feed.api.spec.ts",
+              "6.1 community feed HTTP contract"
+            ],
+            "title": "6.1-API-05 answers 404 for a post id that does not exist",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 148,
+                "startTime": 1792139905352,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "4b94925c5f895c1ca866-5913273c1a67d41e8404",
+            "project": "chromium",
+            "file": "api/community-feed.api.spec.ts",
+            "titlePath": [
+              "api/community-feed.api.spec.ts",
+              "6.1 community feed HTTP contract"
+            ],
+            "title": "6.1-API-06 hides another author draft behind the same 404",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 296,
+                "startTime": 1792139905514,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "4b94925c5f895c1ca866-d7c2ca11187d54d5f78a",
+            "project": "chromium",
+            "file": "api/community-feed.api.spec.ts",
+            "titlePath": [
+              "api/community-feed.api.spec.ts",
+              "6.1 community feed HTTP contract"
+            ],
+            "title": "6.1-API-07 replays a same-reason report and conflicts on a changed one",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 197,
+                "startTime": 1792139905823,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "4b94925c5f895c1ca866-0b093f4f63d00a327eab",
+            "project": "chromium",
+            "file": "api/community-feed.api.spec.ts",
+            "titlePath": [
+              "api/community-feed.api.spec.ts",
+              "6.1 community feed HTTP contract"
+            ],
+            "title": "6.1-API-08 answers 404 when reporting a post the caller cannot see",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 144,
+                "startTime": 1792139906031,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "4b94925c5f895c1ca866-edbd97775e49e8eb9244",
+            "project": "chromium",
+            "file": "api/community-feed.api.spec.ts",
+            "titlePath": [
+              "api/community-feed.api.spec.ts",
+              "6.1 community feed HTTP contract"
+            ],
+            "title": "6.1-API-09 replays an allocation for the same key and payload",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 204,
+                "startTime": 1792139906184,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "4b94925c5f895c1ca866-b5b0e08d1baf1b5ee10c",
+            "project": "chromium",
+            "file": "api/community-feed.api.spec.ts",
+            "titlePath": [
+              "api/community-feed.api.spec.ts",
+              "6.1 community feed HTTP contract"
+            ],
+            "title": "6.1-API-10 conflicts on an allocation key reused with different bytes",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 188,
+                "startTime": 1792139906396,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "698ff5dcc747c4066f5c-2da697878f8c16281311",
+            "project": "chromium",
+            "file": "api/guardian-consent-lifecycle.spec.ts",
+            "titlePath": [
+              "api/guardian-consent-lifecycle.spec.ts",
+              "Guardian consent lifecycle API contracts"
+            ],
+            "title": "[P0] grants consent, restores teen access, and blocks the teen again after revoke",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 246,
+                "startTime": 1792139906599,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "a3b5ead91dba5280ddb5-689a9a27afafc8ab14fd",
+            "project": "chromium",
+            "file": "api/premium-subscription.api.spec.ts",
+            "titlePath": [
+              "api/premium-subscription.api.spec.ts",
+              "premium subscription status over the public API"
+            ],
+            "title": "5.2-E2E-API-001 serves a never-subscribed account as status none with every key present",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 93,
+                "startTime": 1792139906921,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "a3b5ead91dba5280ddb5-c5e16c3fb67eeb6a654d",
+            "project": "chromium",
+            "file": "api/premium-subscription.api.spec.ts",
+            "titlePath": [
+              "api/premium-subscription.api.spec.ts",
+              "premium subscription status over the public API"
+            ],
+            "title": "5.2-E2E-API-002 reflects each seeded entitlement state",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 109,
+                "startTime": 1792139907024,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "a3b5ead91dba5280ddb5-61198223c7c6741a502c",
+            "project": "chromium",
+            "file": "api/premium-subscription.api.spec.ts",
+            "titlePath": [
+              "api/premium-subscription.api.spec.ts",
+              "premium subscription status over the public API"
+            ],
+            "title": "5.2-E2E-API-003 refuses an unauthenticated read",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 109,
+                "startTime": 1792139907141,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "a3b5ead91dba5280ddb5-4f57fcdc7711a078eac5",
+            "project": "chromium",
+            "file": "api/premium-subscription.api.spec.ts",
+            "titlePath": [
+              "api/premium-subscription.api.spec.ts",
+              "checkout and portal sessions"
+            ],
+            "title": "5.2-E2E-API-010 mints a Checkout URL for a never-subscribed account",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 106,
+                "startTime": 1792139907260,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "a3b5ead91dba5280ddb5-8f6e335a1b3ae3a88426",
+            "project": "chromium",
+            "file": "api/premium-subscription.api.spec.ts",
+            "titlePath": [
+              "api/premium-subscription.api.spec.ts",
+              "checkout and portal sessions"
+            ],
+            "title": "5.2-E2E-API-011 rejects an unknown plan at the schema",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 90,
+                "startTime": 1792139907374,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "a3b5ead91dba5280ddb5-73cec19b4f00886eb1d3",
+            "project": "chromium",
+            "file": "api/premium-subscription.api.spec.ts",
+            "titlePath": [
+              "api/premium-subscription.api.spec.ts",
+              "checkout and portal sessions"
+            ],
+            "title": "5.2-E2E-API-012 answers 404 for a portal session with no billing profile",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 108,
+                "startTime": 1792139907473,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "a3b5ead91dba5280ddb5-3a61df528a56babcb9d1",
+            "project": "chromium",
+            "file": "api/premium-subscription.api.spec.ts",
+            "titlePath": [
+              "api/premium-subscription.api.spec.ts",
+              "billing webhooks reject unauthenticated deliveries uniformly"
+            ],
+            "title": "5.2-E2E-API-020 rejects an unsigned Stripe delivery",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 92,
+                "startTime": 1792139907589,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "a3b5ead91dba5280ddb5-4b71eb3f79d8aa75834c",
+            "project": "chromium",
+            "file": "api/premium-subscription.api.spec.ts",
+            "titlePath": [
+              "api/premium-subscription.api.spec.ts",
+              "billing webhooks reject unauthenticated deliveries uniformly"
+            ],
+            "title": "5.2-E2E-API-021 rejects a Stripe delivery signed with the wrong secret",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 89,
+                "startTime": 1792139907691,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "a3b5ead91dba5280ddb5-91b21c91d93efe3f1df2",
+            "project": "chromium",
+            "file": "api/premium-subscription.api.spec.ts",
+            "titlePath": [
+              "api/premium-subscription.api.spec.ts",
+              "billing webhooks reject unauthenticated deliveries uniformly"
+            ],
+            "title": "5.2-E2E-API-022 rejects a RevenueCat delivery with no credential",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 98,
+                "startTime": 1792139907789,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "a3b5ead91dba5280ddb5-47435ef5e25f4732d70b",
+            "project": "chromium",
+            "file": "api/premium-subscription.api.spec.ts",
+            "titlePath": [
+              "api/premium-subscription.api.spec.ts",
+              "billing webhooks reject unauthenticated deliveries uniformly"
+            ],
+            "title": "5.2-E2E-API-023 accepts an authenticated RevenueCat TEST event and records it",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 104,
+                "startTime": 1792139907895,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "a3b5ead91dba5280ddb5-15b5b9998b3728b6dc91",
+            "project": "chromium",
+            "file": "api/premium-subscription.api.spec.ts",
+            "titlePath": [
+              "api/premium-subscription.api.spec.ts",
+              "on-demand refresh"
+            ],
+            "title": "5.2-E2E-API-030 answers a fresh account on demand without inventing an entitlement",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 138,
+                "startTime": 1792139908007,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "a3b5ead91dba5280ddb5-8606c0767da94064749e",
+            "project": "chromium",
+            "file": "api/premium-subscription.api.spec.ts",
+            "titlePath": [
+              "api/premium-subscription.api.spec.ts",
+              "the one-writer rule, end to end over HTTP"
+            ],
+            "title": "5.2-E2E-API-050 a Stripe payment does NOT write the entitlement; the ledger does",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 150,
+                "startTime": 1792139908155,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "a3b5ead91dba5280ddb5-065e3fd5e02e94cf0f89",
+            "project": "chromium",
+            "file": "api/premium-subscription.api.spec.ts",
+            "titlePath": [
+              "api/premium-subscription.api.spec.ts",
+              "webhook secret wiring"
+            ],
+            "title": "5.2-E2E-API-040 uses the test-only Stripe secret, never a real one",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 107,
+                "startTime": 1792139908315,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "c927e6f70a4375d7a656-22df1cbdb030a3d8f1d9",
+            "project": "chromium",
+            "file": "api/realtime-poll-live.spec.ts",
+            "titlePath": [
+              "api/realtime-poll-live.spec.ts",
+              "Realtime poll API"
+            ],
+            "title": "[P1] poll returns events array and nextSince shape",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 115,
+                "startTime": 1792139908436,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "c927e6f70a4375d7a656-64d5af353e5feeb7e897",
+            "project": "chromium",
+            "file": "api/realtime-poll-live.spec.ts",
+            "titlePath": [
+              "api/realtime-poll-live.spec.ts",
+              "Realtime poll API"
+            ],
+            "title": "[P2] poll rejects invalid since timestamp",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 131,
+                "startTime": 1792139908561,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "6f7a1d68daa043735cd1-8601dc24a5598ff1bedb",
+            "project": "chromium",
+            "file": "api/ritual-daily-outfits.spec.ts",
+            "titlePath": [
+              "api/ritual-daily-outfits.spec.ts",
+              "Ritual API – daily scenario outfit recommendations"
+            ],
+            "title": "[P1] unauthenticated request returns 401",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 199,
+                "startTime": 1792139908704,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "6f7a1d68daa043735cd1-18cc07098359a006c252",
+            "project": "chromium",
+            "file": "api/ritual-daily-outfits.spec.ts",
+            "titlePath": [
+              "api/ritual-daily-outfits.spec.ts",
+              "Ritual API – daily scenario outfit recommendations"
+            ],
+            "title": "[P1] authenticated request returns valid ritual response",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 261,
+                "startTime": 1792139909101,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "6f7a1d68daa043735cd1-d8c4c7f4ecc995bf3250",
+            "project": "chromium",
+            "file": "api/ritual-daily-outfits.spec.ts",
+            "titlePath": [
+              "api/ritual-daily-outfits.spec.ts",
+              "Ritual API – daily scenario outfit recommendations"
+            ],
+            "title": "[P2] optional locationId query param is accepted",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 144,
+                "startTime": 1792139909371,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "9e4d658bda5f5f210f63-52a398500ef6cdb27682",
+            "project": "chromium",
+            "file": "auth-session-standard.spec.ts",
+            "titlePath": [
+              "auth-session-standard.spec.ts",
+              "Auth-session standard fixture"
+            ],
+            "title": "[P1] applies persisted auth state through the standard merged fixture",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 79,
+                "startTime": 1792139909534,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "9f95e631f7c4d6f1bb42-19ae1c423466e70fb1db",
+            "project": "chromium",
+            "file": "chip-navigation-bottom-nav.spec.ts",
+            "titlePath": [
+              "chip-navigation-bottom-nav.spec.ts",
+              "Chip Navigation & Sticky Bottom Nav (Story 3.6)"
+            ],
+            "title": "3.6-E2E-001: mobile sticky bottom nav visibility across viewports",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 727,
+                "startTime": 1792139909624,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "9f95e631f7c4d6f1bb42-a6b21989d426654b0ecf",
+            "project": "chromium",
+            "file": "chip-navigation-bottom-nav.spec.ts",
+            "titlePath": [
+              "chip-navigation-bottom-nav.spec.ts",
+              "Chip Navigation & Sticky Bottom Nav (Story 3.6)"
+            ],
+            "title": "3.6-E2E-002: chip navigation bar sticky positioning and click state updates",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 538,
+                "startTime": 1792139910361,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "9f95e631f7c4d6f1bb42-b4f3ac9a2e4140e9afb5",
+            "project": "chromium",
+            "file": "chip-navigation-bottom-nav.spec.ts",
+            "titlePath": [
+              "chip-navigation-bottom-nav.spec.ts",
+              "Chip Navigation & Sticky Bottom Nav (Story 3.6)"
+            ],
+            "title": "3.6-E2E-003: keyboard arrow navigation across chips and focus ring styling",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 606,
+                "startTime": 1792139910909,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          },
+          {
+            "id": "9f95e631f7c4d6f1bb42-02cd4e11d473fab69dc1",
+            "project": "chromium",
+            "file": "chip-navigation-bottom-nav.spec.ts",
+            "titlePath": [
+              "chip-navigation-bottom-nav.spec.ts",
+              "Chip Navigation & Sticky Bottom Nav (Story 3.6)"
+            ],
+            "title": "3.6-E2E-004: respects prefers-reduced-motion media feature",
+            "retries": 2,
+            "attempts": [
+              {
+                "retry": 0,
+                "status": "passed",
+                "duration": 409,
+                "startTime": 1792139911526,
+                "workerIndex": 0
+              }
+            ],
+            "expectedStatus": "passed"
+          }
+        ]
+      },
+      "blobMissing": null
+    },
+    {
+      "index": 2,
+      "total": 2,
+      "jobId": 116885347592,
+      "blob": null,
+      "blobMissing": "no blob artifact was uploaded"
+    }
+  ]
+}

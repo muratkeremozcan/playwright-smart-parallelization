@@ -178,6 +178,32 @@ it reads an earlier evidence file instead of collecting again. The `Qualificatio
 both engines on pull requests that touch `qualification/`, `harness/` or the fixture, with every
 group on its own runner.
 
+## Measurements
+
+`measurements/` turns finished GitHub Actions runs of a Playwright workflow into the figures of
+[`docs/measurements/baseline.md`](docs/measurements/baseline.md), the before measurement of
+couture-cast.
+
+- `collect.js` reads one finished run through `gh api` (the run, every job with its steps, the
+  runner image from each job log, and one blob report per shard) and writes
+  `docs/measurements/raw/LABEL-RUNID.json`. It pages through every list, checks the counts the API
+  reports, and records a shard whose blob report is missing or expired with the reason. A blob report
+  holds the whole environment of the web server, so `blob.js` copies only the fields it reads and
+  never the environment.
+- `analyze.js` and `render.js` compute everything in the document from those records. The document
+  is generated whole and a test compares it with the committed file, so a figure cannot drift from
+  its evidence.
+- `couture-cast.json` names the target: the repository, the shard job and artifact names, the
+  step that runs the tests and the serial suites Playwright keeps whole.
+
+```sh
+npm run measurements:collect -- --label baseline-a --pair 1 --run RUN_ID
+npm run measurements:report
+```
+
+`gh` (logged in), `unzip` and, for the unit tests, `zip` must be on the `PATH`. Blob artifacts expire after the workflow's retention (five days for couture-cast), so collect a run
+before then.
+
 ## License
 
 [MIT](LICENSE)
