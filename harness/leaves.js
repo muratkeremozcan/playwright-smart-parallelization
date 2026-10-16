@@ -14,14 +14,9 @@ function toPosix(file) {
   return String(file).split(path.sep).join('/').replace(/\\/g, '/');
 }
 
-/** Key shape: `project|file|titlePath joined by ' › '|#repeat`. */
-function leafKey({ project, file, titlePath, repeatIndex }) {
-  return `${project}|${file}|${titlePath.join(TITLE_SEPARATOR)}|#${repeatIndex}`;
-}
-
-/** The leaf key without the repeat suffix: one test across all of its repeats. */
-function testId(leaf) {
-  return leaf.key.replace(/\|#\d+$/, '');
+/** The human-readable name of a leaf: `project|file|titlePath joined by ' › '|#repeat`. */
+function leafLabel({ project, specFile, titlePath, repeatIndex }) {
+  return `${project}|${specFile}|${titlePath.join(TITLE_SEPARATOR)}|#${repeatIndex}`;
 }
 
 /** The serial group id without the repeat suffix. */
@@ -30,32 +25,44 @@ function groupBase(group) {
 }
 
 /**
- * Picks the serial annotation that identifies a group. Nested serial describes nest the groups, so
- * the outermost one (the earliest location) is the unit that must stay on a single shard.
+ * Serial group id: `projectIndex|spec file|suite titles|#repeat`. The suite is the outermost serial
+ * suite of the test, found by the reporter from the suite ancestry. Unlike a call site, its titles
+ * tell apart sibling suites that one helper builds, and the project index tells apart projects
+ * that share a name (unnamed ones).
  */
-function serialAnnotation(annotations, testDir) {
-  const serial = (annotations || []).filter((a) => a && a.type === 'serial' && a.location);
-  if (serial.length === 0) return null;
-  serial.sort((a, b) => a.location.line - b.location.line || a.location.column - b.location.column);
-  const { file, line, column } = serial[0].location;
-  return { file: toPosix(testDir ? path.relative(testDir, file) : file), line, column };
+function serialGroupId({ projectIndex, specFile, suiteTitles, repeatIndex }) {
+  return `${projectIndex}|${specFile}|${suiteTitles.join(TITLE_SEPARATOR)}|#${repeatIndex}`;
 }
 
-/** Serial group id: `project|annotation file|line:column|#repeat`, or null outside a serial suite. */
-function serialGroupId({ project, annotations, testDir, repeatIndex }) {
-  const found = serialAnnotation(annotations, testDir);
-  if (!found) return null;
-  return `${project}|${found.file}|${found.line}:${found.column}|#${repeatIndex}`;
-}
-
-function buildLeaf({ project, file, titlePath, repeatIndex, annotations, testDir, line, column }) {
+/**
+ * Builds a leaf. `id` is Playwright's own test id, unique per project, spec file, title path and
+ * repeat, and it is the leaf key: file, project and title can collide (unnamed projects, a helper
+ * that registers the same tests for several spec files), the id cannot. `label` is the readable
+ * name used in output, `testRef` names one test across its repeats, and `file` with `line` and
+ * `column` is the location of the test call for the `--test-list` form.
+ */
+function buildLeaf({
+  id,
+  project,
+  projectIndex,
+  specFile,
+  file,
+  titlePath,
+  repeatIndex,
+  serialGroup,
+  line,
+  column,
+}) {
   return {
-    key: leafKey({ project, file, titlePath, repeatIndex }),
+    key: id,
+    label: leafLabel({ project, specFile, titlePath, repeatIndex }),
+    testRef: `${projectIndex}|${specFile}|${titlePath.join(TITLE_SEPARATOR)}`,
     file,
+    specFile,
     project,
     titlePath,
     repeatIndex,
-    serialGroup: serialGroupId({ project, annotations, testDir, repeatIndex }),
+    serialGroup,
     dependency: false,
     line,
     column,
@@ -112,18 +119,11 @@ function classify(leaves, topLevel) {
 }
 
 /** A leaf as a listing knows it: the reporter's run fields (outcome, attempts, duration) dropped. */
-function listedLeaf({ key, file, project, titlePath, repeatIndex, serialGroup, line, column }) {
-  return {
-    key,
-    file,
-    project,
-    titlePath,
-    repeatIndex,
-    serialGroup,
-    dependency: false,
-    line,
-    column,
-  };
+function listedLeaf(leaf) {
+  const fields = ['key', 'label', 'testRef', 'file', 'specFile', 'project', 'titlePath'];
+  const listed = Object.fromEntries(fields.map((field) => [field, leaf[field]]));
+  const { repeatIndex, serialGroup, line, column } = leaf;
+  return { ...listed, repeatIndex, serialGroup, dependency: false, line, column };
 }
 
 /** The `--list` text form of a leaf, the line format `--test-list` accepts. */
@@ -138,11 +138,10 @@ module.exports = {
   dependencyMap,
   dependencyProjects,
   groupBase,
-  leafKey,
+  leafLabel,
   listLine,
   listedLeaf,
   projectsOf,
   serialGroupId,
-  testId,
   toPosix,
 };

@@ -81,11 +81,22 @@ fails closed instead of qualifying a different suite:
 - `--list`, which executes nothing.
 - The `--` separator among the forwarded arguments, which hands everything after it to the tests
   and would swallow the options the harness adds.
+- A focused test (`.only`) with `forbidOnly` off. Playwright lists every test but a run executes the
+  focused ones only, so the harness lists with `--forbid-only` and rejects the suite.
 - An empty selection, even when Playwright accepts it with `--pass-with-no-tests`: a run needs at
   least one primary leaf to qualify.
 
 Project names are user strings, so no table keyed by them is a plain object: a project named
 `__proto__` keeps its leaves and its dependencies.
+
+A leaf is keyed by Playwright's own test id, which is unique per project, spec file, title path and
+repeat. A name, file and title key is not: unnamed projects share a name, and a helper that
+registers tests for several spec files puts them all at one file. The key is shown to people as a
+label, `project|spec file|title path|#repeat`. A serial group is the outermost serial suite of the
+test, found from the suite ancestry rather than a line number, and named by the project index, spec
+file and suite titles rather than the call site, so sibling suites a helper builds are separate
+groups. The reporter fails closed when two tests share an id, when two distinct serial suites share
+a group, or when the serial suites of a test cannot be matched exactly.
 
 ```sh
 (cd fixtures/consumer && npm ci)

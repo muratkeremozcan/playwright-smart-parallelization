@@ -11,20 +11,58 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { buildLeaf, toPosix } = require('./leaves');
+const { buildLeaf, serialGroupId, toPosix } = require('./leaves');
 
-function leafOf(test) {
-  const testDir = test.parent.project().testDir;
-  const project = test.parent.project().name;
-  const file = toPosix(path.relative(testDir, test.location.file));
+const sameLocation = (a, b) => a.file === b.file && a.line === b.line && a.column === b.column;
+
+/**
+ * The outermost serial suite of a test. Playwright adds one serial annotation per serial ancestor,
+ * outermost first, located at that suite's own call (a helper that builds suites gives siblings one
+ * location). The serial ancestors at that location are matched by walking the suite ancestry, and
+ * the call fails closed when the match is not exact.
+ */
+function outermostSerialSuite(test) {
+  const serial = test.annotations.filter((a) => a.type === 'serial' && a.location);
+  if (serial.length === 0) return null;
+  const { location } = serial[0];
+  const ancestors = [];
+  for (let suite = test.parent; suite; suite = suite.parent) ancestors.unshift(suite);
+  const matching = ancestors.filter(
+    (suite) => suite.location && sameLocation(suite.location, location)
+  );
+  const annotated = serial.filter((a) => sameLocation(a.location, location)).length;
+  if (matching.length === 0 || matching.length !== annotated) {
+    throw new Error(
+      `cannot tell which suite of ${test.titlePath().join(' › ')} is serial: ` +
+        `${annotated} serial annotations and ${matching.length} suites at one location`
+    );
+  }
+  return matching[0];
+}
+
+function leafOf(test, projects = []) {
+  const project = test.parent.project();
+  const testDir = project.testDir;
+  const [, , specFile, ...titlePath] = test.titlePath();
+  const projectIndex = projects.indexOf(project);
+  const serial = outermostSerialSuite(test);
+  const serialGroup = serial
+    ? serialGroupId({
+        projectIndex,
+        specFile,
+        suiteTitles: serial.titlePath().slice(3),
+        repeatIndex: test.repeatEachIndex,
+      })
+    : null;
   const leaf = buildLeaf({
-    project,
-    file,
-    // titlePath() is ['', project, file, ...describes, title].
-    titlePath: test.titlePath().slice(3),
+    id: test.id,
+    project: project.name,
+    projectIndex,
+    specFile,
+    file: toPosix(path.relative(testDir, test.location.file)),
+    titlePath,
     repeatIndex: test.repeatEachIndex,
-    annotations: test.annotations,
-    testDir,
+    serialGroup,
     line: test.location.line,
     column: test.location.column,
   });
@@ -35,6 +73,29 @@ function leafOf(test) {
     attempts: test.results.length,
     durationMs: test.results.reduce((total, result) => total + result.duration, 0),
   };
+}
+
+/**
+ * Leaves of every test, failing closed when two distinct serial suites get one group id or two
+ * tests get one key: a collision would let a split group or a dropped test qualify.
+ */
+function leavesOf(tests, projects) {
+  const groups = new Map();
+  const keys = new Set();
+  return tests.map((test) => {
+    const leaf = leafOf(test, projects);
+    if (keys.has(leaf.key)) throw new Error(`two tests share the id ${leaf.key} (${leaf.label})`);
+    keys.add(leaf.key);
+    if (leaf.serialGroup) {
+      const suite = outermostSerialSuite(test);
+      const known = groups.get(leaf.serialGroup);
+      if (known && known !== suite) {
+        throw new Error(`two serial suites share the group ${leaf.serialGroup}`);
+      }
+      groups.set(leaf.serialGroup, suite);
+    }
+    return leaf;
+  });
 }
 
 class HarnessReporter {
@@ -55,7 +116,7 @@ class HarnessReporter {
     if (!target || !this.suite) return;
     const durationMs =
       typeof result.duration === 'number' ? result.duration : Date.now() - this.startedAt;
-    const leaves = this.suite.allTests().map(leafOf);
+    const leaves = leavesOf(this.suite.allTests(), this.config ? this.config.projects : []);
     const projects = ((this.config && this.config.projects) || []).map((project) => ({
       name: project.name,
       dependencies: project.dependencies || [],
@@ -72,3 +133,4 @@ class HarnessReporter {
 
 module.exports = HarnessReporter;
 module.exports.leafOf = leafOf;
+module.exports.leavesOf = leavesOf;

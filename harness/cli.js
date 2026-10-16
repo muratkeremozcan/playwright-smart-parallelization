@@ -89,7 +89,8 @@ function execute(options, { out, stderr, qualifyRun, negativeRun }) {
   out(`Slowest shard: ${report.slowestShard}, imbalance ${(report.imbalance * 100).toFixed(1)}%`);
   for (const violation of report.violations) {
     stderr.write(
-      `violation ${violation.kind} ${violation.key || violation.group || `shard ${violation.shard}`}: ` +
+      `violation ${violation.kind} ` +
+        `${violation.label || violation.key || violation.group || `shard ${violation.shard}`}: ` +
         `${violation.detail}\n`
     );
   }

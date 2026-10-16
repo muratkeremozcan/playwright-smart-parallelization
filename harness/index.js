@@ -66,9 +66,18 @@ function listWithReporter(cwd, args) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'psp-list-'));
   const resultFile = path.join(dir, 'list.json');
   try {
-    const result = playwright(cwd, ['--list', `--reporter=${REPORTER}`, ...args], {
+    // --forbid-only makes a focused test (.only) an error instead of a silent subset: a list shows
+    // every test while a run executes the focused ones only.
+    const result = playwright(cwd, ['--list', '--forbid-only', `--reporter=${REPORTER}`, ...args], {
       PSP_HARNESS_RESULT: resultFile,
     });
+    if (/--forbid-only/.test(result.stderr || '')) {
+      throw new Error(
+        'the suite has a focused test (.only), so a run executes a subset of what it lists, ' +
+          'which is not supported by the harness. Playwright says:\n' +
+          result.stderr.trim().split('\n').slice(0, 3).join('\n')
+      );
+    }
     if (result.status !== 0 || !fs.existsSync(resultFile)) {
       throw new Error(`playwright test --list failed (exit ${result.status}): ${result.stderr}`);
     }
@@ -228,7 +237,13 @@ function qualify(options, { log = () => {}, quiet = false, deps = {} } = {}) {
     }
   }
 
-  const violations = checkAll(intended, dependencies, shards);
+  const labels = new Map();
+  for (const leaf of [...intended, ...shards.flatMap((shard) => shard.leaves || [])]) {
+    if (leaf.label) labels.set(leaf.key, leaf.label);
+  }
+  const violations = checkAll(intended, dependencies, shards).map((violation) =>
+    labels.has(violation.key) ? { ...violation, label: labels.get(violation.key) } : violation
+  );
   const primaryKeys = new Set(primary.map((leaf) => leaf.key));
   const summaries = shards.map((shard) => ({
     index: shard.index,

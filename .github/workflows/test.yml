@@ -100,6 +100,9 @@ jobs:
           - name: native sharding, setup project selected by name
             id: native-setup
             command: npm run harness -- --shards 2 --report harness-report.json -- --project=setup
+          - name: native sharding, identity fixture
+            id: native-identity
+            command: npm run harness -- --shards 2 --config identity.config.js --report harness-report.json
           - name: negative control
             id: negative
             command: npm run harness:negative -- --report harness-report.json

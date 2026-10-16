@@ -105,6 +105,8 @@ describe('qualify report', () => {
       report.violations.map((violation) => violation.kind),
       ['missing']
     );
+    assert.strictEqual(report.violations[0].label, second.leaves.at(-1).label);
+    assert.ok(report.violations[0].label.includes('|'));
   });
 
   test('is not ok when every leaf skipped at runtime, and names each as not-executed', () => {
@@ -503,6 +505,16 @@ describe('main exit codes', () => {
     });
     assert.strictEqual(code, 1);
     assert.match(err, /Negative control failed/);
+  });
+
+  test('prints the label of a violation instead of the test id', () => {
+    const labelled = {
+      ...failing,
+      violations: [{ kind: 'missing', key: 'a1b2', label: 'chromium|a.spec.js|t|#0', detail: 'd' }],
+    };
+    const { err } = run([], { qualify: () => labelled });
+    assert.match(err, /violation missing chromium\|a\.spec\.js\|t\|#0: d/);
+    assert.doesNotMatch(err, /a1b2/);
   });
 
   test('writes the report file', () => {

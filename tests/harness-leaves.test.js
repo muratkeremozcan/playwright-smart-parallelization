@@ -27,10 +27,11 @@ describe('leaves listed by the reporter from the real fixture', () => {
     assert.strictEqual(all.length - primary.length, 2);
   });
 
-  test('builds the key as project, file, title path and repeat', () => {
+  test('keys a leaf by the Playwright test id and labels it project, file, title path and repeat', () => {
     const leaf = find('chromium', 'catalog.spec.js', 'filters products by category', 1);
+    assert.match(leaf.key, /^[0-9a-f]{20}-[0-9a-f]{20}$/);
     assert.strictEqual(
-      leaf.key,
+      leaf.label,
       'chromium|catalog.spec.js|catalog › filters products by category|#1'
     );
     assert.deepStrictEqual(leaf.titlePath, ['catalog', 'filters products by category']);
@@ -47,7 +48,7 @@ describe('leaves listed by the reporter from the real fixture', () => {
   test('keeps dependency projects at repeat zero', () => {
     const dependencyLeaves = listed().filter((leaf) => leaf.dependency);
     assert.deepStrictEqual(
-      dependencyLeaves.map((leaf) => leaf.key),
+      dependencyLeaves.map((leaf) => leaf.label),
       [
         'setup|global.setup.js|prepare the environment|#0',
         'teardown|global.teardown.js|clean up the environment|#0',
@@ -83,18 +84,24 @@ describe('leaves listed by the reporter from the real fixture', () => {
   });
 });
 
-describe('serialGroupId', () => {
-  test('picks the outermost serial annotation of nested serial suites', () => {
-    const group = leaves.serialGroupId({
-      project: 'p',
-      repeatIndex: 0,
-      testDir: '/t',
-      annotations: [
-        { type: 'serial', location: { file: '/t/a.js', line: 9, column: 3 } },
-        { type: 'serial', location: { file: '/t/a.js', line: 4, column: 1 } },
-      ],
-    });
-    assert.strictEqual(group, 'p|a.js|4:1|#0');
+describe('serialGroupId and leafLabel', () => {
+  test('build the group id from the project index, spec file, suite titles and repeat', () => {
+    assert.strictEqual(
+      leaves.serialGroupId({
+        projectIndex: 2,
+        specFile: 'a.spec.js',
+        suiteTitles: ['outer', 'inner'],
+        repeatIndex: 1,
+      }),
+      '2|a.spec.js|outer › inner|#1'
+    );
+  });
+
+  test('label a leaf for people', () => {
+    assert.strictEqual(
+      leaves.leafLabel({ project: 'p', specFile: 'a.js', titlePath: ['x', 'y'], repeatIndex: 0 }),
+      'p|a.js|x › y|#0'
+    );
   });
 });
 
@@ -173,8 +180,26 @@ describe('classify, the one classification rule', () => {
 });
 
 describe('key helpers', () => {
-  test('testId and groupBase strip the repeat suffix', () => {
-    assert.strictEqual(leaves.testId({ key: 'p|f|a › b|#3' }), 'p|f|a › b');
-    assert.strictEqual(leaves.groupBase('p|f|0:0|#12'), 'p|f|0:0');
+  test('groupBase strips the repeat suffix', () => {
+    assert.strictEqual(leaves.groupBase('1|f|a › b|#12'), '1|f|a › b');
+  });
+
+  test('buildLeaf keys by the id and keeps the call location apart from the spec file', () => {
+    const leaf = leaves.buildLeaf({
+      id: 'abc',
+      project: 'p',
+      projectIndex: 3,
+      specFile: 'a.spec.js',
+      file: 'factory.js',
+      titlePath: ['t'],
+      repeatIndex: 2,
+      serialGroup: null,
+      line: 7,
+      column: 3,
+    });
+    assert.strictEqual(leaf.key, 'abc');
+    assert.strictEqual(leaf.testRef, '3|a.spec.js|t');
+    assert.strictEqual(leaf.label, 'p|a.spec.js|t|#2');
+    assert.strictEqual(leaves.listLine(leaf), '[p] › factory.js:7:3 › t');
   });
 });

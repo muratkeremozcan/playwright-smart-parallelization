@@ -13,7 +13,7 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { dependencyProjects, groupBase, testId } = require('./leaves');
+const { dependencyProjects, groupBase } = require('./leaves');
 const { assertSupportedSelection, listIntended, playwrightVersion, qualify } = require('./index');
 const { nativePartition, testListPartition } = require('./partitions');
 
@@ -31,7 +31,7 @@ function buildUnits(leaves) {
   const units = new Map();
   for (const leaf of leaves) {
     if (leaf.dependency) continue;
-    const id = leaf.serialGroup ? groupBase(leaf.serialGroup) : testId(leaf);
+    const id = leaf.serialGroup ? groupBase(leaf.serialGroup) : leaf.testRef;
     const unit = units.get(id) || { id, serial: Boolean(leaf.serialGroup), leaves: [] };
     unit.leaves.push(leaf);
     units.set(id, unit);
@@ -51,7 +51,7 @@ function cleanAssignment(units) {
 }
 
 function keysOfTest(leaves, id) {
-  return leaves.filter((leaf) => testId(leaf) === id).map((leaf) => leaf.key);
+  return leaves.filter((leaf) => leaf.testRef === id).map((leaf) => leaf.key);
 }
 
 /**
@@ -62,7 +62,9 @@ function keysOfTest(leaves, id) {
 function buildControls(leaves) {
   const units = buildUnits(leaves);
   const plain = units.find((unit) => !unit.serial);
-  const group = units.find((unit) => unit.serial && new Set(unit.leaves.map(testId)).size > 1);
+  const group = units.find(
+    (unit) => unit.serial && new Set(unit.leaves.map((leaf) => leaf.testRef)).size > 1
+  );
   if (!plain || !group) {
     throw new Error('the negative control needs a plain test and a multi-test serial group');
   }
@@ -75,7 +77,7 @@ function buildControls(leaves) {
   const duplicated = clean.map((shard) => [...shard]);
   duplicated[(homeOf([...plainKeys]) + 1) % SHARD_COUNT].push(...plainKeys);
 
-  const lastTest = [...new Set(group.leaves.map(testId))].at(-1);
+  const lastTest = [...new Set(group.leaves.map((leaf) => leaf.testRef))].at(-1);
   const moved = new Set(keysOfTest(leaves, lastTest));
   const home = homeOf([...moved]);
   const split = clean.map((shard) => shard.filter((key) => !moved.has(key)));
