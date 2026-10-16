@@ -170,12 +170,13 @@ describe('buildSelectionScenarios', () => {
     ),
   });
 
-  test('selects the dependency project that has a dependency of its own, three ways', () => {
+  test('selects the dependency project that has a dependency of its own, four ways', () => {
     assert.deepStrictEqual(
       scenarios.map((scenario) => scenario.forward),
       [
         ['-c', 'a.js', '--project=setup'],
         ['-c', 'a.js', '--project', 'setup', 'chromium', '--grep', 'prepare the environment'],
+        ['-c', 'a.js', '--grep', 'prepare the environment'],
         ['-c', 'a.js', '--no-deps', '--project=setup', '--project=teardown'],
       ]
     );
@@ -202,8 +203,12 @@ describe('buildSelectionScenarios', () => {
       ['none', scenarios[1].forward, nativeShards, null],
       ['missing', ['-c', 'a.js'], [{ args: ['--project=teardown'] }], [setupKey]],
     ]);
-    assert.deepStrictEqual(summary(scenarios[2], flat), [
+    assert.deepStrictEqual(summary(scenarios[2], filtered), [
       ['none', scenarios[2].forward, nativeShards, null],
+      ['missing', ['-c', 'a.js'], [{ args: ['--project=teardown'] }], [setupKey]],
+    ]);
+    assert.deepStrictEqual(summary(scenarios[3], flat), [
+      ['none', scenarios[3].forward, nativeShards, null],
       [
         'duplicate',
         ['-c', 'a.js', '--no-deps'],
@@ -211,11 +216,6 @@ describe('buildSelectionScenarios', () => {
         [setupKey],
       ],
     ]);
-  });
-
-  test('flags only leaves that are primary in the scenario listing', () => {
-    const implicit = listingOf([], ['setup', 'teardown']);
-    assert.deepStrictEqual(scenarios[0].controls(implicit)[1].flagged, []);
   });
 
   test('the broken controls are caught only once the selected project has primary leaves', () => {

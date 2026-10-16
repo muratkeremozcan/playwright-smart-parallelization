@@ -5,8 +5,9 @@
  * deliberately broken ones, each end to end: a dropped leaf, a duplicated leaf, a split serial
  * group and a run where every test skips at runtime. Selection scenarios add a clean and a broken
  * run each for a dependency project selected by name, selected and filtered down to its own test,
- * and selected with `--no-deps`. The harness must accept the clean ones and reject every broken one
- * with its expected violation kind, otherwise a passing qualification proves nothing.
+ * filtered with no project named, and selected with `--no-deps`. The harness must accept the clean
+ * ones and reject every broken one with its expected violation kind, otherwise a passing
+ * qualification proves nothing.
  */
 
 const fs = require('node:fs');
@@ -122,6 +123,7 @@ function pickDependencySelection(dependencies) {
  *
  * - P selected by name: a run of T alone leaves P unrun (`missing`).
  * - P and D selected, then filtered down to P's test: D has no test left, so P is still primary.
+ * - The same filter with no project named at all, where every project is selected.
  * - P and T selected with `--no-deps`: both are top-level, so P in every shard is `duplicate`.
  *
  * `leaves` is the unfiltered intended set, used to find P's test title. `base` is the config
@@ -145,9 +147,35 @@ function buildSelectionScenarios(dependencies, leaves, base) {
       .filter((leaf) => leaf.project === project && !leaf.dependency)
       .map((leaf) => leaf.key);
   const only = (name) => [{ args: [`--project=${name}`] }];
+  // A filter that leaves only P's own test: the dependent project has nothing left, so P stays
+  // under test whether or not a `--project` names it.
+  const filteredScenario = (forward, label) => ({
+    forward,
+    controls: (listing) => {
+      if (listing.leaves.some((leaf) => leaf.project === dependent)) {
+        throw new Error(`the ${project} filter of the negative control also selects ${dependent}`);
+      }
+      return [
+        {
+          name: `${label}, clean`,
+          expected: CLEAN,
+          forward,
+          partition: nativePartition(SHARD_COUNT),
+        },
+        {
+          name: `${label}, only ${implicit} runs`,
+          expected: 'missing',
+          forward: base,
+          partition: only(implicit),
+          flagged: keysOf(listing),
+        },
+      ];
+    },
+  });
 
   const selected = [...base, `--project=${project}`];
   const filtered = [...base, '--project', project, dependent, '--grep', grep];
+  const unnamed = [...base, '--grep', grep];
   const flat = [...base, '--no-deps'];
   const topLevel = [...flat, `--project=${project}`, `--project=${implicit}`];
   return [
@@ -169,31 +197,8 @@ function buildSelectionScenarios(dependencies, leaves, base) {
         },
       ],
     },
-    {
-      forward: filtered,
-      controls: (listing) => {
-        if (listing.leaves.some((leaf) => leaf.project === dependent)) {
-          throw new Error(
-            `the ${project} filter of the negative control also selects ${dependent}`
-          );
-        }
-        return [
-          {
-            name: `${project} and ${dependent} selected, filtered to ${project}, clean`,
-            expected: CLEAN,
-            forward: filtered,
-            partition: nativePartition(SHARD_COUNT),
-          },
-          {
-            name: `${project} and ${dependent} selected, filtered to ${project}, only ${implicit} runs`,
-            expected: 'missing',
-            forward: base,
-            partition: only(implicit),
-            flagged: keysOf(listing),
-          },
-        ];
-      },
-    },
+    filteredScenario(filtered, `${project} and ${dependent} selected, filtered to ${project}`),
+    filteredScenario(unnamed, `no project named, filtered to ${project}`),
     {
       forward: topLevel,
       controls: (listing) => [

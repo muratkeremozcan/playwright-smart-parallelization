@@ -22,9 +22,9 @@ const {
 const {
   applyDependencies,
   deriveDependencies,
+  effectiveProjects,
   parseList,
   projectNames,
-  selectedProjects,
 } = require('./leaves');
 const { nativePartition } = require('./partitions');
 
@@ -88,9 +88,8 @@ function listJson(cwd, args) {
 /**
  * Lists the intended leaves and the project dependency map. The listing honors the forwarded
  * selection args and repeat count. Dependencies come from one `--project=P` listing per project,
- * which carries the repeat count, config selection and `--no-deps` only. A dependency project the
- * forwarded `--project` selects by name has primary leaves unless another selected project that
- * still has tests needs it.
+ * which carries the repeat count, config selection and `--no-deps` only. Which leaves are primary
+ * and which are dependencies follows `applyDependencies`, over the effective project selection.
  */
 function listIntended({ cwd, repeatEach = 1, forward = [] }) {
   const base = [`--repeat-each=${repeatEach}`];
@@ -101,7 +100,7 @@ function listIntended({ cwd, repeatEach = 1, forward = [] }) {
     listsByProject[project] = parseList(probe);
   }
   const dependencies = deriveDependencies(listsByProject);
-  const selected = selectedProjects(forward, projectNames(json));
+  const selected = effectiveProjects(forward, projectNames(json));
   return { leaves: applyDependencies(parseList(json), dependencies, selected), dependencies };
 }
 

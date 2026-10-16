@@ -172,26 +172,29 @@ function selectedProjects(args, names) {
 }
 
 /**
- * Returns leaves with `dependency` set from the dependency map. A dependency project that the run
- * selects by name (`selected`) and that no other selected project needs is a project under test,
- * so its leaves are primary. Playwright runs a project that another selected project needs once per
- * dependent shard, so there it stays a dependency. Only a selected project that has leaves in
- * `leaves` needs its dependencies: when filters leave a project with no test, Playwright drops it
- * and runs what it would have needed as a top-level project.
+ * The projects a run selects: the ones `--project` matches by name, otherwise every project, since
+ * Playwright runs all projects of the config when none is named.
  */
-function applyDependencies(leaves, dependencies, selected = []) {
-  const present = new Set(leaves.map((leaf) => leaf.project));
+function effectiveProjects(args, names) {
+  return projectPatterns(args).length > 0 ? selectedProjects(args, names) : names;
+}
+
+/**
+ * Returns leaves with `dependency` set. This is the one classification rule. `selected` is the
+ * effective project selection (`effectiveProjects`; every project in `dependencies` by default).
+ * A selected project survives when `leaves` holds a test of it, because filters and `--no-deps`
+ * are already applied to the listing. A leaf is a dependency, and exempt from exactly-once
+ * coverage, only when a surviving selected project needs its project. Every other leaf is primary,
+ * which includes a setup or teardown project the filters left standing on its own.
+ */
+function applyDependencies(leaves, dependencies, selected = Object.keys(dependencies)) {
+  const surviving = new Set(leaves.map((leaf) => leaf.project));
   const needed = new Set(
     selected
-      .filter((project) => present.has(project))
-      .flatMap((project) => (dependencies[project] || []).filter((name) => name !== project))
+      .filter((project) => surviving.has(project))
+      .flatMap((project) => dependencies[project] || [])
   );
-  const underTest = new Set(selected.filter((project) => !needed.has(project)));
-  const projects = dependencyProjects(dependencies);
-  return leaves.map((leaf) => ({
-    ...leaf,
-    dependency: projects.has(leaf.project) && !underTest.has(leaf.project),
-  }));
+  return leaves.map((leaf) => ({ ...leaf, dependency: needed.has(leaf.project) }));
 }
 
 /** The `--list` text form of a leaf, the line format `--test-list` accepts. */
@@ -205,6 +208,7 @@ module.exports = {
   buildLeaf,
   dependencyProjects,
   deriveDependencies,
+  effectiveProjects,
   groupBase,
   leafKey,
   listLine,

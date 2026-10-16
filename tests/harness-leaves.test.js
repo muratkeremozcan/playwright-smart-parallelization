@@ -151,47 +151,61 @@ describe('dependency derivation', () => {
     );
   });
 
-  test('keeps a selected dependency project primary when no other selected project needs it', () => {
+  describe('applyDependencies, the one classification rule', () => {
     const dependencies = leaves.deriveDependencies(lists);
-    const projects = [{ project: 'setup' }, { project: 'chromium' }, { project: 'teardown' }];
-    const flags = (selected) =>
+    const roles = (present, selected) =>
       leaves
-        .applyDependencies(projects, dependencies, selected)
-        .map((leaf) => [leaf.project, leaf.dependency]);
-    assert.deepStrictEqual(flags(['setup']), [
-      ['setup', false],
-      ['chromium', false],
-      ['teardown', true],
-    ]);
-    assert.deepStrictEqual(flags(['teardown']), [
-      ['setup', true],
-      ['chromium', false],
-      ['teardown', false],
-    ]);
-  });
+        .applyDependencies(
+          present.map((project) => ({ project })),
+          dependencies,
+          selected
+        )
+        .map((leaf) => [leaf.project, leaf.dependency ? 'dependency' : 'primary']);
 
-  test('keeps a selected dependency project implicit when a selected project needs it', () => {
-    const dependencies = leaves.deriveDependencies(lists);
-    const projects = [{ project: 'setup' }, { project: 'chromium' }, { project: 'teardown' }];
-    const flags = (selected) =>
-      leaves.applyDependencies(projects, dependencies, selected).map((leaf) => leaf.dependency);
-    assert.deepStrictEqual(flags(['chromium', 'setup']), [true, false, true]);
-    assert.deepStrictEqual(flags(['setup', 'teardown']), [false, false, true]);
-    assert.deepStrictEqual(flags([]), [true, false, true]);
-  });
+    test('selects every project by default', () => {
+      assert.deepStrictEqual(roles(['setup', 'chromium', 'teardown']), [
+        ['setup', 'dependency'],
+        ['chromium', 'primary'],
+        ['teardown', 'dependency'],
+      ]);
+    });
 
-  test('keeps a selected project primary when its dependent has no leaf left after filters', () => {
-    const dependencies = leaves.deriveDependencies(lists);
-    const filtered = [{ project: 'setup' }, { project: 'teardown' }];
-    const flags = (selected) =>
-      leaves.applyDependencies(filtered, dependencies, selected).map((leaf) => leaf.dependency);
-    assert.deepStrictEqual(flags(['setup', 'chromium']), [false, true]);
-    assert.deepStrictEqual(flags(['setup']), [false, true]);
-    const kept = [...filtered, { project: 'chromium' }];
-    assert.deepStrictEqual(
-      leaves.applyDependencies(kept, dependencies, ['setup', 'chromium']).map((l) => l.dependency),
-      [true, true, false]
-    );
+    test('a project is a dependency only when a surviving selected project needs it', () => {
+      const all = ['setup', 'chromium', 'teardown'];
+      assert.deepStrictEqual(roles(['setup', 'teardown'], ['setup']), [
+        ['setup', 'primary'],
+        ['teardown', 'dependency'],
+      ]);
+      assert.deepStrictEqual(roles(['teardown'], ['teardown']), [['teardown', 'primary']]);
+      assert.deepStrictEqual(roles(all, ['chromium', 'setup']), [
+        ['setup', 'dependency'],
+        ['chromium', 'primary'],
+        ['teardown', 'dependency'],
+      ]);
+      assert.deepStrictEqual(roles(['setup', 'teardown'], ['setup', 'teardown']), [
+        ['setup', 'primary'],
+        ['teardown', 'dependency'],
+      ]);
+    });
+
+    test('a selected project with no leaf left needs nothing, so setup stays primary', () => {
+      assert.deepStrictEqual(roles(['setup', 'teardown'], ['setup', 'chromium']), [
+        ['setup', 'primary'],
+        ['teardown', 'dependency'],
+      ]);
+      assert.deepStrictEqual(roles(['setup', 'teardown', 'chromium'], ['setup', 'chromium']), [
+        ['setup', 'dependency'],
+        ['teardown', 'dependency'],
+        ['chromium', 'primary'],
+      ]);
+    });
+
+    test('a project outside the selection is primary unless a selected project needs it', () => {
+      assert.deepStrictEqual(roles(['setup', 'chromium'], ['setup']), [
+        ['setup', 'primary'],
+        ['chromium', 'primary'],
+      ]);
+    });
   });
 
   test('derives dependencies from the recorded sample projects', () => {
@@ -249,6 +263,23 @@ describe('project selection', () => {
       leaves.selectedProjects(['--project=setup'], leaves.projectNames(sample)),
       ['setup']
     );
+  });
+});
+
+describe('effectiveProjects', () => {
+  const names = ['setup', 'teardown', 'chromium'];
+
+  test('is every project when --project names none', () => {
+    assert.deepStrictEqual(leaves.effectiveProjects([], names), names);
+    assert.deepStrictEqual(leaves.effectiveProjects(['--grep', 'x', '--no-deps'], names), names);
+  });
+
+  test('is the matched projects when --project is given', () => {
+    assert.deepStrictEqual(leaves.effectiveProjects(['--project=setup'], names), ['setup']);
+    assert.deepStrictEqual(leaves.effectiveProjects(['--project', 'chromium', 'setup'], names), [
+      'setup',
+      'chromium',
+    ]);
   });
 });
 
