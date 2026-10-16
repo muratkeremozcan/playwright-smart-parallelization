@@ -286,7 +286,7 @@ function assertSequential(jobs, record, where) {
 /** Which of the three delays is largest: fixed cost, an oversized atomic unit or the assignment. */
 function dominantDelay(decomposition) {
   const candidates = [
-    ['fixed setup cost', decomposition.fixed],
+    ["time outside the critical shard's test span", decomposition.fixed],
     ['one oversized atomic group', decomposition.atomicExcess],
     ['uneven assignment', decomposition.assignmentGap],
   ];

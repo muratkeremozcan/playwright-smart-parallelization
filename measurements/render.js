@@ -281,7 +281,7 @@ function renderSummary(summaries) {
 function renderDecomposition(analyzed, summaries) {
   const parts = [
     ['queue', 'Queue delay on the critical path'],
-    ['fixed', 'Fixed cost: every job and step outside the critical shard test run'],
+    ['fixed', "Fixed cost: every job and step outside the critical shard's test span"],
     ['share', 'Test time, ideal share (total test time over shards)'],
     ['atomicExcess', 'Test time, atomic group beyond the ideal share'],
     ['assignmentGap', 'Test time, critical shard above the lower bound (assignment)'],
@@ -298,7 +298,7 @@ function renderDecomposition(analyzed, summaries) {
     rows.push(cells);
   }
   const header = ['Part of completion'];
-  for (const s of summaries) header.push(`${s.label} median`, `${s.label} share`);
+  for (const s of summaries) header.push(`${s.label} median`, `${s.label} median per-run share`);
   return table(header, rows);
 }
 
@@ -311,9 +311,10 @@ function renderVerdict(summaries, analyzed) {
       const share = (key) => percent(median(runs.map((r) => r.decomposition[key] / r.completion)));
       return [
         `- \`${s.label}\`: the dominant delay is **${s.dominant}**.`,
-        `  Fixed cost is ${sec(d.fixed)} (${share('fixed')} of the ${sec(s.completion.median)} completion).`,
-        `  The assignment gap is ${sec(d.assignmentGap)} (${share('assignmentGap')}).`,
-        `  The largest atomic group exceeds the ideal share by ${sec(d.atomicExcess)} (${share('atomicExcess')}).`,
+        `  Median fixed cost: ${sec(d.fixed)}; median per-run share of completion: ${share('fixed')}. Median completion: ${sec(s.completion.median)}.`,
+        `  Median assignment gap: ${sec(d.assignmentGap)}; median per-run share of completion: ${share('assignmentGap')}.`,
+        `  Median excess of the largest atomic group over the ideal share: ${sec(d.atomicExcess)}; median per-run share of completion: ${share('atomicExcess')}.`,
+        `  Each share is the median of the per-run ratios, so dividing one median by another gives a different figure.`,
         `  The fixed cost ranged over ${sec(s.fixed.max - s.fixed.min)} between runs, against a median balance headroom of ${sec(s.headroom.median)}.`,
       ].join('\n');
     })
