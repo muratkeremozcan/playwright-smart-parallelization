@@ -52,15 +52,15 @@ function upstreamUrl(commit, file) {
 }
 
 /**
- * GETs an upstream file, retrying a failed request three times with a growing pause, so one
- * dropped connection does not fail every citation of a file. A 404 fails at once.
+ * GETs an upstream file, retrying a failed request or body read three times with a growing
+ * pause, so one dropped connection does not fail every citation of a file. A 404 fails at once.
  */
 async function fetchUpstream(url, { attempts = 4, pauseMs = 2000, get = fetch } = {}) {
   let last;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
       const response = await get(url);
-      if (response.ok) return response.text();
+      if (response.ok) return await response.text();
       last = new Error(`GET ${url}: ${response.status}`);
       if (response.status === 404) break;
     } catch (error) {

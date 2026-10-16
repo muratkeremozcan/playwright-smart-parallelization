@@ -91,6 +91,23 @@ describe('fetchUpstream', () => {
     assert.strictEqual(calls, 3);
   });
 
+  test('retries a body read that fails once', async () => {
+    let calls = 0;
+    const get = async () => {
+      calls += 1;
+      return {
+        ok: true,
+        status: 200,
+        text: async () => {
+          if (calls === 1) throw new Error('terminated');
+          return 'body';
+        },
+      };
+    };
+    assert.strictEqual(await fetchUpstream('u', { get, pauseMs: 0 }), 'body');
+    assert.strictEqual(calls, 2);
+  });
+
   test('fails at once on a 404 and after the last attempt otherwise', async () => {
     let calls = 0;
     const missing = async () => {
