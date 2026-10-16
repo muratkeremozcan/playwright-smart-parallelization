@@ -19,7 +19,7 @@ const DOC = fs.readFileSync(
   path.join(ROOT, 'docs', 'research', 'shard-balancer-harvest.md'),
   'utf8'
 );
-const README = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8');
+const DEVELOPMENT = fs.readFileSync(path.join(ROOT, 'docs', 'development.md'), 'utf8');
 const EVIDENCE = JSON.parse(
   fs.readFileSync(path.join(ROOT, 'docs', 'research', 'shard-balancer-evidence.json'), 'utf8')
 );
@@ -63,7 +63,7 @@ function generatedTexts() {
   return texts.map((text) => text.replace(/`[^`]*`/g, '``'));
 }
 
-const README_SECTION = section('Research', README);
+const DEVELOPMENT_SECTION = section('Research', DEVELOPMENT);
 const ANTITHESIS = /instead of|rather than|\bnot\b[^.;:]*\bbut\b|, not /i;
 const DASH = /—|–| - /;
 
@@ -141,14 +141,22 @@ describe('the document', () => {
     }
   });
 
-  test('uses no dash as a clause connector, in the prose, the tables, the README section or the generated text', () => {
-    for (const line of [...proseLines(DOC), ...proseLines(README_SECTION), ...generatedTexts()]) {
+  test('uses no dash as a clause connector, in the prose, the tables, the development guide section or the generated text', () => {
+    for (const line of [
+      ...proseLines(DOC),
+      ...proseLines(DEVELOPMENT_SECTION),
+      ...generatedTexts(),
+    ]) {
       assert.doesNotMatch(line.replace(/^- /, ''), DASH, line.slice(0, 100));
     }
   });
 
   test('uses no negation set up only to be corrected', () => {
-    for (const line of [...proseLines(DOC), ...proseLines(README_SECTION), ...generatedTexts()]) {
+    for (const line of [
+      ...proseLines(DOC),
+      ...proseLines(DEVELOPMENT_SECTION),
+      ...generatedTexts(),
+    ]) {
       assert.doesNotMatch(line, ANTITHESIS, line.slice(0, 100));
     }
   });
