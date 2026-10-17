@@ -13,9 +13,9 @@
 # A re-run reuses the history key, which is keyed on the run id only, so a leg that expects to
 # publish accepts finding its samples already in the history on a later attempt.
 #
-# The assert job also holds the time the Action's steps take to a budget (tests/e2e/timing.js):
-# the median of the main and post steps per shard job, twice that for any one shard job, and the
-# finish step.
+# The assert job also holds the network operations each step of the Action made to budgets from
+# its code paths (tests/e2e/operations.js), and reports the time each step took in the job summary
+# without gating on it: wall-clock time on shared runners varies too much to fail a run on.
 name: E2E pipeline
 
 on:
@@ -72,14 +72,6 @@ on:
         description: published (every passing test has one sample of this run) or unchanged.
         type: string
         required: true
-      shard-budget:
-        description: Seconds for the median of the Action's main and post steps per shard job.
-        type: number
-        default: 4
-      finish-budget:
-        description: Seconds for the finish step, which reads the records of every leg of the run.
-        type: number
-        default: 8
 
 permissions:
   contents: read
@@ -323,9 +315,9 @@ jobs:
               fi ;;
             *) fail "unknown expectation $EXPECTED" ;;
           esac
-      - name: Hold the Action's step times to their budgets
+      - name: Hold the Action's network operations to their budgets, and report its step times
         env:
           GH_TOKEN: ${{ github.token }}
-          SHARD_BUDGET: ${{ inputs.shard-budget }}
-          FINISH_BUDGET: ${{ inputs.finish-budget }}
-        run: node tests/e2e/timing.js "$SHARD_BUDGET" "$FINISH_BUDGET"
+          SHARDS: ${{ inputs.shards }}
+          ENABLED: ${{ inputs.enabled }}
+        run: node tests/e2e/operations.js "$SHARDS" "$ENABLED"

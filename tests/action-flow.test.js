@@ -176,7 +176,17 @@ describe('cold start, a warm run without finish, a re-run shard, a failed test a
     }
     assert.ok(![...world.runs.get('104').keys()].some((k) => k.startsWith('psp-pin-')), 'no pin');
     assert.deepStrictEqual(newest(world, keyOf(cold)), before);
-    const finish = await finishOf(world, 104);
+    // The jobs API answers two slow pages; a finish with nothing to check still reads them all
+    // before it ends, so no request outlives the step and its operation count.
+    const pages = [];
+    const fetchImpl = async (url) => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      pages.push(url);
+      const jobs = Array.from({ length: pages.length === 1 ? 100 : 3 }, (_, i) => ({ id: i }));
+      return { ok: true, status: 200, json: async () => ({ jobs }) };
+    };
+    const finish = await finishOf(world, 104, { inputs: { 'github-token': 't' }, fetchImpl });
+    assert.strictEqual(pages.length, 2, 'every page was read before finish returned');
     assert.strictEqual(finish.io.failed, null);
     assert.deepStrictEqual(
       [finish.io.outputs.mode, finish.io.outputs.coverage],
