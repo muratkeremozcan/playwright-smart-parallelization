@@ -59,30 +59,14 @@ jobs:
 
 `finish` merges the shard reports, fails if any test ran twice or not at all, updates the history, and writes the shard times to the job summary.
 
-Each shard uploads its blob report as `blob-report-<key>-<shard>-attempt-<n>`, so `pattern: blob-report-*` downloads them.
-
-A blob reporter in your config writes into the Action's folder too, and `finish` merges it.
-
-`finish` merges with the Playwright installed in `working-directory`, else `npx playwright@<version>`.
-
-`merge-config` picks the merge reporters and needs Playwright installed in the finish job.
-
-`prepare` outputs `mode` and `reason`; `finish` outputs `mode`, `coverage` (`ok`, `failed`, `not checked`) and `history` (`published`, `unchanged`, `failed`).
-
 With the default `publish-history: auto`, only runs on the default branch write the history; pull requests, other branches and forks read it.
 
-The history is keyed by command, working directory, workers, runner label and `history-key`; the shard count can change freely.
-
-The history lives in the Actions cache, which drops entries unused for 7 days, so a quiet repo starts cold again.
-
 Playwright below 1.63 runs plain `--shard` with no coverage check.
-
-The Action needs Node 20 or later on the runner.
 
 To turn balancing off, set `enabled: false` on `prepare`.
 The run goes back to plain `--shard`, and `finish` checks only the shard exit codes.
 
-All inputs are in [`action.yml`](action.yml).
+All inputs are in [`action.yml`](action.yml); outputs, report names, the history key and the runner needs are in [`docs/reference.md`](docs/reference.md).
 
 ## What we know so far
 
