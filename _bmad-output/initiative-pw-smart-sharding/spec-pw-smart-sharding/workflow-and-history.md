@@ -1,25 +1,24 @@
 # Workflow and history
 
-Applies only after CAP-3 selects an engine. Names below are a proposed interface, not existing ones.
+CAP-3 chose our own engine (CAP-7). The loop below is the one built; `action.yml`, `finish/action.yml` and `docs/reference.md` hold the exact interface.
 
-## Reusable workflow
+## The Action loop
 
-- **Inputs:** working directory, config path, projects and filters, shard count, workers, timing artifact location, retention, engine enable/disable switch.
-- **Prepare:** validate inputs. Lock one history snapshot or assignment for the whole run. Keep the caller's own dependency install and app start steps.
-- **Execute:** matrix over shards running ordinary Playwright commands under the selected engine. Upload uniquely named per-run, per-attempt, per-shard artifacts even when tests fail.
-- **Aggregate:** check expected shard completeness, merge native results, update timings from eligible observations, summarize slowest-shard time and imbalance.
+- **Inputs:** enabled, workers, working directory, runner label, history key, publish policy. The command, config, projects, filters and shard count stay in the caller's own Playwright command.
+- **Main step**, in each shard job before the caller's command: upload a start marker, pin one history snapshot to the job and run, decide the mode from its bytes, export `$PSP_ARGS`. Keep the caller's own dependency install and app start steps.
+- **Execute:** the caller's ordinary Playwright command with `$PSP_ARGS`; the bundled reporter balances whole spec files and writes the shard's record. `--no-deps` makes every project ordinary; `--last-failed` is refused before any test.
+- **Post step:** upload the shard's record, uniquely named per job, suite, shard and attempt, even when tests fail, and publish the shard's passing samples by compare-and-swap.
+- **Finish (optional):** prove exactly-once coverage across the shards, including re-run shards that left no record, and summarize slowest-shard time and imbalance. Report merging stays the caller's.
 - **Rollback:** a single switch disables balancing for the entire run and keeps existing native reporting.
-
-Reuse `gh-build-matrix` for matrix generation where it fits.
 
 ## History policy
 
-- One trusted writer. Each record carries source commit and run, configuration fingerprint, schema version, and time.
+- Every trusted shard publishes its own samples by compare-and-swap. Each record carries source commit and run, configuration fingerprint, schema version, and time.
 - A delayed older run never overwrites newer history.
 - Observations for tests absent from a filtered run are preserved.
-- Failed, cancelled, or incomplete runs, and zero-valued data, never replace good history.
+- A failed shard publishes the samples of its passing tests; failed attempts, cancelled runs and zero-valued data never replace good history.
 - Bounded observation window, with a review that history adapts after tests get faster. No endless max-over-history accumulation.
-- Separate history per browser, runner class, and worker count unless a normalization is justified.
+- Separate history per working directory, explicit worker count, runner class and `history-key`; callers separate browsers and environments with `history-key`.
 - Reuse the engine's format and merger first. Change policy only when measurements show a problem.
 - Persist in the consuming repo's own Actions storage (artifact or cache); the simplest option that works.
 

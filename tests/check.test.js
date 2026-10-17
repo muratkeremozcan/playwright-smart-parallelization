@@ -7,10 +7,13 @@ const { test, describe } = require('node:test');
 const assert = require('node:assert');
 const {
   RECORD_SCHEMA,
+  START_SCHEMA,
   STATUS_SCHEMA,
   checkRun,
   latestAttempts,
+  unanswered,
   validateRecord,
+  validateStart,
   validateStatus,
 } = require('../lib/check');
 
@@ -203,4 +206,30 @@ test('validateRecord refuses something that is not a record', () => {
     /not a run record/
   );
   assert.ok(validateRecord(record(1, ['a'])));
+});
+
+describe('start markers', () => {
+  const start = (token, attempt = 2) => ({
+    schema: START_SCHEMA,
+    version: 1,
+    token,
+    run: { id: 1, attempt },
+    key: 'k',
+    job: 'test',
+  });
+
+  test('validateStart takes the marker a main step uploads and refuses anything else', () => {
+    assert.strictEqual(validateStart(start('t1')).token, 't1');
+    assert.throws(() => validateStart({ ...start('t1'), token: '' }), /not a start marker/);
+    assert.throws(() => validateStart({ schema: START_SCHEMA }), /not a start marker/);
+  });
+
+  test('tries of one upload share a token and count as one start', () => {
+    const tries = [start('t1'), start('t1'), start('t2')];
+    assert.deepStrictEqual(
+      unanswered(tries, [{ start: 't1' }]).map((s) => s.token),
+      ['t2']
+    );
+    assert.strictEqual(unanswered([start('t1'), start('t1')], []).length, 1);
+  });
 });

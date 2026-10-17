@@ -9,7 +9,9 @@
 
 const { describe, test } = require('node:test');
 const assert = require('node:assert');
+const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const YAML = require('yaml');
 
@@ -67,12 +69,12 @@ describe('triggers and permissions', () => {
     for (const name of ['prepare', 'draft']) {
       assert.strictEqual(jobs[name].if, "github.event_name == 'workflow_dispatch'");
     }
-    for (const name of ['verify', 'promote']) {
-      assert.strictEqual(
-        jobs[name].if,
-        "github.event_name == 'release' && github.event.action == 'published'"
-      );
-    }
+    const published = "github.event_name == 'release' && github.event.action == 'published'";
+    assert.strictEqual(jobs.verify.if, published);
+    assert.ok(
+      jobs.promote.if.startsWith(`${published} && `),
+      'promote also needs a current release'
+    );
     assert.strictEqual(jobs.draft.needs, 'prepare');
     assert.strictEqual(jobs.promote.needs, 'verify');
   });
@@ -170,16 +172,10 @@ describe('Marketplace and the floating major tag', () => {
     const slug = ACTION.name.toLowerCase().replace(/\s+/g, '-');
     assert.match(step.run, new RegExp(`https://github\\.com/marketplace/actions/${slug}'`));
     assert.match(step.run, /grep --fixed-strings --word-regexp --quiet "\$TAG"/);
-    assert.strictEqual(stepNames('verify').at(-1), 'Verify Marketplace publication');
-  });
-
-  test('prevents major-tag rollback and peels annotated tags to commits', () => {
-    const move = jobs.promote.steps[0];
-    assert.strictEqual(move.name, 'Move the floating major tag');
-    assert.match(move.run, /if \[ "\$RELEASE_ORDER" -lt 0 \]/);
-    assert.match(move.run, /while \[ "\$object_type" = 'tag' \]/);
-    assert.match(move.run, /exact_sha=\$\(resolve_tag_commit "\$TAG"\)/);
-    assert.match(move.run, /major_sha=\$\(resolve_tag_commit "\$MAJOR"\)/);
+    assert.deepStrictEqual(stepNames('verify').slice(-2), [
+      'Verify Marketplace publication',
+      'Recheck the release order',
+    ]);
   });
 
   test('verifies the exact and the floating tag resolve to the release commit', () => {
@@ -253,5 +249,306 @@ describe('the draft', () => {
     assert.match(DRAFT_JOB, /Tick Publish this Action to the GitHub Marketplace/);
     assert.match(DRAFT_JOB, /Click Publish release/);
     assert.match(DRAFT_JOB, />> "\$GITHUB_STEP_SUMMARY"/);
+  });
+});
+
+/**
+ * A fake `gh` on PATH for the shell of a workflow step: `gh api` over a JSON state of releases,
+ * refs and annotated tag objects, with `--jq` applied by the real jq. Every call is logged, so a
+ * test can tell whether the step changed a ref.
+ */
+const FAKE_GH = `#!/usr/bin/env node
+'use strict';
+const fs = require('node:fs');
+const { spawnSync } = require('node:child_process');
+const args = process.argv.slice(2);
+fs.appendFileSync(process.env.MOCK_LOG, JSON.stringify(args) + '\\n');
+const state = JSON.parse(fs.readFileSync(process.env.MOCK_STATE, 'utf8'));
+const save = () => fs.writeFileSync(process.env.MOCK_STATE, JSON.stringify(state));
+const fail = (message) => {
+  process.stderr.write('gh: ' + message + '\\n');
+  process.exit(1);
+};
+if (args[0] !== 'api') fail('unexpected command ' + args.join(' '));
+let method = 'GET';
+let jq = null;
+let endpoint = null;
+const fields = {};
+for (let i = 1; i < args.length; i++) {
+  const arg = args[i];
+  if (arg === '--method') method = args[++i];
+  else if (arg === '--jq') jq = args[++i];
+  else if (arg === '--paginate') continue;
+  else if (arg === '-f' || arg === '-F') {
+    const [name, ...value] = args[++i].split('=');
+    fields[name] = value.join('=');
+  } else endpoint = arg;
+}
+const repo = 'repos/' + process.env.GITHUB_REPOSITORY + '/';
+if (!endpoint || !endpoint.startsWith(repo)) fail('unexpected endpoint ' + endpoint);
+const route = endpoint.slice(repo.length);
+let body;
+let match;
+if (method === 'GET' && route === 'releases?per_page=100') {
+  if (state.releasesDown) fail('Server Error (HTTP 502)');
+  body = state.releases;
+}
+else if (method === 'GET' && (match = /^git\\/ref\\/tags\\/(.+)$/.exec(route))) {
+  const ref = state.refs[match[1]];
+  if (!ref) fail('Not Found (HTTP 404)');
+  body = { ref: 'refs/tags/' + match[1], object: ref };
+} else if (method === 'GET' && (match = /^git\\/tags\\/([0-9a-f]+)$/.exec(route))) {
+  const tag = state.tags[match[1]];
+  if (!tag) fail('Not Found (HTTP 404)');
+  body = { sha: match[1], object: tag };
+} else if (method === 'PATCH' && (match = /^git\\/refs\\/tags\\/(.+)$/.exec(route))) {
+  if (!state.refs[match[1]]) fail('Reference does not exist (HTTP 422)');
+  state.refs[match[1]] = { type: 'commit', sha: fields.sha };
+  save();
+  body = {};
+} else if (method === 'POST' && route === 'git/refs') {
+  const name = fields.ref.replace(/^refs\\/tags\\//, '');
+  if (state.refs[name]) fail('Reference already exists (HTTP 422)');
+  state.refs[name] = { type: 'commit', sha: fields.sha };
+  save();
+  body = {};
+} else fail('unexpected call ' + method + ' ' + route);
+if (jq === null) process.stdout.write(JSON.stringify(body) + '\\n');
+else {
+  const out = spawnSync('jq', ['-r', jq], { input: JSON.stringify(body), encoding: 'utf8' });
+  if (out.status !== 0) fail('jq failed: ' + out.stderr);
+  process.stdout.write(out.stdout);
+}
+`;
+
+const SHA = {
+  v100: 'a'.repeat(40),
+  v101: 'b'.repeat(40),
+  v200: 'c'.repeat(40),
+  other: 'd'.repeat(40),
+};
+const ANNOTATED = 'e'.repeat(40);
+
+const published = (...tags) =>
+  tags.map((tag) => ({ tag_name: tag, draft: false, prerelease: false }));
+
+/**
+ * Runs the shell of `step` the way the runner does, with the fake `gh` over `state`. `values` maps
+ * the expressions of the step's env, such as `needs.verify.outputs.tag`, to their values. Returns
+ * `{ status, stderr, state, mutations, output, summary }`.
+ */
+function runStep(step, state, values) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'psp-release-step-'));
+  const bin = path.join(dir, 'bin');
+  fs.mkdirSync(bin);
+  fs.writeFileSync(path.join(bin, 'gh'), FAKE_GH, { mode: 0o755 });
+  const file = (name) => path.join(dir, name);
+  fs.writeFileSync(file('state.json'), JSON.stringify(state));
+  for (const name of ['calls', 'output', 'summary']) fs.writeFileSync(file(name), '');
+  const env = {};
+  for (const [name, expression] of Object.entries(step.env || {})) {
+    const found = /^\$\{\{ (.+) \}\}$/.exec(expression);
+    assert.ok(found && found[1] in values, `the test gives ${expression}`);
+    env[name] = values[found[1]];
+  }
+  const result = spawnSync('bash', ['--noprofile', '--norc', '-eo', 'pipefail', '-c', step.run], {
+    cwd: ROOT,
+    encoding: 'utf8',
+    env: {
+      PATH: `${bin}${path.delimiter}${process.env.PATH}`,
+      HOME: process.env.HOME,
+      GITHUB_REPOSITORY: 'owner/action',
+      GITHUB_OUTPUT: file('output'),
+      GITHUB_STEP_SUMMARY: file('summary'),
+      MOCK_STATE: file('state.json'),
+      MOCK_LOG: file('calls'),
+      ...env,
+    },
+  });
+  const calls = fs
+    .readFileSync(file('calls'), 'utf8')
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
+  const run = {
+    status: result.status,
+    stderr: result.stderr,
+    state: JSON.parse(fs.readFileSync(file('state.json'), 'utf8')),
+    mutations: calls.filter((c) => c.includes('PATCH') || c.includes('POST')),
+    output: fs.readFileSync(file('output'), 'utf8'),
+    summary: fs.readFileSync(file('summary'), 'utf8'),
+  };
+  fs.rmSync(dir, { recursive: true, force: true });
+  return run;
+}
+
+/**
+ * The promote step of `tag`, given the outputs its verify job wrote when it started, which may be
+ * stale by the time the promotion runs.
+ */
+function promote(state, { tag, sha }) {
+  const major = tag.split('.')[0];
+  return runStep(jobs.promote.steps[0], state, {
+    'github.token': 'token',
+    'needs.verify.outputs.tag': tag,
+    'needs.verify.outputs.major': major,
+    'needs.verify.outputs.release-sha': sha,
+  });
+}
+
+describe('promoting the floating major against the published releases', () => {
+  test('promotions of one major run one at a time, and only for a release still the highest', () => {
+    assert.deepStrictEqual(jobs.promote.concurrency, {
+      group: 'playwright-smart-parallelization-promote-${{ needs.verify.outputs.major }}',
+      'cancel-in-progress': false,
+      queue: 'max',
+    });
+    assert.match(jobs.promote.if, /needs\.verify\.outputs\.current == 'true'/);
+    assert.strictEqual(jobs.verify.outputs.current, '${{ steps.order.outputs.current }}');
+  });
+
+  test('an older release promoted after a newer one leaves the major on the newer', () => {
+    // v1.0.0 verified while it was the highest; v1.0.1 published, verified and promoted first.
+    const state = {
+      releases: published('v10.0.0', 'v1.0.1', 'v1.0.0'),
+      refs: {
+        'v1.0.0': { type: 'commit', sha: SHA.v100 },
+        'v1.0.1': { type: 'commit', sha: SHA.v101 },
+        v1: { type: 'commit', sha: SHA.v101 },
+      },
+      tags: {},
+    };
+    const run = promote(state, { tag: 'v1.0.0', sha: SHA.v100 });
+    assert.notStrictEqual(run.status, 0);
+    assert.match(run.stderr, /v1\.0\.0 is older than v1\.0\.1/);
+    assert.deepStrictEqual(run.mutations, []);
+    assert.strictEqual(run.state.refs.v1.sha, SHA.v101);
+  });
+
+  test('the highest release moves its major, and a later older promotion does not undo it', () => {
+    const state = {
+      releases: published('v1.0.0', 'v1.0.1'),
+      refs: {
+        'v1.0.0': { type: 'commit', sha: SHA.v100 },
+        // An annotated exact tag peels to its commit.
+        'v1.0.1': { type: 'tag', sha: ANNOTATED },
+        v1: { type: 'commit', sha: SHA.v100 },
+      },
+      tags: { [ANNOTATED]: { type: 'commit', sha: SHA.v101 } },
+    };
+    const newer = promote(state, { tag: 'v1.0.1', sha: SHA.v101 });
+    assert.strictEqual(newer.status, 0, newer.stderr);
+    assert.strictEqual(newer.mutations.length, 1);
+    assert.ok(newer.mutations[0].includes('PATCH'));
+    assert.strictEqual(newer.state.refs.v1.sha, SHA.v101);
+
+    const older = promote(newer.state, { tag: 'v1.0.0', sha: SHA.v100 });
+    assert.notStrictEqual(older.status, 0);
+    assert.deepStrictEqual(older.mutations, []);
+    assert.strictEqual(older.state.refs.v1.sha, SHA.v101);
+  });
+
+  test('a major with no tag yet is created at the release', () => {
+    const state = {
+      releases: published('v1.0.0'),
+      refs: { 'v1.0.0': { type: 'commit', sha: SHA.v100 } },
+      tags: {},
+    };
+    const run = promote(state, { tag: 'v1.0.0', sha: SHA.v100 });
+    assert.strictEqual(run.status, 0, run.stderr);
+    assert.strictEqual(run.mutations.length, 1);
+    assert.ok(run.mutations[0].includes('POST'));
+    assert.deepStrictEqual(run.state.refs.v1, { type: 'commit', sha: SHA.v100 });
+  });
+
+  test('two majors progress independently', () => {
+    const state = {
+      releases: published('v2.0.0', 'v1.0.1', 'v1.0.0'),
+      refs: {
+        'v1.0.0': { type: 'commit', sha: SHA.v100 },
+        'v1.0.1': { type: 'commit', sha: SHA.v101 },
+        'v2.0.0': { type: 'commit', sha: SHA.v200 },
+        v1: { type: 'commit', sha: SHA.v100 },
+      },
+      tags: {},
+    };
+    const two = promote(state, { tag: 'v2.0.0', sha: SHA.v200 });
+    assert.strictEqual(two.status, 0, two.stderr);
+    assert.strictEqual(two.state.refs.v2.sha, SHA.v200);
+    assert.strictEqual(two.state.refs.v1.sha, SHA.v100, 'v2 leaves v1 alone');
+
+    // v2.0.0 is the highest release overall; v1.0.1 is still the highest of v1.
+    const one = promote(two.state, { tag: 'v1.0.1', sha: SHA.v101 });
+    assert.strictEqual(one.status, 0, one.stderr);
+    assert.strictEqual(one.state.refs.v1.sha, SHA.v101);
+    assert.strictEqual(one.state.refs.v2.sha, SHA.v200, 'v1 leaves v2 alone');
+  });
+
+  test('a repeated promotion to the same commit succeeds and changes nothing', () => {
+    const state = {
+      releases: published('v1.0.1', 'v1.0.0'),
+      refs: {
+        'v1.0.1': { type: 'commit', sha: SHA.v101 },
+        v1: { type: 'commit', sha: SHA.v101 },
+      },
+      tags: {},
+    };
+    const run = promote(state, { tag: 'v1.0.1', sha: SHA.v101 });
+    assert.strictEqual(run.status, 0, run.stderr);
+    assert.deepStrictEqual(run.mutations, []);
+    assert.match(run.summary, /v1 already resolves to b{40}/);
+  });
+
+  test('verify fails a release that a newer one superseded while it was verified', () => {
+    const step = jobs.verify.steps[stepIndex('verify', 'Recheck the release order')];
+    const values = (tag) => ({
+      'github.token': 'token',
+      'steps.release.outputs.tag': tag,
+      'steps.release.outputs.major': 'v1',
+    });
+    const state = { releases: published('v1.0.1', 'v1.0.0', 'v10.0.0'), refs: {}, tags: {} };
+
+    const older = runStep(step, state, values('v1.0.0'));
+    assert.notStrictEqual(older.status, 0);
+    assert.match(older.stderr, /v1\.0\.0 was superseded by v1\.0\.1/);
+    assert.strictEqual(older.output, '', 'a superseded release has no current output');
+
+    const current = runStep(step, state, values('v1.0.1'));
+    assert.strictEqual(current.status, 0, current.stderr);
+    assert.strictEqual(current.output, 'current=true\n');
+  });
+
+  test('a releases API that fails stops the promotion before any tag moves', () => {
+    // v1.0.1 is the highest, but the read fails; a promotion of the older v1.0.0 must not proceed.
+    const state = {
+      releases: published('v1.0.1', 'v1.0.0'),
+      releasesDown: true,
+      refs: {
+        'v1.0.0': { type: 'commit', sha: SHA.v100 },
+        v1: { type: 'commit', sha: SHA.v101 },
+      },
+      tags: {},
+    };
+    const run = promote(state, { tag: 'v1.0.0', sha: SHA.v100 });
+    assert.notStrictEqual(run.status, 0);
+    assert.match(run.stderr, /HTTP 502/);
+    assert.deepStrictEqual(run.mutations, []);
+    assert.strictEqual(run.state.refs.v1.sha, SHA.v101);
+  });
+
+  test('an exact tag on another commit aborts the promotion', () => {
+    const state = {
+      releases: published('v1.0.1', 'v1.0.0'),
+      refs: {
+        'v1.0.1': { type: 'commit', sha: SHA.other },
+        v1: { type: 'commit', sha: SHA.v100 },
+      },
+      tags: {},
+    };
+    const run = promote(state, { tag: 'v1.0.1', sha: SHA.v101 });
+    assert.notStrictEqual(run.status, 0);
+    assert.match(run.stderr, /v1\.0\.1 resolves to d{40} instead of b{40}/);
+    assert.deepStrictEqual(run.mutations, []);
+    assert.strictEqual(run.state.refs.v1.sha, SHA.v100);
   });
 });
