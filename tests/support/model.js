@@ -9,7 +9,7 @@
  * - the Actions cache: immutable keys; a save reserves its key at once and finalizes it one tick
  *   later, so a save onto a reserved or finalized key changes nothing and an exact restore of a
  *   key still uploading misses; a restore by prefix returns the newest entry created (what GitHub
- *   documents);
+ *   documents), and a lookup the key that restore would match;
  * - the artifact store, one per run: a name is created once in a run, a second upload of it fails,
  *   and it becomes visible to `find`, `list` and `download` one tick after its upload starts.
  *
@@ -27,7 +27,9 @@ const { finish } = require('../../lib/finish');
 const { envName } = require('../../lib/inputs');
 
 const ROOT = path.join(__dirname, '..', '..');
-const REPORTER = path.join(ROOT, 'reporter', 'reporter.js');
+// The bundled reporter, the file the main step copies for $PSP_ARGS (tests/dist.test.js keeps it
+// current with reporter/).
+const REPORTER = path.join(ROOT, 'dist', 'reporter.js');
 
 function newWorld() {
   return { cache: new Map(), created: 0, runs: new Map(), nextId: 1, log: [], before: null };
@@ -94,6 +96,11 @@ function modelCache(world, workspace, { available = true, readable = true, writa
       const found = cacheRestore(world, key, restoreKeys);
       if (found.entry) writeTree(path.join(workspace, dir), found.entry.files);
       return found.matched;
+    },
+    async lookup(dir, key, restoreKeys = []) {
+      if (world.before) await world.before('lookup', key);
+      await tick();
+      return cacheRestore(world, key, restoreKeys).matched;
     },
     async save(dir, key) {
       if (world.before) await world.before('save', key);

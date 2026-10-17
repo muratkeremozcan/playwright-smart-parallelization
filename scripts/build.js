@@ -83,6 +83,9 @@ async function build(out = path.join(ROOT, 'dist')) {
     outfile: path.join(out, 'index.js'),
     target: 'node24',
     minify: true,
+    // The toolkit tells its errors apart by class name (`error.name === ReserveCacheError.name`),
+    // so a minified name would log a lost cache reservation as a warning on every shard.
+    keepNames: true,
     plugins: [legacyBuffer],
   });
   await esbuild.build({

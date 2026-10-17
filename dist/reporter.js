@@ -46,6 +46,24 @@ var require_util = __commonJS({
       if (m < 60) return `${m}m${String(s % 60).padStart(2, "0")}s`;
       return `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}m`;
     }
+    async function mapLimit(items, limit, fn) {
+      const results = new Array(items.length);
+      let next = 0;
+      let failed = null;
+      const lane = async () => {
+        while (next < items.length && !failed) {
+          const index = next++;
+          try {
+            results[index] = await fn(items[index], index);
+          } catch (error) {
+            failed = failed || { error };
+          }
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(limit, items.length) }, lane));
+      if (failed) throw failed.error;
+      return results;
+    }
     function compareVersions(a, b) {
       const pa = String(a).split(/[.-]/).map((part) => Number.parseInt(part, 10) || 0);
       const pb = String(b).split(/[.-]/).map((part) => Number.parseInt(part, 10) || 0);
@@ -58,6 +76,7 @@ var require_util = __commonJS({
       canonicalJson,
       compareVersions,
       formatMs: formatMs2,
+      mapLimit,
       readJsonFile,
       sha256: sha2562,
       short: short2,
