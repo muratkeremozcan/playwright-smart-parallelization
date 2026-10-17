@@ -11,7 +11,7 @@ const path = require('node:path');
 const { actionInputs, readInputs, ACTION_INPUTS } = require('../lib/inputs');
 const { decide, preliminary, reporterPath, runAgeDays } = require('../lib/setup');
 const { pin } = require('../lib/pin');
-const { trust } = require('../lib/trust');
+const { onDefaultBranch, trust } = require('../lib/trust');
 const store = require('../lib/store');
 const { toolkitCache } = require('../lib/cache');
 const { fetchJobs, markdown, overheadFrom, simulate } = require('../lib/summary');
@@ -417,6 +417,32 @@ describe('the pin', () => {
     );
     await assert.rejects(run(), /not a pin of this job and run/);
   });
+});
+
+test('a run is on the default branch only for a push or schedule of that branch', () => {
+  const event = (payload) => {
+    const file = path.join(tmp('psp-event-'), 'event.json');
+    fs.writeFileSync(file, JSON.stringify(payload));
+    return file;
+  };
+  const repo = { repository: { default_branch: 'main' } };
+  const on = (env) => onDefaultBranch({ GITHUB_EVENT_NAME: 'push', ...env });
+  assert.strictEqual(on({ GITHUB_REF: 'refs/heads/main', GITHUB_EVENT_PATH: event(repo) }), true);
+  assert.strictEqual(on({ GITHUB_REF: 'refs/heads/dev', GITHUB_EVENT_PATH: event(repo) }), false);
+  assert.strictEqual(
+    on({
+      GITHUB_EVENT_NAME: 'pull_request',
+      GITHUB_REF: 'refs/heads/main',
+      GITHUB_EVENT_PATH: event({ ...repo, pull_request: {} }),
+    }),
+    false
+  );
+  assert.strictEqual(on({ GITHUB_REF: 'refs/heads/main' }), false, 'no payload');
+  assert.strictEqual(
+    on({ GITHUB_EVENT_NAME: 'schedule', GITHUB_REF: 'refs/heads/main' }),
+    true,
+    'a schedule runs on the default branch'
+  );
 });
 
 describe('publish-history', () => {
@@ -864,6 +890,15 @@ describe('the publish loop', () => {
       JSON.parse(world.cache.get(cacheKey(key, 20261016, 2)).files['history.json']).runs,
       [1, 2]
     );
+  });
+
+  test('off the default branch a writer holds no bytes, so it downloads the newest entry', async () => {
+    // Another ref also reads the default branch's scope, where the same key can hold other bytes.
+    const world = seeded();
+    const ops = traced(world);
+    const { state } = await publishOne(world, 2, { held: null });
+    assert.strictEqual(state.status, 'published');
+    assert.deepStrictEqual(ops, ['restore ', 'save 20261016-2']);
   });
 
   test('a writer that holds an older entry downloads the newest one', async () => {
