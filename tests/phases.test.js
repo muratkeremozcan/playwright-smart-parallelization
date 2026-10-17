@@ -291,7 +291,7 @@ describe('run checks everything before Playwright starts', () => {
     );
   });
 
-  test('disabled: the plain command with --shard and the workers, no reporter, no blob variable', () => {
+  test('disabled: the plain command with --shard and the workers, no reporter, the blob file in the Action folder', () => {
     const { j, plan } = planned('disabled');
     const setup = run.setup({ inputs: { plan, shard: '3' }, env: j.env });
     assert.strictEqual(
@@ -308,10 +308,7 @@ describe('run checks everything before Playwright starts', () => {
     ]);
     const cmd = run.command({ inputs: { plan, shard: '3' }, env: j.env });
     assert.ok(!cmd.argv.some((arg) => arg.startsWith('--add-reporter')));
-    assert.deepStrictEqual(
-      Object.keys(cmd.env).filter((name) => name.startsWith('PLAYWRIGHT_BLOB_')),
-      []
-    );
+    assert.deepStrictEqual(cmd.env, run.blobOutput(setup.outputs['blob-path'], 3));
   });
 
   test('an inherited PLAYWRIGHT_BLOB_OUTPUT_FILE cannot move the reports out of the upload path', () => {
