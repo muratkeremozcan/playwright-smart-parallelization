@@ -941,7 +941,8 @@ var require_check = __commonJS({
     }
     var unanswered = (starts, records) => {
       const answered = new Set(records.map((r) => r.start).filter(Boolean));
-      return starts.filter((s) => !answered.has(s.token));
+      const byToken = new Map(starts.map((s) => [s.token, s]));
+      return [...byToken.values()].filter((s) => !answered.has(s.token));
     };
     function unrecordedProblems(latest, total, unrecorded) {
       const problems = [];
@@ -1122,7 +1123,7 @@ var require_identity = __commonJS({
       const corpus = record.corpusSha ? record.corpusSha.slice(0, 12) : "none";
       return `psp-record-${record.job || "job"}-${record.key.slice(0, 12)}-${corpus}-${record.shard.current}of${record.shard.total}-attempt-${record.run.attempt}`;
     }
-    var startName = (key, job, token, attempt) => `psp-start-${job || "job"}-${key.slice(0, 12)}-${token}-attempt-${attempt}`;
+    var startName = (key, job, token, attempt, tryIndex = 1) => `psp-start-${job || "job"}-${key.slice(0, 12)}-${token}-${tryIndex}-attempt-${attempt}`;
     module2.exports = {
       CACHE_PATH,
       HISTORY_FILE,

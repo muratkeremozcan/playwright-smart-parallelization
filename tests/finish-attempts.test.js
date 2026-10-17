@@ -164,6 +164,15 @@ describe('the start marker', () => {
     assert.strictEqual(job.user.status, 0);
   });
 
+  test('a disabled job beside a job that left no record still fails coverage', async () => {
+    const run = newRun();
+    await run.job(1, 1, good, { inputs: { enabled: 'false' } });
+    await run.job(1, 1, broken, { job: 'other' });
+    const finished = await run.finish(1);
+    assert.strictEqual(finished.result.ok, false);
+    assert.strictEqual(finished.io.outputs.coverage, 'failed');
+  });
+
   test('a second job that started and left no record fails coverage too', async () => {
     const run = newRun();
     for (const shard of [1, 2]) await run.job(shard, 1);
