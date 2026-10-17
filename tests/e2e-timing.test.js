@@ -5,7 +5,7 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { judge, stepTimes } = require('./e2e/timing');
+const { judge, pipelineJobs, stepTimes } = require('./e2e/timing');
 
 const PREFIX = '[playwright-smart-parallelization]';
 
@@ -35,7 +35,7 @@ test('holds the median shard job to the budget and any one shard job to twice it
 
   const slow = judge({
     shards: [shard('a', 2, 2), shard('b', 2, 2)],
-    finish: null,
+    finish: { name: 'f', finish: 1 },
     shardBudget: 3,
     finishBudget: 4,
   });
@@ -43,7 +43,7 @@ test('holds the median shard job to the budget and any one shard job to twice it
 
   const outlier = judge({
     shards: [shard('a', 1, 1), shard('b', 1, 1), shard('c', 3, 4)],
-    finish: null,
+    finish: { name: 'f', finish: 1 },
     shardBudget: 3,
     finishBudget: 4,
   });
@@ -65,11 +65,43 @@ test('a missing time, no shard job or a slow finish fails the check', () => {
   ]);
   assert.deepStrictEqual(
     judge({ shards: [], finish: null, shardBudget: 3, finishBudget: 4 }).problems,
-    ['no shard job of this pipeline was found']
+    ['no shard job of this pipeline was found', 'no finish job of this pipeline was found']
   );
   assert.match(
     judge({ shards: [], finish: { name: 'f', finish: 5 }, shardBudget: 3, finishBudget: 4 })
       .problems[1],
     /finish step took 5\.00s, over the budget of 4s/
   );
+});
+
+test("picks the newest execution of each of its own pipeline's jobs, also on a re-run of the assert job alone", () => {
+  const job = (name, attempt, conclusion = 'success', extra = {}) => ({
+    name,
+    run_attempt: attempt,
+    conclusion,
+    status: 'completed',
+    ...extra,
+  });
+  const jobs = [
+    job('leg / test (1, false)', 1),
+    job('leg / test (2, false)', 1, 'failure'),
+    job('leg / test (2, false)', 2),
+    job('leg / warm (1)', 1),
+    job('leg / finish', 1),
+    job('leg / assert', 1, 'failure'),
+    job('leg / assert', 2, null, { status: 'in_progress', runner_name: 'r2' }),
+    job('other / test (1, false)', 1),
+    job('leg / test (3, false)', 1, 'cancelled'),
+  ];
+  const picked = pipelineJobs(jobs, 'r2');
+  assert.deepStrictEqual(
+    picked.shards.map((j) => [j.name, j.run_attempt]),
+    [
+      ['leg / test (1, false)', 1],
+      ['leg / test (2, false)', 2],
+      ['leg / warm (1)', 1],
+    ]
+  );
+  assert.strictEqual(picked.finish.name, 'leg / finish');
+  assert.throws(() => pipelineJobs(jobs, 'nobody'), /no running job of this run has the runner/);
 });
