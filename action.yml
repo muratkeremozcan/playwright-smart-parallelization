@@ -33,6 +33,10 @@ inputs:
       never. Fork pull requests and pull_request_target never publish.
     required: false
     default: 'auto'
+  github-token:
+    description: 'Reads the age of the run from the runs API, only when a re-run finds no pin and artifacts are kept under 30 days.'
+    required: false
+    default: ${{ github.token }}
 
 outputs:
   mode:

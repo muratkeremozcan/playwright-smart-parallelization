@@ -173,7 +173,8 @@ jobs:
           history-key: ${{ inputs.history-key }}
           enabled: ${{ inputs.enabled }}
           fail-test: ${{ inputs.fail-test }}
-          expect-mode: ${{ github.run_attempt > 1 && inputs.expect-mode == 'native' && 'balanced' || inputs.expect-mode }}
+          # A re-run reads the pin of the first attempt, so it expects the same mode.
+          expect-mode: ${{ inputs.expect-mode }}
           expect-sha: ${{ matrix.rerun && needs.setup.outputs.seed-sha || '' }}
           barrier: ${{ needs.setup.outputs.barrier }}
 
@@ -287,7 +288,6 @@ jobs:
           ATTEMPT: ${{ github.run_attempt }}
           BARRIER: ${{ inputs.barrier }}
           PREFIX: ${{ needs.setup.outputs.prefix }}
-          SHARDS: ${{ inputs.shards }}
         run: |
           echo "newest entry before: ${BEFORE:-none}, after: ${AFTER:-none}, pinned: ${PINNED:-false}"
           fail() { echo "::error::$1"; exit 1; }
@@ -304,9 +304,10 @@ jobs:
               [ -n "$AFTER" ] || fail "nothing was published"
               if [ "$ATTEMPT" = 1 ] && [ "$AFTER" = "$BEFORE" ]; then fail "nothing was published"; fi
               node tests/e2e/history.js expect-samples "$RUN_ID" records "$FAIL_TEST"
-              # Eight shards at once, cold: one entry per shard, the chain at 8.
+              # Eight shards at once, cold: one entry per shard that had a passing test.
               if [ "$BARRIER" = true ] && [ "$ATTEMPT" = 1 ]; then
-                case "$AFTER" in "$PREFIX"*-"$SHARDS") ;; *) fail "expected the entry ${SHARDS} of a fresh chain, got $AFTER" ;; esac
+                n=$(node tests/e2e/history.js publishers "$RUN_ID" records)
+                case "$AFTER" in "$PREFIX"*-"$n") ;; *) fail "expected the entry $n of a fresh chain, got $AFTER" ;; esac
               fi ;;
             *) fail "unknown expectation $EXPECTED" ;;
           esac

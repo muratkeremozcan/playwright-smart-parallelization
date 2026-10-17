@@ -99,7 +99,7 @@ runs:
     - name: Require the outcome of the Playwright step
       shell: bash
       env:
-        OUTCOME: ${{ steps.plain.outcome || steps.shell.outcome || steps.npm.outcome }}
+        OUTCOME: ${{ inputs.shape == 'npm' && steps.npm.outcome || inputs.shape == 'shell' && steps.shell.outcome || steps.plain.outcome }}
         FAIL_TEST: ${{ inputs.fail-test }}
       run: |
         echo "the Playwright step ended $OUTCOME"

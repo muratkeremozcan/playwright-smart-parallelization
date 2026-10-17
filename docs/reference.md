@@ -24,6 +24,7 @@ Facts about the Action that the README example does not need. Every input is in 
 
 - `finish` reads the run records the shards upload as `psp-record-*` artifacts, so it needs no blob reports and merges none; your own merge step stays yours.
 - It checks every sharded job of the run; with several sharded jobs and a finish for each, give each job its own `history-key` and pass the same one to its finish.
+- A matrix with another dimension next to `shard` that runs the same tests, such as `node: [20, 22]`, needs its own `history-key` per leg, such as `history-key: node-${{ matrix.node }}`, so each leg keeps its own records and history.
 - It reads the jobs API for the per-shard overhead, so its job needs `permissions: actions: read`.
 
 ## History
@@ -38,4 +39,4 @@ Facts about the Action that the README example does not need. Every input is in 
 - The Action runs on the runner's Node 24. The reporter runs in your Node, which Playwright 1.63 and later needs at 20 or above.
 - Playwright below 1.63, an unknown Playwright version, or Yarn Plug'n'Play leave `$PSP_ARGS` empty: plain `--shard`.
 - Without an Actions cache, or with a cache mode that refuses reads, every shard runs native; a cache mode that refuses reads or writes publishes nothing.
-- The pin lives as long as the run's artifacts. With artifacts kept under 30 days, the time a run can be re-run, a re-run that finds no pin stops before any test; start a new run.
+- The pin lives as long as the run's artifacts. With artifacts kept under 30 days, the time a run can be re-run, a re-run that finds no pin and is older than the retention stops before any test; start a new run. The Action reads the run's age with `github-token`, which needs `actions: read`.

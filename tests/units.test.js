@@ -9,7 +9,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { actionInputs, readInputs, ACTION_INPUTS } = require('../lib/inputs');
-const { decide, preliminary, reporterPath } = require('../lib/setup');
+const { decide, preliminary, reporterPath, runAgeDays } = require('../lib/setup');
 const { pin } = require('../lib/pin');
 const { trust } = require('../lib/trust');
 const store = require('../lib/store');
@@ -149,6 +149,19 @@ describe('the main step decides the mode of its shard', () => {
   });
 });
 
+test('the run age comes from the runs API, and is unknown when it cannot be read', async () => {
+  const env = { GITHUB_REPOSITORY: 'o/r', GITHUB_RUN_ID: '9' };
+  const created = new Date(Date.now() - 2 * 86400000).toISOString();
+  const age = await runAgeDays(
+    env,
+    async () => ({ ok: true, json: async () => ({ created_at: created }) }),
+    't'
+  );
+  assert.ok(age > 1.9 && age < 2.1);
+  assert.strictEqual(await runAgeDays(env, async () => ({ ok: false, status: 403 }), 't'), null);
+  assert.strictEqual(await runAgeDays(env, async () => ({}), ''), null);
+});
+
 describe('the pin', () => {
   const setupPin = () => {
     const j = job();
@@ -214,6 +227,15 @@ describe('the pin', () => {
     });
     // Artifacts kept shorter than a run can be re-run: a missing pin may have expired.
     await assert.rejects(setupPin().run({ attempt: 2, retentionDays: '7' }), /kept 7 days/);
+    await assert.rejects(
+      setupPin().run({ attempt: 2, retentionDays: '7', runAge: async () => 9 }),
+      /kept 7 days/
+    );
+    // A run younger than the retention has lost no artifact: no shard ever pinned.
+    assert.deepStrictEqual(
+      await setupPin().run({ attempt: 2, retentionDays: '7', runAge: async () => 0.5 }),
+      { matchedKey: '', history: null }
+    );
     assert.ok(await setupPin().run({ attempt: 1, retentionDays: '7' }));
   });
 

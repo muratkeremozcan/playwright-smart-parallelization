@@ -15,6 +15,9 @@
  *                                                 one sample of RUN_ID for every test that passed
  *                                                 in the records, and none for a test whose title
  *                                                 contains EXCLUDED
+ *   node tests/e2e/history.js publishers RUN_ID RECORDS_DIR
+ *                                                 print how many shards of RUN_ID had a passing
+ *                                                 test, so published an entry of their own
  *   node tests/e2e/history.js expect-runs ID...   fail unless the restored history holds these runs
  */
 
@@ -102,5 +105,9 @@ if (command === 'key') {
 } else if (command === 'seed') seed(args[0], args[1]);
 else if (command === 'sha') process.stdout.write(`sha=${sha256(fs.readFileSync(file, 'utf8'))}\n`);
 else if (command === 'expect-samples') expectSamples(args[0], args[1], args[2]);
-else if (command === 'expect-runs') expectRuns(args);
+else if (command === 'publishers') {
+  const id = Number(args[0]);
+  const n = records(args[1]).filter((r) => r.run.id === id && r.tests.some((t) => t.sample_ms));
+  process.stdout.write(`${n.length}\n`);
+} else if (command === 'expect-runs') expectRuns(args);
 else fail(`unknown command ${command}`);

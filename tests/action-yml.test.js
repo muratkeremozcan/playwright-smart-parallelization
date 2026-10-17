@@ -19,7 +19,11 @@ const finish = read('finish/action.yml');
 
 describe('action.yml', () => {
   test('declares the inputs the main step reads, every one optional with a default', () => {
-    assert.deepStrictEqual(Object.keys(action.inputs).sort(), [...ACTION_INPUTS].sort());
+    assert.deepStrictEqual(
+      Object.keys(action.inputs).sort(),
+      [...ACTION_INPUTS, 'github-token'].sort()
+    );
+    assert.strictEqual(action.inputs['github-token'].default, '${{ github.token }}');
     for (const [name, input] of Object.entries(action.inputs)) {
       assert.strictEqual(input.required, false, name);
       assert.strictEqual(typeof input.default, 'string', name);
