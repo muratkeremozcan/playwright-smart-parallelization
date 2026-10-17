@@ -203,16 +203,26 @@ describe('cold start, warm run, failed shard and rollback', () => {
     assert.deepStrictEqual(outcome(off.finish), ['disabled', 'not checked', 'unchanged']);
   });
 
-  test('rollback: enabled false runs plain --shard, no planning reporter, no history write', () => {
-    const before = newest(ctx.world, cold.plan.key);
-    const off = pipeline(ctx, 104, { inputs: { enabled: 'false' } });
+  test('rollback: enabled false runs plain --shard, no reporter at all, no history write', () => {
+    // Its own run: the same cache, and none of the artifacts the other runs uploaded, so a blob
+    // report of another run cannot stand in for one of this run.
+    const own = {
+      ws: ctx.ws,
+      world: { ...newWorld(), cache: ctx.world.cache, created: ctx.world.created },
+    };
+    const before = newest(own.world, cold.plan.key);
+    const off = pipeline(own, 104, { inputs: { enabled: 'false' } });
     assert.strictEqual(off.plan.mode, 'disabled');
     for (const s of off.shards) {
       assert.strictEqual(s.outcome, 'success');
-      assert.doesNotMatch(s.stdout, /reporter\.js|plan [0-9a-f]{12}/);
-      assert.match(s.stdout, /--add-reporter=blob/);
+      assert.doesNotMatch(s.stdout, /--add-reporter|plan [0-9a-f]{12}/);
     }
-    const uploaded = [...ctx.world.artifacts].filter(([n]) => n.includes('-104-'));
+    assert.deepStrictEqual(
+      [...own.world.artifacts.keys()].filter((n) => !n.startsWith('psp-record-')),
+      [],
+      'no blob report and no merged report'
+    );
+    const uploaded = [...own.world.artifacts].filter(([n]) => n.includes('-104-'));
     assert.strictEqual(uploaded.length, 2, 'one status record per shard');
     for (const [, files] of uploaded) {
       assert.strictEqual(
@@ -221,7 +231,7 @@ describe('cold start, warm run, failed shard and rollback', () => {
       );
     }
     assert.strictEqual(off.finish.outcome, 'success');
-    assert.deepStrictEqual(newest(ctx.world, cold.plan.key), before);
+    assert.deepStrictEqual(newest(own.world, cold.plan.key), before);
     // Rollback checks the shard exit codes only, and says so.
     assert.deepStrictEqual(outcome(off.finish), ['disabled', 'not checked', 'unchanged']);
     assert.match(off.finish.summary, /Coverage \*\*not checked\*\*/);

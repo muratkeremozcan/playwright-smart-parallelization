@@ -41,10 +41,10 @@ describe('main', () => {
 
 test(`the Node guard fails below Node ${MIN_NODE} with a message, before any module loads`, () => {
   assert.match(
-    nodeGuard('16.20.2'),
-    /needs Node 18 or later on the runner's PATH, found 16\.20\.2/
+    nodeGuard('18.20.5'),
+    /needs Node 20 or later on the runner's PATH, found 18\.20\.5/
   );
-  assert.strictEqual(nodeGuard('18.0.0'), null);
+  assert.strictEqual(nodeGuard('20.0.0'), null);
   assert.strictEqual(nodeGuard(process.versions.node), null);
   const source = fs.readFileSync(path.join(ROOT, 'main.js'), 'utf8');
   assert.ok(source.indexOf('nodeGuard()') < source.indexOf("require('./lib/"));

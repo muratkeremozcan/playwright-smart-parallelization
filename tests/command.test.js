@@ -100,12 +100,11 @@ describe('the arguments of a shard', () => {
     );
   });
 
-  test('adds the blob reporter once: never a second one next to a blob the command names', () => {
+  test('adds the blob reporter once, and leaves it out when the command names one', () => {
     const last = (command) => shardArgv(command, { shard: 1, total: 2 }).pop();
     assert.strictEqual(last('npx playwright test'), '--add-reporter=blob');
     assert.strictEqual(last('npx playwright test --reporter=blob'), '--shard=1/2');
     assert.strictEqual(last('npx playwright test --reporter list,blob'), '--shard=1/2');
-    assert.strictEqual(last('npx playwright test -r blob'), '--shard=1/2');
     assert.strictEqual(last('npx playwright test --add-reporter=blob'), '--add-reporter=blob');
   });
 

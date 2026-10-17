@@ -50,21 +50,21 @@ context: []
 
 ## Code Map
 
-- `lib/run.js` `setup`, `command`, `shardArgv` in `lib/command.js` -- add the blob reporter and its env; drop `blob-report`.
-- `lib/identity.js` `artifactNames` -- blob artifact names.
-- `lib/finish.js` `check`, `report`, `conclude`, `trust` -- outputs, coverage state, local merge, merge config.
-- `lib/summary.js` `fetchJobs`, `markdown` -- 403 message, coverage line.
-- `lib/prepare.js` -- `reason` output and job summary.
-- `scripts/render-action.js` -- inputs and outputs; `action.yml` is rendered.
-- `main.js` -- Node guard.
-- `.github/workflows/e2e-pipeline.yml`, `test.yml` -- assertions and the lowest-Node leg.
-- `README.md` -- Usage only.
+- `lib/run.js` `setup`, `command`, `shardArgv` in `lib/command.js`: add the blob reporter and its env; drop `blob-report`.
+- `lib/identity.js` `artifactNames`: blob artifact names.
+- `lib/finish.js` `check`, `report`, `conclude`, `trust`: outputs, coverage state, local merge, merge config.
+- `lib/summary.js` `fetchJobs`, `markdown`: 403 message, coverage line.
+- `lib/prepare.js`: `reason` output and job summary.
+- `scripts/render-action.js`: inputs and outputs; `action.yml` is rendered.
+- `main.js`: Node guard.
+- `.github/workflows/e2e-pipeline.yml`, `test.yml`: assertions and the lowest-Node leg.
+- `README.md`: Usage only.
 
 ## Tasks & Acceptance
 
 **Execution:**
 - [x] each matrix row, code and test in the files above
-- [x] `docs/decision-record.md` -- one line each for the blob reporter and the merge source
+- [x] `docs/decision-record.md`: one line each for the blob reporter and the merge source
 
 **Acceptance Criteria:**
 - Given the e2e workflow, when it runs, then every leg asserts the finish outputs, the merged report and the blob artifact names, the rollback leg asserts coverage `not checked`, and one leg runs prepare and finish on the lowest supported Node.
@@ -73,9 +73,10 @@ context: []
 
 ## Plan Change Log
 
-- 2026-10-17: lowest Node is 18, the first with a global `fetch` for the jobs API; the code needs nothing newer. The cold e2e leg runs prepare and finish on Node 18.
+- 2026-10-17: lowest Node is 20: finish runs Playwright's CLI to merge the reports, and Playwright 1.64 needs Node 20. The cold e2e leg runs prepare and finish on Node 20.
 - 2026-10-17: finish also outputs `overhead-ms`, which the e2e legs assert to prove the jobs API was read (row 1).
-- 2026-10-17: the blob reporter is added in disabled mode too, so rollback still has a merged report; it is skipped when the command names a blob reporter.
+- 2026-10-17: disabled mode adds no reporter and no blob variable (Playwright below 1.63 has no `--add-reporter`), so rollback has no merged report; balanced and native skip the added blob reporter when the command names one.
+- 2026-10-17: every Node step after the first reads the inputs from a file the first step writes, so the plan appears once in the log; the token is passed to the jobs-API step only.
 - 2026-10-17: download-artifact@v8 puts a single pattern match straight into the path; finish reads both layouts (unchanged).
 
 ## Review Triage Log
@@ -83,4 +84,4 @@ context: []
 ## Verification
 
 **Commands:**
-- `npm run validate` -- expected: exit 0
+- `npm run validate`: expected exit 0

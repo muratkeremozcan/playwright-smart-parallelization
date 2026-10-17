@@ -65,7 +65,7 @@ jobs:
     with:
       history-key: e2e-cold-${{ github.run_id }}
       # prepare and finish on the lowest Node the Action supports (main.js).
-      node-version: '18'
+      node-version: '20'
       expect-mode: native
       expect-history: changed
 

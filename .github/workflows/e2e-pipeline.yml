@@ -102,6 +102,15 @@ jobs:
         with:
           node-version: ${{ inputs.node-version }}
 
+      - if: inputs.node-version != ''
+        env:
+          EXPECTED: ${{ inputs.node-version }}
+        run: |
+          case "$(node --version)" in
+            "v$EXPECTED".*) echo "prepare runs on $(node --version)" ;;
+            *) echo "::error::expected Node $EXPECTED, got $(node --version)"; exit 1 ;;
+          esac
+
       - id: psp
         uses: ./
         with:
@@ -341,8 +350,10 @@ jobs:
             *) echo "::error::unknown expectation $EXPECTED"; exit 1 ;;
           esac
 
+      # Rollback adds no reporter, so it uploads no blob report and merges nothing.
       - name: Require the blob reports and the merged report
         env:
+          ROLLBACK: ${{ inputs.expect-coverage == 'not checked' }}
           GH_TOKEN: ${{ github.token }}
           PLAN: ${{ needs.prepare.outputs.plan }}
           REPO: ${{ github.repository }}
@@ -351,6 +362,11 @@ jobs:
           key12=$(jq -r '.key[0:12]' <<< "$PLAN")
           total=$(jq -r .total <<< "$PLAN")
           names=$(gh api --paginate "repos/$REPO/actions/runs/$RUN_ID/artifacts?per_page=100" --jq '.artifacts[].name')
+          if [ "$ROLLBACK" = true ]; then
+            ! grep -qE "^(blob-report|playwright-report)-$key12-" <<< "$names" \
+              || { echo "::error::a rollback run uploaded a blob or merged report"; exit 1; }
+            exit 0
+          fi
           for shard in $(seq 1 "$total"); do
             grep -qE "^blob-report-$key12-$shard-attempt-[0-9]+$" <<< "$names" \
               || { echo "::error::no blob-report-$key12-$shard-attempt-N artifact"; exit 1; }
