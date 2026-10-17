@@ -115,7 +115,10 @@ describe('the main step decides the mode of its shard', () => {
     const key = 'k';
     const text = serializeHistory(someHistory(key));
     const matched = cacheKey(key, 3, 4);
-    assert.strictEqual(decide({ matchedKey: '', history: null }, key).reason, 'no history yet');
+    assert.strictEqual(
+      decide({ matchedKey: '', history: null, note: null }, key).reason,
+      'no history yet'
+    );
     const balanced = decide({ matchedKey: matched, history: text }, key);
     assert.deepStrictEqual(
       [balanced.mode, balanced.sha, balanced.slot],
@@ -186,7 +189,7 @@ describe('the pin', () => {
     const first = serializeHistory(someHistory(p.key));
     cacheSave(world, cacheKey(p.key, 1, 1), { 'history.json': Buffer.from(first) });
     const a = await run();
-    assert.deepStrictEqual(a, { matchedKey: cacheKey(p.key, 1, 1), history: first });
+    assert.deepStrictEqual(a, { matchedKey: cacheKey(p.key, 1, 1), history: first, note: null });
     assert.ok(pinArtifact(world, p));
     cacheSave(world, cacheKey(p.key, 1, 2), { 'history.json': Buffer.from('newer') });
     assert.deepStrictEqual(await run(), a);
@@ -224,6 +227,7 @@ describe('the pin', () => {
     assert.deepStrictEqual(await fresh.run({ attempt: 2, retentionDays: '90' }), {
       matchedKey: '',
       history: null,
+      note: null,
     });
     // Artifacts kept shorter than a run can be re-run: a missing pin may have expired.
     await assert.rejects(setupPin().run({ attempt: 2, retentionDays: '7' }), /kept 7 days/);
@@ -234,18 +238,49 @@ describe('the pin', () => {
     // A run younger than the retention has lost no artifact: no shard ever pinned.
     assert.deepStrictEqual(
       await setupPin().run({ attempt: 2, retentionDays: '7', runAge: async () => 0.5 }),
-      { matchedKey: '', history: null }
+      { matchedKey: '', history: null, note: null }
     );
     assert.ok(await setupPin().run({ attempt: 1, retentionDays: '7' }));
   });
 
+  test('a shard that cannot read the cache plans from the pin another shard wrote', async () => {
+    const { p, world, run } = setupPin();
+    const first = serializeHistory(someHistory(p.key));
+    cacheSave(world, cacheKey(p.key, 1, 1), { 'history.json': Buffer.from(first) });
+    const a = await run();
+    assert.deepStrictEqual(await run({ unreadable: 'no cache' }), a);
+    // The first shard without a cache pins no history, and says why.
+    const cold = setupPin();
+    assert.deepStrictEqual(await cold.run({ unreadable: 'no cache' }), {
+      matchedKey: '',
+      history: null,
+      note: 'no cache',
+    });
+  });
+
+  test("a re-run counts only earlier attempts' records, not a sibling's of its own attempt", async () => {
+    const { p, world, run } = setupPin();
+    const dir = tmp('psp-record-');
+    fs.writeFileSync(path.join(dir, 'record.json'), JSON.stringify({ pinned: true }));
+    await modelArtifacts(world, 7).upload(
+      `psp-record-test-${p.key.slice(0, 12)}-abc-1of2-attempt-2`,
+      [path.join(dir, 'record.json')],
+      dir
+    );
+    assert.deepStrictEqual(await run({ attempt: 2, retentionDays: '90' }), {
+      matchedKey: '',
+      history: null,
+      note: null,
+    });
+  });
+
   test('no history is pinned too, so a shard that starts after a publish still plans native', async () => {
     const { p, world, run } = setupPin();
-    assert.deepStrictEqual(await run(), { matchedKey: '', history: null });
+    assert.deepStrictEqual(await run(), { matchedKey: '', history: null, note: null });
     cacheSave(world, cacheKey(p.key, 1, 1), {
       'history.json': Buffer.from(serializeHistory(someHistory(p.key))),
     });
-    assert.deepStrictEqual(await run(), { matchedKey: '', history: null });
+    assert.deepStrictEqual(await run(), { matchedKey: '', history: null, note: null });
   });
 
   test('two shards racing for the pin plan from the winner, even when the history moved between them', async () => {
