@@ -920,6 +920,7 @@ var require_check = __commonJS({
     var RECORD_SCHEMA2 = "playwright-smart-parallelization/record";
     var RECORD_VERSION2 = 1;
     var STATUS_SCHEMA = "playwright-smart-parallelization/status";
+    var START_SCHEMA = "playwright-smart-parallelization/start";
     var names = (ids) => ids.length > 10 ? `${ids.slice(0, 10).join(", ")} and ${ids.length - 10} more` : ids.join(", ");
     function validateRecord(data, source = "a record") {
       const ok = data && data.schema === RECORD_SCHEMA2 && data.version === RECORD_VERSION2 && data.run && Number.isSafeInteger(data.run.id) && Number.isSafeInteger(data.run.attempt) && data.shard && Number.isSafeInteger(data.shard.current) && Number.isSafeInteger(data.shard.total) && typeof data.mode === "string" && Array.isArray(data.tests) && data.tests.every(
@@ -932,6 +933,34 @@ var require_check = __commonJS({
       const ok = data && data.schema === STATUS_SCHEMA && data.version === RECORD_VERSION2 && data.mode === "disabled" && data.run && Number.isSafeInteger(data.run.id) && Number.isSafeInteger(data.run.attempt) && typeof data.key === "string" && typeof data.job === "string";
       if (!ok) throw new Error(`${source} is not a status record of this Action`);
       return data;
+    }
+    function validateStart(data, source = "a start marker") {
+      const ok = data && data.schema === START_SCHEMA && data.version === RECORD_VERSION2 && typeof data.token === "string" && data.token !== "" && data.run && Number.isSafeInteger(data.run.id) && Number.isSafeInteger(data.run.attempt) && typeof data.key === "string" && typeof data.job === "string";
+      if (!ok) throw new Error(`${source} is not a start marker of this Action`);
+      return data;
+    }
+    var unanswered = (starts, records) => {
+      const answered = new Set(records.map((r) => r.start).filter(Boolean));
+      return starts.filter((s) => !answered.has(s.token));
+    };
+    function unrecordedProblems(latest, total, unrecorded) {
+      const problems = [];
+      const byAttempt = /* @__PURE__ */ new Map();
+      for (const start of unrecorded) {
+        byAttempt.set(start.run.attempt, (byAttempt.get(start.run.attempt) || 0) + 1);
+      }
+      const latestAttempt = new Map(latest.map((r) => [r.shard.current, r.run.attempt]));
+      for (const [attempt, count] of [...byAttempt].sort((a, b) => a[0] - b[0])) {
+        const open = [];
+        for (let k = 1; k <= total; k++) {
+          if ((latestAttempt.get(k) || 0) < attempt) open.push(k);
+        }
+        if (!open.length) continue;
+        problems.push(
+          `${count} shard job(s) of attempt ${attempt} left no record (Playwright stopped before it loaded the reporter, the job was cancelled, or the upload failed), so shard ${open.join(", ")} cannot stand on a record of an earlier attempt; re-run the shard jobs`
+        );
+      }
+      return problems;
     }
     function latestAttempts(records) {
       const byShard = /* @__PURE__ */ new Map();
@@ -972,6 +1001,7 @@ var require_check = __commonJS({
       const missing = [];
       for (let k = 1; k <= plan.total; k++) if (!shards.has(k)) missing.push(k);
       if (missing.length) problems.push(`no record for shard ${missing.join(", ")}`);
+      problems.push(...unrecordedProblems(latest, plan.total, plan.unrecorded || []));
       const outside = latest.filter((r) => r.shard.current > plan.total || r.shard.current < 1);
       if (outside.length) {
         problems.push(
@@ -1047,11 +1077,14 @@ var require_check = __commonJS({
     module2.exports = {
       RECORD_SCHEMA: RECORD_SCHEMA2,
       RECORD_VERSION: RECORD_VERSION2,
+      START_SCHEMA,
       STATUS_SCHEMA,
       checkRun,
       corpusSha: corpusSha2,
       latestAttempts,
+      unanswered,
       validateRecord,
+      validateStart,
       validateStatus
     };
   }
@@ -1089,6 +1122,7 @@ var require_identity = __commonJS({
       const corpus = record.corpusSha ? record.corpusSha.slice(0, 12) : "none";
       return `psp-record-${record.job || "job"}-${record.key.slice(0, 12)}-${corpus}-${record.shard.current}of${record.shard.total}-attempt-${record.run.attempt}`;
     }
+    var startName = (key, job, token, attempt) => `psp-start-${job || "job"}-${key.slice(0, 12)}-${token}-attempt-${attempt}`;
     module2.exports = {
       CACHE_PATH,
       HISTORY_FILE,
@@ -1100,8 +1134,91 @@ var require_identity = __commonJS({
       fingerprint: fingerprint2,
       historyKey,
       pinName,
-      recordName
+      recordName,
+      startName
     };
+  }
+});
+
+// lib/invocation.js
+var require_invocation = __commonJS({
+  "lib/invocation.js"(exports2, module2) {
+    "use strict";
+    var LONG = {
+      "add-reporter": "required",
+      browser: "required",
+      config: "required",
+      debug: "optional",
+      "global-timeout": "required",
+      grep: "required",
+      "grep-invert": "required",
+      "last-failed-file": "required",
+      "max-failures": "required",
+      output: "required",
+      "only-changed": "optional",
+      project: "variadic",
+      "repeat-each": "required",
+      reporter: "required",
+      retries: "required",
+      "run-agents": "required",
+      shard: "required",
+      "shard-weights": "required",
+      shuffle: "optional",
+      "test-list": "required",
+      "test-list-invert": "required",
+      timeout: "required",
+      trace: "required",
+      tsconfig: "required",
+      "ui-host": "required",
+      "ui-port": "required",
+      "update-snapshots": "optional",
+      "update-source-method": "required",
+      workers: "required"
+    };
+    var SHORT = { c: "required", g: "required", G: "required", j: "required", u: "optional" };
+    var isOption = (token) => token.length > 1 && token.startsWith("-");
+    function parseInvocation2(argv) {
+      const args = argv.slice(2);
+      const at = args.findIndex((token) => !isOption(token));
+      if (at === -1 || args[at] !== "test") {
+        throw new Error(
+          `cannot find the playwright test command in the command line ${JSON.stringify(argv.slice(1))}, so --no-deps and --last-failed cannot be read; run the reporter through $PSP_ARGS in a playwright test command`
+        );
+      }
+      const found = { noDeps: false, lastFailed: false };
+      const tokens = args.slice(at + 1);
+      const skipValue = (kind, i2) => {
+        if (kind === "required") return i2 + 1;
+        if (kind === "optional") return i2 < tokens.length && !isOption(tokens[i2]) ? i2 + 1 : i2;
+        let next = i2;
+        while (next < tokens.length && !isOption(tokens[next])) next++;
+        return next;
+      };
+      let i = 0;
+      while (i < tokens.length) {
+        const token = tokens[i++];
+        if (token === "--") break;
+        if (!isOption(token)) continue;
+        if (token.startsWith("--")) {
+          const eq = token.indexOf("=");
+          const name = token.slice(2, eq === -1 ? void 0 : eq);
+          if (name === "no-deps") found.noDeps = true;
+          else if (name === "last-failed") found.lastFailed = true;
+          const kind = LONG[name];
+          if (kind && eq === -1) i = skipValue(kind, i);
+          else if (kind === "variadic") i = skipValue(kind, i);
+          continue;
+        }
+        for (let c = 1; c < token.length; c++) {
+          const kind = SHORT[token[c]];
+          if (!kind) continue;
+          if (c + 1 < token.length) break;
+          i = skipValue(kind, i);
+        }
+      }
+      return found;
+    }
+    module2.exports = { parseInvocation: parseInvocation2 };
   }
 });
 
@@ -1114,6 +1231,7 @@ var { buildUnits, dependencyProjects, setupCosts, setupPhases } = require_units(
 var { parseHistory } = require_history();
 var { RECORD_SCHEMA, RECORD_VERSION, corpusSha } = require_check();
 var { fingerprint } = require_identity();
+var { parseInvocation } = require_invocation();
 var { formatMs, sha256, short, writeAtomic } = require_util();
 var PREFIX = "[playwright-smart-parallelization]";
 var log = (message) => process.stdout.write(`${PREFIX} ${message}
@@ -1146,7 +1264,8 @@ function optionsFromEnv(env = process.env) {
     reason: env.PSP_REASON || null,
     job: env.PSP_JOB || "",
     pinned: env.PSP_PINNED === "true",
-    historyKey: env.PSP_HISTORY_KEY || ""
+    historyKey: env.PSP_HISTORY_KEY || "",
+    start: env.PSP_START || null
   };
 }
 var toPosix = (p) => p.split(path.sep).join("/");
@@ -1155,10 +1274,10 @@ function fileSuiteOf(test) {
   while (suite && suite.type !== "file") suite = suite.parent;
   return suite;
 }
-var projectsOf = (config) => config.projects.map((p) => ({
+var projectsOf = (config, { noDeps }) => config.projects.map((p) => ({
   name: p.name,
-  dependencies: p.dependencies || [],
-  teardown: p.teardown || null
+  dependencies: noDeps ? [] : p.dependencies || [],
+  teardown: noDeps ? null : p.teardown || null
 }));
 function assertNamedProjects(projects) {
   const byName = /* @__PURE__ */ new Map();
@@ -1219,7 +1338,7 @@ function readSnapshot(options) {
 }
 var SmartParallelizationReporter = class {
   constructor(options = {}) {
-    this.options = { ...optionsFromEnv(), ...options };
+    this.options = { argv: process.argv, ...optionsFromEnv(), ...options };
     this.preprocessed = false;
     this.config = null;
     this.tests = [];
@@ -1233,6 +1352,7 @@ var SmartParallelizationReporter = class {
       commit: this.options.commit,
       runner: this.options.runner,
       job: this.options.job,
+      start: this.options.start,
       pinned: this.options.pinned,
       historyKey: this.options.historyKey,
       shard: { current: 1, total: 1 },
@@ -1262,7 +1382,18 @@ var SmartParallelizationReporter = class {
     this.record.shard = shard;
     this.record.playwright = config.version;
     this.record.fingerprint = fingerprint(options.key, config.version);
-    const projects = projectsOf(config);
+    let invocation;
+    try {
+      invocation = parseInvocation(options.argv);
+    } catch (error) {
+      throw new Error(`${PREFIX} ${label}: ${error.message}`, { cause: error });
+    }
+    if (invocation.lastFailed) {
+      throw new Error(
+        `${PREFIX} ${label}: --last-failed is not supported. Playwright applies it after the split, so no shard can prove which tests the run selected; run that command with the Action's enabled: false, which leaves PSP_ARGS empty and the run plain Playwright`
+      );
+    }
+    const projects = projectsOf(config, invocation);
     assertNamedProjects(projects);
     const names = suite.suites.map((s) => s.title);
     const readonly = dependencyProjects(projects, names);

@@ -282,14 +282,10 @@ describe('the decisions', () => {
   });
 
   test('answer each item of the workflow and history companion once', () => {
+    // The harvest answered the companion as it stood then (commit e0f8039); the companion has
+    // since moved on to the loop that was built, so the test reads the copy of that version.
     const companion = fs.readFileSync(
-      path.join(
-        ROOT,
-        '_bmad-output',
-        'initiative-pw-smart-sharding',
-        'spec-pw-smart-sharding',
-        'workflow-and-history.md'
-      ),
+      path.join(__dirname, 'workflow-and-history-at-harvest.md'),
       'utf8'
     );
     const items = companion

@@ -4,7 +4,7 @@ companions: [engine-qualification.md, workflow-and-history.md]
 sources: [../inputs/playwright-smart-sharding-comparison-and-handoff.md]
 ---
 
-> **Canonical contract.** This SPEC and the files in `companions:` are the complete, preservation-validated contract for what to build, test, and validate. Source documents listed in frontmatter are for traceability. Consult them only if you need narrative rationale or prose color this contract intentionally omits.
+> **Canonical contract.** This SPEC and the files in `companions:` are the complete, preservation-validated contract for what to build, test, and validate. Source documents listed in frontmatter are for traceability. Consult them only if you need narrative rationale or prose color this contract intentionally omits. Design changes accepted in `docs/decision-record.md` are folded in here; as of 2026-10-17 that is the drop-in loop of CAP-4 and the per-shard history publication of CAP-5.
 
 # Playwright smart sharding
 
@@ -24,14 +24,14 @@ A pain to solve. Native Playwright `--shard` splits tests by count, so shards fi
   - **intent:** Decide adopt, reject, or inconclusive from CAP-1 and CAP-2 evidence.
   - **success:** A short decision record names exact versions, fixture results, real-run measurements, the chosen engine or none, and the smallest remaining integration gap. Adopt requires at least 10% median completion-time reduction, no correctness regression, no material retry increase.
 - **CAP-4**
-  - **intent:** A maintainer adds duration-balanced sharding to an existing Playwright GitHub Actions pipeline through a reusable workflow around the selected engine, with the Gleb-style loop: prepare, matrix execute, artifacts, aggregate, history update, rollback.
-  - **success:** On a fixture repo, a cold start (no history) runs the full suite, a second run consumes history from the first, a failed run still uploads artifacts, and the one-switch rollback restores native sharding for the entire run. Interface and behavior in `workflow-and-history.md`.
+  - **intent:** A maintainer adds duration-balanced sharding to an existing Playwright GitHub Actions pipeline with one Action step before their own Playwright command, which adds `$PSP_ARGS`: the step pins one history snapshot per job and run, a post step uploads the shard's record and publishes its passing samples, and an optional finish action proves cross-shard coverage and writes the summary. A single switch rolls back.
+  - **success:** On a fixture repo, a cold start (no history) runs native, a second run consumes the history the first one's shards published, a failed run still uploads its records, finish proves exactly-once coverage, and the one-switch rollback restores native sharding for the entire run. Interface and behavior in `workflow-and-history.md`.
 - **CAP-5**
   - **intent:** Timing history stays correct under failure and concurrency.
-  - **success:** Tests demonstrate that a damaged timing file, a cancelled or failed run, a missing shard artifact, and two runs racing to publish never replace good history with partial, zero-valued, or older data, and never let some shards use custom assignment while others use native.
+  - **success:** Tests demonstrate that a damaged timing file, a cancelled or failed run, a missing shard artifact, and two runs racing to publish never replace good history with zero-valued or older data, and never let some shards use custom assignment while others use native. A failed shard publishes the samples of its passing tests (accepted 2026-10-17); a failed attempt adds no sample.
 - **CAP-6**
   - **intent:** Operate without any third-party service.
-  - **success:** Timings and reports live only in the consuming repo's own Actions artifacts or cache; a fixture network check shows no outbound connection to an engine vendor service; untrusted PR runs have read-only history access and a trusted post-run job publishes updates.
+  - **success:** Timings and reports live only in the consuming repo's own Actions artifacts or cache; a fixture network check shows no outbound connection to an engine vendor service; untrusted PR runs have read-only history access and only trusted shards publish updates.
 - **CAP-7**
   - **intent:** If neither engine qualifies, fill the gap with a minimal Playwright Utils implementation on the public `Reporter.preprocess` / `TestRun` API.
   - **success:** Starts only after CAP-3 records the failing fixture or measured cost; preserves native grouping and dependencies; passes the same CAP-1 proofs; uses no Playwright internals.
@@ -40,11 +40,11 @@ A pain to solve. Native Playwright `--shard` splits tests by count, so shards fi
 
 - No speedup by skipping work: no fewer tests, dropped browser projects, changed retries, `fullyParallel` enabled for the benchmark, or larger runners.
 - Serial groups, setup/teardown dependencies, filters, and project selection keep identical meaning before and after adoption. File affinity never stands in for serial correctness.
-- Every shard of a run uses one commit, config, selection, and immutable timing snapshot or assignment. Fallback to native sharding is decided for the whole run before fan-out, otherwise the run fails before execution.
+- Every shard of a job uses one immutable timing snapshot, pinned to the run, and decides the mode from its bytes, so fallback to native sharding holds for the whole job or the shard fails before execution. One config and selection across shards is checked after execution by finish (fingerprint and corpus), which is the only cross-shard proof.
 - Missing or corrupt shard artifacts or timing input never yield a green or silently partial result.
 - Allocation is static, preassigned from historical durations. Live redistribution and queue infrastructure are out of scope unless static planning is shown insufficient.
 - No dependency on undocumented deep imports (Flakiness exports only its reporter) and no patching of Playwright internals.
-- Durations from different browsers, runner classes, worker counts, or materially different environments are never mixed without justified normalization.
+- Durations are kept apart by working directory, explicit workers, runner label and `history-key`. Callers give materially different browsers, environments or configs their own `history-key` or `runner-label`; nothing else separates them.
 - Flakiness with `disableUpload: true` still generates reports and samples CPU/RAM. Treat it as heavier than timing-only until measured.
 - The `cypress-split` pairwise-averaging merger is order-dependent for three or more observations and is not transplanted. History uses a bounded observation window.
 - Timing data stays in the consuming repo's own Actions storage; no third-party service or gist. Untrusted PR code gets no write credentials.

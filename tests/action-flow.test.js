@@ -269,7 +269,9 @@ describe('the command shapes a user writes', () => {
     assert.match(job.post.warnings.join('\n'), /add \$PSP_ARGS/);
     assert.ok(![...world.cache.keys()].some((k) => k.startsWith('psp-history-')));
     const finish = await finishOf(world, 304);
-    assert.match(finish.io.summaryText, /no run records/);
+    assert.match(finish.io.summaryText, /no shard of its job left a record.*\$PSP_ARGS is missing/);
+    assert.strictEqual(finish.io.outputs.coverage, 'failed');
+    assert.ok(finish.io.failed);
   });
 
   test('two sharded jobs in one run: finish with history-key checks its own', async () => {

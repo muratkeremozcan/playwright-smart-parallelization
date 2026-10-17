@@ -20,6 +20,7 @@
  *   PSP_KEY            the history key, PSP_WORKERS the workers the plan packs for
  *   PSP_RECORD         where onEnd writes the record
  *   PSP_PINNED         whether the mode came from a pinned snapshot
+ *   PSP_START          the token of the start marker the main step uploaded
  *   PSP_JOB, PSP_HISTORY_KEY, PSP_RUN_ID, PSP_RUN_ATTEMPT, PSP_COMMIT, PSP_RUNNER_NAME,
  *   PSP_REASON         identity of the run
  */
@@ -32,6 +33,7 @@ const { buildUnits, dependencyProjects, setupCosts, setupPhases } = require('../
 const { parseHistory } = require('../lib/history');
 const { RECORD_SCHEMA, RECORD_VERSION, corpusSha } = require('../lib/check');
 const { fingerprint } = require('../lib/identity');
+const { parseInvocation } = require('../lib/invocation');
 const { formatMs, sha256, short, writeAtomic } = require('../lib/util');
 
 const PREFIX = '[playwright-smart-parallelization]';
@@ -67,6 +69,7 @@ function optionsFromEnv(env = process.env) {
     job: env.PSP_JOB || '',
     pinned: env.PSP_PINNED === 'true',
     historyKey: env.PSP_HISTORY_KEY || '',
+    start: env.PSP_START || null,
   };
 }
 
@@ -78,11 +81,12 @@ function fileSuiteOf(test) {
   return suite;
 }
 
-const projectsOf = (config) =>
+/** The projects of the config with the edges this run keeps: none under `--no-deps`. */
+const projectsOf = (config, { noDeps }) =>
   config.projects.map((p) => ({
     name: p.name,
-    dependencies: p.dependencies || [],
-    teardown: p.teardown || null,
+    dependencies: noDeps ? [] : p.dependencies || [],
+    teardown: noDeps ? null : p.teardown || null,
   }));
 
 /**
@@ -155,7 +159,7 @@ function readSnapshot(options) {
 
 class SmartParallelizationReporter {
   constructor(options = {}) {
-    this.options = { ...optionsFromEnv(), ...options };
+    this.options = { argv: process.argv, ...optionsFromEnv(), ...options };
     this.preprocessed = false;
     this.config = null;
     this.tests = [];
@@ -169,6 +173,7 @@ class SmartParallelizationReporter {
       commit: this.options.commit,
       runner: this.options.runner,
       job: this.options.job,
+      start: this.options.start,
       pinned: this.options.pinned,
       historyKey: this.options.historyKey,
       shard: { current: 1, total: 1 },
@@ -202,7 +207,20 @@ class SmartParallelizationReporter {
     this.record.shard = shard;
     this.record.playwright = config.version;
     this.record.fingerprint = fingerprint(options.key, config.version);
-    const projects = projectsOf(config);
+    let invocation;
+    try {
+      invocation = parseInvocation(options.argv);
+    } catch (error) {
+      throw new Error(`${PREFIX} ${label}: ${error.message}`, { cause: error });
+    }
+    if (invocation.lastFailed) {
+      throw new Error(
+        `${PREFIX} ${label}: --last-failed is not supported. Playwright applies it after the ` +
+          'split, so no shard can prove which tests the run selected; run that command with the ' +
+          "Action's enabled: false, which leaves PSP_ARGS empty and the run plain Playwright"
+      );
+    }
+    const projects = projectsOf(config, invocation);
     assertNamedProjects(projects);
     const names = suite.suites.map((s) => s.title);
     const readonly = dependencyProjects(projects, names);

@@ -53,7 +53,7 @@ For a cross-shard check that every test ran exactly once, and the shard times in
 
 To turn balancing off, set `enabled: false`: `$PSP_ARGS` is empty and the run is plain Playwright.
 
-All inputs are in [`action.yml`](action.yml); outputs, the history and the runner needs are in [`docs/reference.md`](docs/reference.md).
+All inputs are in [`action.yml`](action.yml); whole-file units, keeping histories apart, outputs and the runner needs are in [`docs/reference.md`](docs/reference.md).
 
 ## What we know so far
 
