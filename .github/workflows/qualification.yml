@@ -17,6 +17,8 @@ on:
 
 permissions:
   contents: read
+  # The assert jobs list and download the run's evidence through the REST API.
+  actions: read
 
 concurrency:
   group: qualification-${{ github.ref }}
@@ -68,7 +70,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: evidence-nsxbet-${{ matrix.group }}
+          name: evidence-nsxbet-${{ matrix.group }}-attempt-${{ github.run_attempt }}
           path: ${{ runner.temp }}/evidence-${{ matrix.group }}.json
           if-no-files-found: ignore
 
@@ -118,7 +120,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: evidence-flakiness-${{ matrix.group }}
+          name: evidence-flakiness-${{ matrix.group }}-attempt-${{ github.run_attempt }}
           path: ${{ runner.temp }}/evidence-${{ matrix.group }}.json
           if-no-files-found: ignore
 
@@ -136,9 +138,9 @@ jobs:
         with:
           node-version: '24'
 
-      - uses: actions/download-artifact@v7
+      - uses: ./.github/actions/download-newest-artifacts
         with:
-          pattern: evidence-nsxbet-*
+          prefix: evidence-nsxbet-
           path: ${{ runner.temp }}/parts
 
       - name: Merge the evidence
@@ -171,9 +173,9 @@ jobs:
         with:
           node-version: '24'
 
-      - uses: actions/download-artifact@v7
+      - uses: ./.github/actions/download-newest-artifacts
         with:
-          pattern: evidence-flakiness-*
+          prefix: evidence-flakiness-
           path: ${{ runner.temp }}/parts
 
       - name: Merge the evidence

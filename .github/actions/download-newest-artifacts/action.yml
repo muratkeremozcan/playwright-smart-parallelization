@@ -1,0 +1,42 @@
+# Downloads the artifacts of this run whose names start with a prefix, the newest attempt of each.
+# The uploads name each artifact `<prefix><part>-attempt-<n>`, so a re-run of some jobs keeps the
+# earlier attempt's artifacts of the jobs it did not re-run, and a re-run of the whole workflow
+# finds its own. actions/download-artifact cannot do that: a re-run of the whole workflow deletes
+# the earlier attempt's artifacts, which the listings still return for minutes, and a download of
+# one fails, failing the step. The job needs `actions: read`.
+name: download newest artifacts
+description: Download the newest attempt of each artifact of this run whose name starts with a prefix.
+
+inputs:
+  prefix:
+    description: The start of the artifact names, before `<part>-attempt-<n>`.
+    required: true
+  path:
+    description: The folder each artifact is extracted into, one subfolder per artifact.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        PREFIX: ${{ inputs.prefix }}
+        DEST: ${{ inputs.path }}
+        REPO: ${{ github.repository }}
+        RUN_ID: ${{ github.run_id }}
+      run: |
+        set -euo pipefail
+        mkdir -p "$DEST"
+        gh api --paginate "repos/$REPO/actions/runs/$RUN_ID/artifacts?per_page=100" --jq '.artifacts[]' |
+          jq -rs --arg prefix "$PREFIX" '
+            map(select(.name | startswith($prefix) and test("-attempt-[0-9]+$"))
+              | . + { part: (.name | sub("-attempt-[0-9]+$"; "")),
+                      attempt: (.name | capture("-attempt-(?<n>[0-9]+)$").n | tonumber) })
+            | group_by(.part) | map(max_by(.attempt)) | .[] | "\(.id) \(.name)"' > "$RUNNER_TEMP/newest.txt"
+        [ -s "$RUNNER_TEMP/newest.txt" ] || { echo "::error::no artifact of this run starts with $PREFIX"; exit 1; }
+        while read -r id name; do
+          gh api "repos/$REPO/actions/artifacts/$id/zip" > "$RUNNER_TEMP/artifact.zip"
+          unzip -q -o "$RUNNER_TEMP/artifact.zip" -d "$DEST/$name"
+          echo "downloaded $name"
+        done < "$RUNNER_TEMP/newest.txt"
