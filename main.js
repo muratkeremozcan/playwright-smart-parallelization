@@ -5,14 +5,35 @@
  * `node "$GITHUB_ACTION_PATH/main.js" <step>`. Each step reads the inputs from `PSP_INPUT_*`,
  * writes its outputs, log lines and job summary, and fails with an error annotation on any
  * problem. Zero runtime dependencies: no node_modules to audit and no bundle step.
+ *
+ * The steps run on the runner's own `node`. The lowest version is Node 20: finish runs
+ * Playwright's CLI to merge the reports, and Playwright 1.64 needs Node 20 (its `engines`). The
+ * check runs before any module of the Action loads.
  */
+
+const MIN_NODE = 20;
+
+/** The error for a Node below `MIN_NODE`, or null. */
+function nodeGuard(version = process.versions.node) {
+  const major = Number(String(version).split('.')[0]);
+  if (major >= MIN_NODE) return null;
+  return (
+    `playwright-smart-parallelization needs Node ${MIN_NODE} or later on the runner's PATH, ` +
+    `found ${version}; add actions/setup-node before this step`
+  );
+}
+
+if (require.main === module && nodeGuard()) {
+  process.stdout.write(`::error title=playwright-smart-parallelization::${nodeGuard()}\n`);
+  process.exit(1);
+}
 
 const path = require('node:path');
 const prepare = require('./lib/prepare');
 const run = require('./lib/run');
 const finish = require('./lib/finish');
 const store = require('./lib/store');
-const { readInputs } = require('./lib/inputs');
+const { readInputs, writeInputs } = require('./lib/inputs');
 const { appendSummary, errorCommand, setOutputs, warningCommand } = require('./lib/util');
 
 const PHASES = ['prepare', 'run', 'finish'];
@@ -20,13 +41,13 @@ const PHASES = ['prepare', 'run', 'finish'];
 const workspace = (env) => env.GITHUB_WORKSPACE || process.cwd();
 
 const STEPS = {
-  phase: ({ inputs }) => {
+  phase: ({ inputs, env }) => {
     if (!PHASES.includes(inputs.phase)) {
       throw new Error(
         `the phase input must be one of ${PHASES.join(', ')}, got ${JSON.stringify(inputs.phase)}`
       );
     }
-    return {};
+    return { outputs: { file: writeInputs(inputs, env) } };
   },
   'prepare-key': prepare.key,
   'prepare-plan': prepare.plan,
@@ -83,4 +104,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { STEPS, main, root: path.resolve(__dirname) };
+module.exports = { MIN_NODE, STEPS, main, nodeGuard, root: path.resolve(__dirname) };

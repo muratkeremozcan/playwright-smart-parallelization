@@ -9,7 +9,13 @@ const assert = require('node:assert');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { parsePlan, prepareInputs, readInputs, workingDirectory } = require('../lib/inputs');
+const {
+  parsePlan,
+  prepareInputs,
+  readInputs,
+  workingDirectory,
+  writeInputs,
+} = require('../lib/inputs');
 const prepare = require('../lib/prepare');
 const run = require('../lib/run');
 const finish = require('../lib/finish');
@@ -78,6 +84,18 @@ const someHistory = (key) =>
   }).history;
 
 describe('inputs', () => {
+  test('the first step stores the inputs without the token; later steps read them back', () => {
+    const j = job();
+    const file = writeInputs({ ...inputs(), plan: '{"v":1}', 'github-token': 'ghs_secret' }, j.env);
+    assert.ok(file.startsWith(j.env.RUNNER_TEMP));
+    assert.doesNotMatch(fs.readFileSync(file, 'utf8'), /ghs_secret|github-token/);
+    assert.notStrictEqual(writeInputs(inputs(), j.env), file, 'one file per invocation');
+    const read = readInputs({ PSP_INPUTS_FILE: file, PSP_INPUT_GITHUB_TOKEN: 'ghs_own' });
+    assert.strictEqual(read.plan, '{"v":1}');
+    assert.strictEqual(read.command, 'npx playwright test');
+    assert.strictEqual(read['github-token'], 'ghs_own');
+  });
+
   test('the history key changes with the command, workers, runner label and history-key', () => {
     const j = job();
     const key = (extra, env = j.env) => prepareInputs(inputs(extra), env).key;
@@ -117,6 +135,12 @@ describe('prepare decides the mode of the whole run', () => {
     const result = prepare.plan({ inputs: inputs({ enabled: 'false' }), env: j.env });
     assert.strictEqual(planOf(result).mode, 'disabled');
     assert.deepStrictEqual(JSON.parse(result.outputs.matrix), { shard: [1, 2, 3] });
+    assert.strictEqual(result.outputs.mode, 'disabled');
+    assert.strictEqual(result.outputs.reason, 'the enabled input is false');
+    assert.match(
+      result.summary,
+      /Mode \*\*disabled\*\* for all 3 shards: the enabled input is false/
+    );
   });
 
   test('Playwright 1.62 has no --add-reporter: disabled; 1.63 restores history', () => {
@@ -238,10 +262,19 @@ describe('run checks everything before Playwright starts', () => {
     assert.deepStrictEqual(cmd.argv.slice(-3), [
       '--shard=2/3',
       '--workers=2',
-      `--add-reporter=${run.REPORTER}`,
+      `--add-reporter=blob,${run.REPORTER}`,
     ]);
     assert.strictEqual(cmd.env.PSP_MODE, 'balanced');
     assert.strictEqual(cmd.env.PSP_SNAPSHOT_SHA, JSON.parse(plan).sha);
+    // The blob reporter writes where the run step uploads from, a folder the Action owns.
+    assert.strictEqual(cmd.env.PLAYWRIGHT_BLOB_OUTPUT_DIR, setup.outputs['blob-path']);
+    assert.strictEqual(
+      cmd.env.PLAYWRIGHT_BLOB_OUTPUT_FILE,
+      path.join(setup.outputs['blob-path'], 'report-2.zip')
+    );
+    assert.ok(setup.outputs['blob-path'].startsWith(j.env.RUNNER_TEMP));
+    const key12 = JSON.parse(plan).key.slice(0, 12);
+    assert.strictEqual(setup.outputs['blob-name'], `blob-report-${key12}-2-attempt-1`);
   });
 
   test('balanced: other snapshot bytes or none stop the shard', () => {
@@ -258,7 +291,7 @@ describe('run checks everything before Playwright starts', () => {
     );
   });
 
-  test('disabled: the plain command with --shard and the workers, no reporter', () => {
+  test('disabled: the plain command with --shard and the workers, no reporter, no blob variable', () => {
     const { j, plan } = planned('disabled');
     const setup = run.setup({ inputs: { plan, shard: '3' }, env: j.env });
     assert.strictEqual(
@@ -273,6 +306,35 @@ describe('run checks everything before Playwright starts', () => {
       '--shard=3/3',
       '--workers=2',
     ]);
+    const cmd = run.command({ inputs: { plan, shard: '3' }, env: j.env });
+    assert.ok(!cmd.argv.some((arg) => arg.startsWith('--add-reporter')));
+    assert.deepStrictEqual(
+      Object.keys(cmd.env).filter((name) => name.startsWith('PLAYWRIGHT_BLOB_')),
+      []
+    );
+  });
+
+  test('an inherited PLAYWRIGHT_BLOB_OUTPUT_FILE cannot move the reports out of the upload path', () => {
+    const { j, plan } = planned('native');
+    const setup = run.setup({ inputs: { plan, shard: '1' }, env: j.env });
+    const bin = tmp('psp-bin-');
+    const seen = path.join(bin, 'env.json');
+    fs.writeFileSync(
+      path.join(bin, 'npx'),
+      `#!/usr/bin/env node\nrequire('node:fs').writeFileSync(${JSON.stringify(seen)}, JSON.stringify(process.env));\n`,
+      { mode: 0o755 }
+    );
+    const env = {
+      ...j.env,
+      PATH: `${bin}${path.delimiter}${process.env.PATH}`,
+      PLAYWRIGHT_BLOB_OUTPUT_FILE: path.join(tmp('psp-elsewhere-'), 'report.zip'),
+    };
+    assert.strictEqual(run.exec({ inputs: { plan, shard: '1' }, env, stdio: 'ignore' }), 0);
+    const child = JSON.parse(fs.readFileSync(seen, 'utf8'));
+    assert.strictEqual(
+      child.PLAYWRIGHT_BLOB_OUTPUT_FILE,
+      path.join(setup.outputs['blob-path'], 'report-1.zip')
+    );
   });
 
   test('the shard process gets none of the Action inputs, the token above all', () => {
@@ -291,13 +353,14 @@ describe('run checks everything before Playwright starts', () => {
       PATH: `${bin}${path.delimiter}${process.env.PATH}`,
       PSP_INPUT_GITHUB_TOKEN: 'ghs_secret',
       PSP_INPUT_PLAN: plan,
+      PSP_INPUTS_FILE: path.join(j.env.RUNNER_TEMP, 'psp-inputs-x.json'),
       KEEP_ME: 'yes',
     };
     const status = run.exec({ inputs: { plan, shard: '1' }, env, stdio: 'ignore' });
     assert.strictEqual(status, 0);
     const child = JSON.parse(fs.readFileSync(seen, 'utf8'));
     assert.deepStrictEqual(
-      Object.keys(child).filter((name) => name.startsWith('PSP_INPUT_')),
+      Object.keys(child).filter((name) => name.startsWith('PSP_INPUT')),
       []
     );
     assert.strictEqual(child.KEEP_ME, 'yes');
@@ -399,14 +462,14 @@ describe('finish', () => {
       fs.mkdirSync(path.join(blobs, name), { recursive: true });
       fs.writeFileSync(path.join(blobs, name, file), name);
     };
-    put('psp-blob-kkkkkkkkkkkk-9-1-attempt-1', 'report-a.zip');
-    put('psp-blob-kkkkkkkkkkkk-9-2-attempt-1', 'report-b.zip');
-    put('psp-blob-kkkkkkkkkkkk-9-2-attempt-2', 'report-c.zip');
+    put('blob-report-kkkkkkkkkkkk-1-attempt-1', 'report-a.zip');
+    put('blob-report-kkkkkkkkkkkk-2-attempt-1', 'report-b.zip');
+    put('blob-report-kkkkkkkkkkkk-2-attempt-2', 'report-c.zip');
     const merged = path.join(tmp('psp-merged-'), 'm');
     assert.strictEqual(finish.collectBlobs(blobs, merged, plan), 2);
     assert.deepStrictEqual(fs.readdirSync(merged).sort(), [
-      'psp-blob-kkkkkkkkkkkk-9-1-attempt-1-report-a.zip',
-      'psp-blob-kkkkkkkkkkkk-9-2-attempt-2-report-c.zip',
+      'blob-report-kkkkkkkkkkkk-1-attempt-1-report-a.zip',
+      'blob-report-kkkkkkkkkkkk-2-attempt-2-report-c.zip',
     ]);
     const single = tmp('psp-single-');
     fs.writeFileSync(path.join(single, 'report.zip'), 'x');
@@ -421,14 +484,18 @@ describe('finish', () => {
     const j = job();
     const plan = prepare.plan({ inputs: inputs(), env: j.env }).outputs.plan;
     const setup = finish.setup({ inputs: { plan }, env: j.env });
-    const name = `psp-blob-${JSON.parse(plan).key.slice(0, 12)}-42-1-attempt-1`;
+    const name = `blob-report-${JSON.parse(plan).key.slice(0, 12)}-1-attempt-1`;
     fs.mkdirSync(path.join(setup.outputs['blob-dir'], name));
     fs.writeFileSync(path.join(setup.outputs['blob-dir'], name, 'report.zip'), 'x');
     const calls = [];
     const ok = finish.report({
       inputs: { plan },
       env: j.env,
-      spawn: (cmd, args) => calls.push([cmd, ...args]) && { status: 0 },
+      spawn: (cmd, args, options) => {
+        calls.push([cmd, ...args]);
+        fs.writeFileSync(path.join(options.env.PLAYWRIGHT_HTML_OUTPUT_DIR, 'index.html'), 'x');
+        return { status: 0 };
+      },
     });
     assert.strictEqual(ok.outputs.merged, 'true');
     assert.deepStrictEqual(calls[0].slice(0, 4), [
@@ -437,9 +504,55 @@ describe('finish', () => {
       `playwright@${JSON.parse(plan).playwright}`,
       'merge-reports',
     ]);
+    assert.ok(calls[0].includes('--reporter=html'));
     const failed = finish.report({ inputs: { plan }, env: j.env, spawn: () => ({ status: 1 }) });
     assert.strictEqual(failed.outputs.merged, 'false');
     assert.match(failed.annotations[0], /failed with exit 1/);
+    // A merge config without an HTML reporter writes nothing here: nothing to upload.
+    const empty = finish.report({ inputs: { plan }, env: j.env, spawn: () => ({ status: 0 }) });
+    assert.strictEqual(empty.outputs.merged, 'false');
+    assert.match(empty.annotations[0], /wrote nothing to upload/);
+  });
+
+  test('report merges with the Playwright installed in the working directory, and merge-config', () => {
+    const j = job();
+    fs.symlinkSync(path.join(FIXTURE, 'node_modules'), path.join(j.app, 'node_modules'), 'dir');
+    const plan = JSON.parse(prepare.plan({ inputs: inputs(), env: j.env }).outputs.plan);
+    const local = finish.mergeCommand(plan, {}, j.env);
+    assert.strictEqual(local.command, process.execPath);
+    assert.match(local.args[0], /@playwright[\\/]test[\\/]cli\.js$/);
+    assert.deepStrictEqual(local.args.slice(1), ['merge-reports', '--reporter=html']);
+    const configured = finish.mergeCommand(plan, { 'merge-config': 'merge.config.js' }, j.env);
+    assert.deepStrictEqual(configured.args.slice(1), [
+      'merge-reports',
+      `--config=${path.join(j.app, 'merge.config.js')}`,
+    ]);
+    // Under pull_request_target nothing from the checkout runs: npx alone, merge-config ignored.
+    const target = finish.mergeCommand(
+      plan,
+      { 'merge-config': 'merge.config.js' },
+      { ...j.env, GITHUB_EVENT_NAME: 'pull_request_target' }
+    );
+    assert.strictEqual(target.command, 'npx');
+    assert.deepStrictEqual(target.args.slice(2), ['merge-reports', '--reporter=html']);
+    assert.match(target.warning, /merge-config is ignored under pull_request_target/);
+    fs.rmSync(path.join(j.app, 'node_modules'));
+    assert.strictEqual(finish.mergeCommand(plan, {}, j.env).command, 'npx');
+    assert.strictEqual(finish.mergeCommand({ ...plan, playwright: null }, {}, j.env), null);
+  });
+
+  test('conclude outputs the mode, the coverage and the history', async () => {
+    const j = job();
+    const plan = prepare.plan({ inputs: inputs({ enabled: 'false' }), env: j.env }).outputs.plan;
+    finish.setup({ inputs: { plan }, env: j.env });
+    const checked = await finish.check({ inputs: { plan }, env: j.env, fetchImpl: null });
+    assert.match(checked.summary, /Coverage \*\*not checked\*\*/);
+    const out = finish.conclude({ inputs: { plan }, env: j.env }).outputs;
+    assert.deepStrictEqual(out, {
+      mode: 'disabled',
+      coverage: 'not checked',
+      history: 'unchanged',
+    });
   });
 });
 
@@ -681,7 +794,15 @@ describe('summary', () => {
     }));
     assert.deepStrictEqual(ok, { jobs: [{ id: 1 }] });
     const denied = await fetchJobs(env, async () => ({ ok: false, status: 403 }));
-    assert.match(denied.error, /403/);
+    assert.match(denied.error, /403: give the finish job `permissions: actions: read`/);
+    const missing = await fetchJobs(
+      { ...env, GITHUB_API_URL: 'https://ghe.example/api/v3' },
+      async () => ({ ok: false, status: 404 })
+    );
+    assert.match(missing.error, /404 for run 1 at https:\/\/ghe\.example\/api\/v3/);
+    assert.match(missing.error, /permissions: actions: read/);
+    const broken = await fetchJobs(env, async () => ({ ok: false, status: 500 }));
+    assert.doesNotMatch(broken.error, /actions: read/);
     assert.match((await fetchJobs({}, async () => ({}))).error, /no token/);
   });
 });

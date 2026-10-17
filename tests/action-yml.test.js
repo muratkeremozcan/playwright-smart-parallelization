@@ -41,28 +41,60 @@ describe('inputs and outputs', () => {
     assert.strictEqual(action.inputs.enabled.default, 'true');
   });
 
-  test('outputs the matrix, the plan and the mode of the prepare step', () => {
-    assert.deepStrictEqual(Object.keys(action.outputs).sort(), ['matrix', 'mode', 'plan']);
+  test('outputs the matrix, plan, mode and reason of prepare and the outcome of finish', () => {
+    assert.deepStrictEqual(Object.keys(action.outputs).sort(), [
+      'coverage',
+      'history',
+      'matrix',
+      'mode',
+      'overhead-ms',
+      'plan',
+      'reason',
+    ]);
     assert.match(action.outputs.plan.value, /steps\.prepare\.outputs\.plan/);
+    assert.match(
+      action.outputs.mode.value,
+      /steps\.prepare\.outputs\.mode \|\| steps\.finish\.outputs\.mode/
+    );
+    for (const name of ['coverage', 'history']) {
+      assert.match(action.outputs[name].value, new RegExp(`steps\\.finish\\.outputs\\.${name}`));
+    }
   });
 });
 
 describe('steps', () => {
-  test('is a composite action whose Node steps call main.js with a known step and every input', () => {
+  test('is a composite action whose Node steps call main.js with a known step', () => {
     assert.strictEqual(action.runs.using, 'composite');
     for (const step of nodeSteps) {
       assert.strictEqual(step.shell, 'bash');
       const match = /^node "\$GITHUB_ACTION_PATH\/main\.js" ([\w-]+)$/.exec(step.run);
       assert.ok(match, step.run);
       assert.ok(STEPS[match[1]], `main.js has the step ${match[1]}`);
-      for (const input of INPUTS.filter((i) => i !== 'github-token')) {
-        assert.strictEqual(
-          step.env[envName(input)],
-          `\${{ inputs.${input} }}`,
-          `${step.name} ${input}`
-        );
-      }
     }
+  });
+
+  test('the first step gets every input but the token; every later one only the inputs file', () => {
+    const [first, ...rest] = nodeSteps;
+    assert.strictEqual(first.id, 'inputs');
+    assert.strictEqual(steps[0], first);
+    for (const input of INPUTS.filter((i) => i !== 'github-token')) {
+      assert.strictEqual(first.env[envName(input)], `\${{ inputs.${input} }}`, input);
+    }
+    for (const step of rest) {
+      assert.strictEqual(step.env.PSP_INPUTS_FILE, '${{ steps.inputs.outputs.file }}', step.name);
+      const inputs = Object.keys(step.env).filter((name) => name.startsWith('PSP_INPUT_'));
+      assert.deepStrictEqual(
+        inputs,
+        step.id === 'finish-check' ? [envName('github-token')] : [],
+        step.name
+      );
+    }
+  });
+
+  test('the plan appears in the env of exactly one step', () => {
+    const holders = steps.filter((s) => s.env && envName('plan') in s.env);
+    assert.strictEqual(holders.length, 1);
+    assert.strictEqual((text.match(/PSP_INPUT_PLAN/g) || []).length, 1);
   });
 
   test('gives the token to the step that reads the jobs API and to no other step', () => {

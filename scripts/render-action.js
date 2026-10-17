@@ -13,12 +13,20 @@ const { ATTEMPTS } = require('../lib/store');
 const { CACHE_PATH } = require('../lib/identity');
 const { INPUTS, envName } = require('../lib/inputs');
 
-// Only the step that reads the jobs API gets the token; above all, the step that runs the user's
-// Playwright command never has it in its environment.
+// The first step gets every input but the token and writes them to a file; every later step gets
+// that file's path, so the plan is printed once in the log. Only the step that reads the jobs API
+// gets the token, which no file holds; above all, the step that runs the user's Playwright command
+// never has it in its environment.
+const inputsBlock = (indent) => {
+  const pad = ' '.repeat(indent);
+  return INPUTS.filter((i) => i !== 'github-token')
+    .map((i) => `${pad}${envName(i)}: \${{ inputs.${i} }}`)
+    .join('\n');
+};
 const envBlock = (indent, extra = {}, { token = false } = {}) => {
   const pad = ' '.repeat(indent);
-  const names = INPUTS.filter((i) => token || i !== 'github-token');
-  const lines = names.map((i) => `${pad}${envName(i)}: \${{ inputs.${i} }}`);
+  const lines = [`${pad}PSP_INPUTS_FILE: \${{ steps.inputs.outputs.file }}`];
+  if (token) lines.push(`${pad}${envName('github-token')}: \${{ inputs.github-token }}`);
   for (const [k, v] of Object.entries(extra)) lines.push(`${pad}${k}: ${v}`);
   return lines.join('\n');
 };
@@ -77,10 +85,10 @@ inputs:
     description: 'run: this shard, from the matrix.'
     required: false
     default: ''
-  blob-report:
-    description: 'run: the folder of the blob report, relative to working-directory, uploaded when present and merged by finish.'
+  merge-config:
+    description: 'finish: a Playwright config, relative to working-directory, whose reporters merge-reports uses. Empty writes the HTML report.'
     required: false
-    default: 'blob-report'
+    default: ''
   publish-history:
     description: |
       finish: auto publishes the history from the repository's default branch only; true also from
@@ -101,17 +109,30 @@ outputs:
     description: 'prepare: the plan every run and finish step takes back.'
     value: \${{ steps.prepare.outputs.plan }}
   mode:
-    description: 'prepare: balanced, native or disabled.'
-    value: \${{ steps.prepare.outputs.mode }}
+    description: 'prepare and finish: balanced, native or disabled.'
+    value: \${{ steps.prepare.outputs.mode || steps.finish.outputs.mode }}
+  reason:
+    description: 'prepare: why the run has that mode.'
+    value: \${{ steps.prepare.outputs.reason }}
+  coverage:
+    description: 'finish: ok (every test ran exactly once), failed, or not checked (disabled).'
+    value: \${{ steps.finish.outputs.coverage }}
+  history:
+    description: 'finish: published, unchanged, or failed (a write was due and did not happen).'
+    value: \${{ steps.finish.outputs.history }}
+  overhead-ms:
+    description: 'finish: the median per-shard overhead outside Playwright; empty when the jobs API is unreadable, no shard job matches, coverage failed, or the run is disabled.'
+    value: \${{ steps.finish-check.outputs.overhead-ms }}
 
 runs:
   using: composite
   steps:
-    - name: Check the phase
+    - name: Check the phase and store the inputs
+      id: inputs
       shell: bash
       run: ${node('phase')}
       env:
-${envBlock(8)}
+${inputsBlock(8)}
 
     # prepare: decide the mode of the whole run and pin one history snapshot.
     - name: Prepare, history key
@@ -281,6 +302,7 @@ ${envBlock(8, stateEnv({ PSP_CACHE_HIT: `\${{ steps.cas${k}-check.outputs.cache-
 }
 add(`
     - name: Finish, conclude
+      id: finish
       if: always() && inputs.phase == 'finish' && steps.finish-setup.outcome == 'success'
       shell: bash
       run: ${node('finish-conclude')}

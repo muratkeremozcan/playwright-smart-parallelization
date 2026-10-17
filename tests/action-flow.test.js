@@ -93,6 +93,9 @@ function newest(world, key) {
     : null;
 }
 
+/** The finish outputs a later step reads: mode, coverage and history. */
+const outcome = (run) => [run.outputs.mode, run.outputs.coverage, run.outputs.history];
+
 const planLines = (out) => out.split('\n').filter((l) => /shard \d\/\d: balanced/.test(l));
 
 describe('cold start, warm run, failed shard and rollback', () => {
@@ -126,6 +129,21 @@ describe('cold start, warm run, failed shard and rollback', () => {
     assert.deepStrictEqual(history.runs, [101]);
     assert.strictEqual(history.source.fingerprint, cold.plan.fingerprint);
     assert.strictEqual(history.source.commit, 'c0ffee');
+    assert.strictEqual(cold.prepare.outputs.reason, 'no history yet');
+    assert.deepStrictEqual(outcome(cold.finish), ['native', 'ok', 'published']);
+  });
+
+  test('every shard uploads a blob report the Action adds, and finish merges them', () => {
+    // The command names no blob reporter; the Action adds one per shard.
+    const key12 = cold.plan.key.slice(0, 12);
+    for (const n of [1, 2]) {
+      const files = ctx.world.artifacts.get(`blob-report-${key12}-${n}-attempt-1`);
+      assert.ok(files, `blob-report-${key12}-${n}-attempt-1`);
+      assert.ok(Object.keys(files).some((f) => f.endsWith('.zip')));
+    }
+    const merged = ctx.world.artifacts.get(`playwright-report-${key12}-101`);
+    assert.ok(merged && merged['index.html'], 'the merged HTML report');
+    assert.match(cold.finish.stdout, /merged 2 blob report file\(s\) with the Playwright in app/);
   });
 
   test('warm: balanced from that history, one plan line per shard with one plan sha', () => {
@@ -145,6 +163,7 @@ describe('cold start, warm run, failed shard and rollback', () => {
       cacheKey(warm.plan.key, EPOCH, 2),
       'the cold chain continues'
     );
+    assert.deepStrictEqual(outcome(warm.finish), ['balanced', 'ok', 'published']);
   });
 
   test('a re-run of finish for a published run leaves the history as it was', () => {
@@ -152,6 +171,7 @@ describe('cold start, warm run, failed shard and rollback', () => {
     const again = finish(ctx, 102, warm.prepare.outputs.plan);
     assert.strictEqual(again.outcome, 'success');
     assert.match(again.stdout, /already in the history/);
+    assert.deepStrictEqual(outcome(again), ['balanced', 'ok', 'unchanged']);
     assert.deepStrictEqual(newest(ctx.world, warm.plan.key), before);
   });
 
@@ -169,6 +189,7 @@ describe('cold start, warm run, failed shard and rollback', () => {
     assert.strictEqual(failed.finish.outcome, 'failure');
     assert.match(failed.finish.summary, /ended with status failed/);
     assert.deepStrictEqual(newest(ctx.world, cold.plan.key), before);
+    assert.deepStrictEqual(outcome(failed.finish), ['balanced', 'ok', 'unchanged']);
   });
 
   test('rollback: a failed shard fails finish through its status record', () => {
@@ -179,17 +200,29 @@ describe('cold start, warm run, failed shard and rollback', () => {
     assert.ok(off.shards.some((s) => s.outcome === 'failure'));
     assert.strictEqual(off.finish.outcome, 'failure');
     assert.match(off.finish.summary, /shard \d exited with 1/);
+    assert.deepStrictEqual(outcome(off.finish), ['disabled', 'not checked', 'unchanged']);
   });
 
-  test('rollback: enabled false runs plain --shard, no reporter, no plan line, no history write', () => {
-    const before = newest(ctx.world, cold.plan.key);
-    const off = pipeline(ctx, 104, { inputs: { enabled: 'false' } });
+  test('rollback: enabled false runs plain --shard, no reporter at all, no history write', () => {
+    // Its own run: the same cache, and none of the artifacts the other runs uploaded, so a blob
+    // report of another run cannot stand in for one of this run.
+    const own = {
+      ws: ctx.ws,
+      world: { ...newWorld(), cache: ctx.world.cache, created: ctx.world.created },
+    };
+    const before = newest(own.world, cold.plan.key);
+    const off = pipeline(own, 104, { inputs: { enabled: 'false' } });
     assert.strictEqual(off.plan.mode, 'disabled');
     for (const s of off.shards) {
       assert.strictEqual(s.outcome, 'success');
       assert.doesNotMatch(s.stdout, /--add-reporter|plan [0-9a-f]{12}/);
     }
-    const uploaded = [...ctx.world.artifacts].filter(([n]) => n.includes('-104-'));
+    assert.deepStrictEqual(
+      [...own.world.artifacts.keys()].filter((n) => !n.startsWith('psp-record-')),
+      [],
+      'no blob report and no merged report'
+    );
+    const uploaded = [...own.world.artifacts].filter(([n]) => n.includes('-104-'));
     assert.strictEqual(uploaded.length, 2, 'one status record per shard');
     for (const [, files] of uploaded) {
       assert.strictEqual(
@@ -198,7 +231,10 @@ describe('cold start, warm run, failed shard and rollback', () => {
       );
     }
     assert.strictEqual(off.finish.outcome, 'success');
-    assert.deepStrictEqual(newest(ctx.world, cold.plan.key), before);
+    assert.deepStrictEqual(newest(own.world, cold.plan.key), before);
+    // Rollback checks the shard exit codes only, and says so.
+    assert.deepStrictEqual(outcome(off.finish), ['disabled', 'not checked', 'unchanged']);
+    assert.match(off.finish.summary, /Coverage \*\*not checked\*\*/);
   });
 });
 
