@@ -62,6 +62,27 @@ describe('inputs and outputs', () => {
   });
 });
 
+describe('Marketplace metadata', () => {
+  test('has the name, a description the listing shows whole, and branding', () => {
+    assert.strictEqual(action.name, 'Playwright Smart Parallelization');
+    assert.ok(action.description.length <= 125, 'the Marketplace cuts descriptions at 125');
+    assert.match(action.branding.icon, /^[a-z0-9-]+$/);
+    assert.ok(
+      [
+        'white',
+        'black',
+        'yellow',
+        'blue',
+        'green',
+        'orange',
+        'red',
+        'purple',
+        'gray-dark',
+      ].includes(action.branding.color)
+    );
+  });
+});
+
 describe('steps', () => {
   test('is a composite action whose Node steps call main.js with a known step', () => {
     assert.strictEqual(action.runs.using, 'composite');
