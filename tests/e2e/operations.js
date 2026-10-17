@@ -11,9 +11,11 @@
  * The budgets (`budgets`) come from the Action's own code paths and constants, so a step that
  * starts making an operation its path does not make fails, while the races the Action is built
  * for, a pin two shards upload at once and a compare-and-swap that loses, stay within them. A call
- * that threw is a failure of the service: it is reported, and does not count against a budget. The time each step took (src/index.js: "the main step took 1.23s") goes into
- * the job summary as a report and fails nothing: wall-clock time on shared runners varies too much
- * to gate on.
+ * that threw is a failure of the service: it is reported, and does not count against a budget. It
+ * also fails when more than one shard of a job logged that it created the job's pin, since every
+ * shard must plan from one. The time each step took (src/index.js: "the main step took 1.23s")
+ * goes into the job summary as a report and fails nothing: wall-clock time on shared runners
+ * varies too much to gate on.
  *
  * The pipeline's jobs are the jobs of this run whose names start like the name of the job that
  * runs this check, which it finds by its runner (`pipelineJobs`). It reads GH_TOKEN,
@@ -27,6 +29,14 @@ const { attemptsFor } = require('../../lib/store');
 
 const STEP =
   /\[playwright-smart-parallelization\] the (main|post|finish) step took (\d+(?:\.\d+)?)s$/;
+/** The line of the main step of the shard that created its job's pin. */
+const PINNED = /\[playwright-smart-parallelization\] pinned .+ as psp-pin-/;
+
+/** Whether one job log says its main step created the pin. */
+const createdPin = (log) =>
+  String(log)
+    .split('\n')
+    .some((line) => PINNED.test(line));
 
 /** The step times one job log holds: `{ main, post, finish }` in seconds, each or undefined. */
 function stepTimes(log) {
@@ -146,6 +156,19 @@ function judge({ shards, finish, run }) {
         lookups: counts['cache-lookup'],
       })[step];
       problems.push(...overBudget(shard.name, step, counts, budget));
+    }
+  }
+  // Every shard of a job plans from one pin, so at most one shard of each job creates it.
+  const creators = new Map();
+  for (const shard of shards.filter((s) => s.createdPin)) {
+    const job = shard.name.slice(shard.name.lastIndexOf(' / ') + 3).split(' ')[0];
+    creators.set(job, [...(creators.get(job) || []), shard.name]);
+  }
+  for (const [job, names] of creators) {
+    if (names.length > 1) {
+      problems.push(
+        `${names.length} shards of job ${job} each created its pin: ${names.join(', ')}`
+      );
     }
   }
   if (!shards.length) problems.push('no shard job of this pipeline was found');
@@ -273,6 +296,7 @@ async function main(env = process.env, argv = process.argv.slice(2)) {
       attempt: j.run_attempt || 1,
       operations: readOperations(log),
       times: stepTimes(log),
+      createdPin: createdPin(log),
     };
   };
   const shards = [];
@@ -307,4 +331,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { budgets, judge, pipelineJobs, settledJobs, stepTimes };
+module.exports = { budgets, createdPin, judge, pipelineJobs, settledJobs, stepTimes };

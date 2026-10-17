@@ -9,6 +9,11 @@
 # from the history the first job's shards published. `rerun` adds one more matrix leg that runs
 # shard 2 again once the others have published: it must plan from the same pin, the seeded bytes.
 # `barrier` holds every shard after Playwright until one moment, so all post steps publish at once.
+# `start-together` starts the shards' Action 300 ms apart, while mover jobs publish a newer history
+# entry between each two starts: a shard that misses the pin reads another entry than the shard
+# before it, and every shard must still plan from one pinned snapshot. A mover that starts too
+# late to save in that window saves nothing, and the post steps wait a minute past it, so no mover
+# entry lands among the shards' own publishes.
 #
 # A re-run reuses the history key, which is keyed on the run id only, so a leg that expects to
 # publish accepts finding its samples already in the history on a later attempt.
@@ -54,6 +59,9 @@ on:
       barrier:
         type: boolean
         default: false
+      start-together:
+        type: boolean
+        default: false
       checkout-head:
         description: Check out the pull request head and export it as GITHUB_SHA, as some workflows do.
         type: boolean
@@ -85,6 +93,8 @@ jobs:
       shards: ${{ steps.matrix.outputs.shards }}
       include: ${{ steps.matrix.outputs.include }}
       barrier: ${{ steps.matrix.outputs.barrier }}
+      start: ${{ steps.matrix.outputs.start }}
+      key: ${{ steps.key.outputs.key }}
       key12: ${{ steps.key.outputs.key12 }}
       prefix: ${{ steps.key.outputs.prefix }}
       pin: ${{ steps.key.outputs.pin }}
@@ -99,11 +109,18 @@ jobs:
           TOTAL: ${{ inputs.shards }}
           RERUN: ${{ inputs.rerun }}
           BARRIER: ${{ inputs.barrier }}
+          START: ${{ inputs.start-together }}
         run: |
           echo "shards=$(seq -s, 1 "$TOTAL" | sed 's/^/[/; s/$/]/')" >> "$GITHUB_OUTPUT"
           if [ "$RERUN" = true ]; then echo 'include=[{"shard":2,"rerun":true}]' >> "$GITHUB_OUTPUT"; else echo 'include=[]' >> "$GITHUB_OUTPUT"; fi
           # Room for every shard runner to start, install and run its tests first.
           if [ "$BARRIER" = true ]; then echo "barrier=$(( $(date +%s) + 240 ))" >> "$GITHUB_OUTPUT"; fi
+          # Room for every shard and mover runner to start and install first.
+          if [ "$START" = true ]; then
+            start=$(( $(date +%s) + 150 ))
+            echo "start=$start" >> "$GITHUB_OUTPUT"
+            echo "barrier=$(( start + 60 ))" >> "$GITHUB_OUTPUT"
+          fi
       - id: key
         env:
           INPUT_WORKING-DIRECTORY: ${{ inputs.working-directory }}
@@ -125,6 +142,36 @@ jobs:
           key: ${{ steps.key.outputs.prefix }}
           restore-keys: ${{ steps.key.outputs.prefix }}
           lookup-only: true
+
+  # Other runs publishing while the shards pin: mover k saves a newer entry of the history between
+  # the starts of shard k and shard k + 1, a save taking about 300 ms.
+  mover:
+    needs: setup
+    if: inputs.start-together
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        mover: [1, 2, 3, 4, 5, 6, 7, 8]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - env:
+          KEY: ${{ needs.setup.outputs.key }}
+          MOVER: ${{ matrix.mover }}
+        run: node tests/e2e/history.js seed "$KEY" "$((1000 + MOVER))"
+      - name: Wait for this mover's moment
+        id: moment
+        env:
+          AT: ${{ needs.setup.outputs.start }}
+          MOVER: ${{ matrix.mover }}
+        run: node tests/e2e/history.js wait-until "$AT" "$(( (MOVER - 1) * 300 - 150 ))" >> "$GITHUB_OUTPUT"
+      - if: steps.moment.outputs.late != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: .psp/history
+          key: ${{ needs.setup.outputs.prefix }}1-${{ matrix.mover }}0
 
   test:
     needs: setup
@@ -181,6 +228,7 @@ jobs:
           expect-mode: ${{ inputs.expect-mode }}
           expect-sha: ${{ matrix.rerun && needs.setup.outputs.seed-sha || '' }}
           barrier: ${{ needs.setup.outputs.barrier }}
+          start: ${{ needs.setup.outputs.start }}
 
   # The next run of the same history, with no finish job before it.
   warm:

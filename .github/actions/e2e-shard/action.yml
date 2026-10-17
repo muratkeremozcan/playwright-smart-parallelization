@@ -31,10 +31,21 @@ inputs:
   barrier:
     description: A Unix time to wait for after Playwright, so every post step starts at once.
     default: ''
+  start:
+    description: A Unix time; shard k starts the Action (k - 1) * 300 ms after it.
+    default: ''
 
 runs:
   using: composite
   steps:
+    - name: Wait for this shard's moment, so the main steps pin together
+      if: inputs.start != ''
+      shell: bash
+      env:
+        AT: ${{ inputs.start }}
+        SHARD: ${{ inputs.shard }}
+      run: node tests/e2e/history.js wait-until "$AT" "$(( (SHARD - 1) * 300 ))"
+
     - id: psp
       uses: ./
       with:

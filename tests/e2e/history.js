@@ -19,6 +19,9 @@
  *                                                 print how many shards of RUN_ID had a passing
  *                                                 test, so published an entry of their own
  *   node tests/e2e/history.js expect-runs ID...   fail unless the restored history holds these runs
+ *   node tests/e2e/history.js wait-until AT MS    sleep until MS milliseconds after the Unix time
+ *                                                 AT, to the millisecond; when it passed more than
+ *                                                 two seconds ago, warn and print late=true
  */
 
 const fs = require('node:fs');
@@ -110,4 +113,17 @@ else if (command === 'publishers') {
   const n = records(args[1]).filter((r) => r.run.id === id && r.tests.some((t) => t.sample_ms));
   process.stdout.write(`${n.length}\n`);
 } else if (command === 'expect-runs') expectRuns(args);
-else fail(`unknown command ${command}`);
+else if (command === 'wait-until') {
+  // Lines for the log go to stderr; stdout carries only the step output.
+  const at = Number(args[0]) * 1000 + Number(args[1] || 0);
+  const late = Date.now() - at;
+  if (late > 2000) {
+    process.stderr.write(`::warning::the moment passed ${late}ms ago\n`);
+    process.stdout.write('late=true\n');
+  } else {
+    setTimeout(
+      () => process.stderr.write(`waited until ${new Date(at).toISOString()}\n`),
+      Math.max(0, -late)
+    );
+  }
+} else fail(`unknown command ${command}`);

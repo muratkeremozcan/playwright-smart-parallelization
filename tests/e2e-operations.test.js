@@ -8,7 +8,14 @@ const assert = require('node:assert');
 const { KINDS, operationCounter } = require('../lib/operations');
 const { WAITS } = require('../lib/pin');
 const { attemptsFor } = require('../lib/store');
-const { budgets, judge, pipelineJobs, settledJobs, stepTimes } = require('./e2e/operations');
+const {
+  budgets,
+  createdPin,
+  judge,
+  pipelineJobs,
+  settledJobs,
+  stepTimes,
+} = require('./e2e/operations');
 
 const PREFIX = '[playwright-smart-parallelization]';
 
@@ -299,4 +306,17 @@ test('waits until the jobs API lists every pipeline job as completed, then fails
     /^Error: the jobs API still lists e2e, x \/ test \(2, false\) as in_progress after 20s$/
   );
   assert.strictEqual(clock, 20_000);
+});
+
+test('at most one shard of a job may create its pin', () => {
+  const line = `2026-10-17T12:00:00.0000000Z ${PREFIX} pinned psp-history-v2-k-1-1 as psp-pin-v2-k-test-7`;
+  assert.strictEqual(createdPin(line), true);
+  assert.strictEqual(createdPin(`${PREFIX} read the pin psp-pin-v2-k-test-7`), false);
+  const run = pipeline();
+  run.shards[0].createdPin = true;
+  assert.deepStrictEqual(judge({ ...run, run: RUN }).problems, []);
+  run.shards[1].createdPin = true;
+  assert.deepStrictEqual(judge({ ...run, run: RUN }).problems, [
+    '2 shards of job test each created its pin: leg / test (1, false), leg / test (2, false)',
+  ]);
 });

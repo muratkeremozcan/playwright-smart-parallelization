@@ -77,6 +77,18 @@ jobs:
       expect-mode: native
       expect-history: published
 
+  e2e-race:
+    name: e2e, eight shards pinning at once while the history moves
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    uses: ./.github/workflows/e2e-pipeline.yml
+    with:
+      history-key: e2e-race-${{ github.run_id }}
+      shards: 8
+      seed: true
+      start-together: true
+      expect-mode: balanced
+      expect-history: published
+
   e2e-rerun:
     name: e2e, balanced, and a re-run shard reads the same pin
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
