@@ -29,9 +29,9 @@ permissions: {}
 # Dispatches queue in one group. Each published tag has a group of its own, so a later dispatch or
 # publication never cancels a pending publication. The promote job has a group per major: one
 # promotion of a major runs at a time, and it reads the highest published release of the major
-# again right before it moves the tag, so an older release never moves the major back. GitHub keeps
-# one pending job per group, so verify fails a release that a newer one superseded while it was
-# verified, and its promotion never queues where it would displace the newer pending one.
+# again right before it moves the tag, so an older release never moves the major back. The group
+# queues every pending promotion (`queue: max`), so a late older one never cancels a newer one that
+# waits, and verify fails a release that a newer one superseded while it was verified.
 concurrency:
   group: playwright-smart-parallelization-release-${{ github.event.release.tag_name || github.event_name }}
   cancel-in-progress: false
@@ -422,9 +422,8 @@ jobs:
           exit 1
 
       # The gates and the Marketplace wait take minutes, and a newer release of the major may have
-      # been published meanwhile. A superseded release fails here, so its promotion never queues in
-      # the promote group of the major. The promote step reads the order once more before it moves
-      # the tag.
+      # been published meanwhile. A superseded release fails here, so it never queues a promotion.
+      # The promote step reads the order once more before it moves the tag.
       - name: Recheck the release order
         id: order
         env:
@@ -457,6 +456,7 @@ jobs:
     concurrency:
       group: playwright-smart-parallelization-promote-${{ needs.verify.outputs.major }}
       cancel-in-progress: false
+      queue: max
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -504,13 +504,12 @@ jobs:
           # This job's concurrency group runs one promotion of the major at a time, so the highest
           # published release of the major read here still holds when the tag moves below. A release
           # published after verify read the order, and promoted first, keeps the major.
-          newest_tag=$({
-            gh api \
-              --paginate \
-              "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
-              --jq '.[] | select(.draft == false and .prerelease == false) | .tag_name'
-            printf '%s\n' "$TAG"
-          } \
+          # A failed read stops the step here, before any tag moves.
+          published=$(gh api \
+            --paginate \
+            "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            --jq '.[] | select(.draft == false and .prerelease == false) | .tag_name')
+          newest_tag=$(printf '%s\n%s\n' "$published" "$TAG" \
             | awk -v prefix="$MAJOR." 'index($0, prefix) == 1 && /^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/' \
             | sort -t . -k 2,2n -k 3,3n \
             | tail -n 1)

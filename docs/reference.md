@@ -29,7 +29,7 @@ Facts about the Action that the README example does not need. Every input is in 
 ## Finish
 
 - Only `finish` proves that every test ran exactly once across the shards; without it the run still balances, and each shard job's own status stays yours to check.
-- Each shard's main step uploads a `psp-start-*` marker. A shard job that started and left no record (Playwright stopped before it loaded the reporter, the job was cancelled, or the upload failed) fails `finish`, so an earlier attempt's record never stands for a shard that was re-run.
+- Each shard's main step uploads a `psp-start-*` marker. A shard job that started and left no record (Playwright stopped before it loaded the reporter, the job was cancelled, or the upload failed) fails `finish`, so an earlier attempt's record never stands for a shard that was re-run. A shard whose marker cannot be uploaded after three retries stops before your command, so its job is red; `finish` cannot see a job that never uploaded its marker.
 - `finish` reads the run records the shards upload as `psp-record-*` artifacts, so it needs no blob reports and merges none; your own merge step stays yours.
 - It checks every sharded job of the run; with several sharded jobs and a finish for each, give each job its own `history-key` and pass the same one to its finish.
 - A matrix with another dimension next to `shard` that runs the same tests, such as `node: [20, 22]`, needs its own `history-key` per leg, such as `history-key: node-${{ matrix.node }}`, so each leg keeps its own records and history.

@@ -5,7 +5,8 @@
  * Playwright: a shard job that started in an attempt and left no record (Playwright stopped
  * before it loaded the reporter, the job was cancelled before its post step, or the upload of its
  * record failed) keeps the earlier record of its shard from standing, while a shard that was not
- * re-run keeps its earlier record and a newer record replaces an older one, failed or missing.
+ * re-run keeps its earlier record and a newer record replaces an older one, failed or missing; a
+ * shard whose start marker cannot be uploaded stops before its command.
  */
 
 const { test, describe, before } = require('node:test');
@@ -15,6 +16,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { finishJob, mainStep, newWorld, shardJob } = require('./support/model');
 const { FIXTURE, requireFixture } = require('./support/fixture');
+const { START_WAITS } = require('../lib/setup');
 
 /** A browser-free project with two spec files; `FAIL=<title>` fails that test. */
 function workspace() {
@@ -130,6 +132,47 @@ describe('a shard job that started and left no record', () => {
     const finished = await run.finish(3);
     assert.strictEqual(finished.result.ok, false);
     assert.ok(problemsOf(finished).some((p) => /attempt 2 left no record.*shard 1 cannot/.test(p)));
+  });
+});
+
+describe('the start marker', () => {
+  test('an upload that keeps failing stops the shard before its command, after retries', async () => {
+    const run = newRun();
+    let tries = 0;
+    run.world.before = async (op, name) => {
+      if (op === 'upload' && name.startsWith('psp-start-')) {
+        tries++;
+        throw new Error('(503) the artifact service is unavailable');
+      }
+    };
+    const job = await run.job(1, 1);
+    assert.strictEqual(tries, 1 + START_WAITS.length);
+    assert.match(job.main.error.message, /start of this shard could not be uploaded.*\(503\)/);
+    assert.strictEqual(job.user, null, 'the Playwright step does not run');
+  });
+
+  test('an upload that fails once is tried again', async () => {
+    const run = newRun();
+    let tries = 0;
+    run.world.before = async (op, name) => {
+      if (op === 'upload' && name.startsWith('psp-start-') && tries++ === 0) {
+        throw new Error('(503) the artifact service is unavailable');
+      }
+    };
+    const job = await run.job(1, 1);
+    assert.strictEqual(job.main.error, null);
+    assert.strictEqual(job.user.status, 0);
+  });
+
+  test('a second job that started and left no record fails coverage too', async () => {
+    const run = newRun();
+    for (const shard of [1, 2]) await run.job(shard, 1);
+    await run.job(1, 1, broken, { job: 'other' });
+    const finished = await run.finish(1);
+    assert.strictEqual(finished.result.ok, false);
+    assert.strictEqual(finished.result.coverage, 'failed');
+    assert.strictEqual(finished.io.outputs.coverage, 'failed');
+    assert.match(finished.io.summaryText, /job other started in attempt 1/);
   });
 });
 

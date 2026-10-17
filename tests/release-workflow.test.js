@@ -289,7 +289,10 @@ if (!endpoint || !endpoint.startsWith(repo)) fail('unexpected endpoint ' + endpo
 const route = endpoint.slice(repo.length);
 let body;
 let match;
-if (method === 'GET' && route === 'releases?per_page=100') body = state.releases;
+if (method === 'GET' && route === 'releases?per_page=100') {
+  if (state.releasesDown) fail('Server Error (HTTP 502)');
+  body = state.releases;
+}
 else if (method === 'GET' && (match = /^git\\/ref\\/tags\\/(.+)$/.exec(route))) {
   const ref = state.refs[match[1]];
   if (!ref) fail('Not Found (HTTP 404)');
@@ -383,15 +386,13 @@ function runStep(step, state, values) {
  * The promote step of `tag`, given the outputs its verify job wrote when it started, which may be
  * stale by the time the promotion runs.
  */
-function promote(state, { tag, sha, highest = tag }) {
+function promote(state, { tag, sha }) {
   const major = tag.split('.')[0];
   return runStep(jobs.promote.steps[0], state, {
     'github.token': 'token',
     'needs.verify.outputs.tag': tag,
     'needs.verify.outputs.major': major,
     'needs.verify.outputs.release-sha': sha,
-    'needs.verify.outputs.highest-tag': highest,
-    'needs.verify.outputs.release-order': '0',
   });
 }
 
@@ -400,6 +401,7 @@ describe('promoting the floating major against the published releases', () => {
     assert.deepStrictEqual(jobs.promote.concurrency, {
       group: 'playwright-smart-parallelization-promote-${{ needs.verify.outputs.major }}',
       'cancel-in-progress': false,
+      queue: 'max',
     });
     assert.match(jobs.promote.if, /needs\.verify\.outputs\.current == 'true'/);
     assert.strictEqual(jobs.verify.outputs.current, '${{ steps.order.outputs.current }}');
@@ -514,6 +516,24 @@ describe('promoting the floating major against the published releases', () => {
     const current = runStep(step, state, values('v1.0.1'));
     assert.strictEqual(current.status, 0, current.stderr);
     assert.strictEqual(current.output, 'current=true\n');
+  });
+
+  test('a releases API that fails stops the promotion before any tag moves', () => {
+    // v1.0.1 is the highest, but the read fails; a promotion of the older v1.0.0 must not proceed.
+    const state = {
+      releases: published('v1.0.1', 'v1.0.0'),
+      releasesDown: true,
+      refs: {
+        'v1.0.0': { type: 'commit', sha: SHA.v100 },
+        v1: { type: 'commit', sha: SHA.v101 },
+      },
+      tags: {},
+    };
+    const run = promote(state, { tag: 'v1.0.0', sha: SHA.v100 });
+    assert.notStrictEqual(run.status, 0);
+    assert.match(run.stderr, /HTTP 502/);
+    assert.deepStrictEqual(run.mutations, []);
+    assert.strictEqual(run.state.refs.v1.sha, SHA.v101);
   });
 
   test('an exact tag on another commit aborts the promotion', () => {
