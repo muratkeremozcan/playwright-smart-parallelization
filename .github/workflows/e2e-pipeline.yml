@@ -9,9 +9,20 @@
 # from the history the first job's shards published. `rerun` adds one more matrix leg that runs
 # shard 2 again once the others have published: it must plan from the same pin, the seeded bytes.
 # `barrier` holds every shard after Playwright until one moment, so all post steps publish at once.
+# `start-together` starts the shards' Action 300 ms apart, while mover jobs publish a newer history
+# entry between each two starts: a shard that misses the pin reads another entry than the shard
+# before it, and every shard must still plan from one pinned snapshot. A mover that starts too
+# late to save in that window saves nothing, and the post steps wait a minute past it, so no mover
+# entry lands among the shards' own publishes. The race gates nothing by its timing, which a runner
+# queue or the cache's visibility can blunt: the pin checks below hold whatever the timing, and
+# each shard reports in its job summary whether it met its moment and the history moved past its
+# pinned entry.
 #
 # A re-run reuses the history key, which is keyed on the run id only, so a leg that expects to
-# publish accepts finding its samples already in the history on a later attempt.
+# publish accepts finding its samples already in the history on a later attempt. Every shard of a
+# later attempt plans from the pin of the first, a cache entry that outlives the artifacts a
+# re-run of the whole workflow deletes, so it expects the mode of the first attempt, and the
+# assert job requires the pin to predate the attempt.
 #
 # The assert job also holds the network operations each step of the Action made to budgets from
 # its code paths (tests/e2e/operations.js), and reports the time each step took in the job summary
@@ -54,6 +65,9 @@ on:
       barrier:
         type: boolean
         default: false
+      start-together:
+        type: boolean
+        default: false
       checkout-head:
         description: Check out the pull request head and export it as GITHUB_SHA, as some workflows do.
         type: boolean
@@ -85,6 +99,8 @@ jobs:
       shards: ${{ steps.matrix.outputs.shards }}
       include: ${{ steps.matrix.outputs.include }}
       barrier: ${{ steps.matrix.outputs.barrier }}
+      start: ${{ steps.matrix.outputs.start }}
+      key: ${{ steps.key.outputs.key }}
       key12: ${{ steps.key.outputs.key12 }}
       prefix: ${{ steps.key.outputs.prefix }}
       pin: ${{ steps.key.outputs.pin }}
@@ -99,16 +115,24 @@ jobs:
           TOTAL: ${{ inputs.shards }}
           RERUN: ${{ inputs.rerun }}
           BARRIER: ${{ inputs.barrier }}
+          START: ${{ inputs.start-together }}
         run: |
           echo "shards=$(seq -s, 1 "$TOTAL" | sed 's/^/[/; s/$/]/')" >> "$GITHUB_OUTPUT"
           if [ "$RERUN" = true ]; then echo 'include=[{"shard":2,"rerun":true}]' >> "$GITHUB_OUTPUT"; else echo 'include=[]' >> "$GITHUB_OUTPUT"; fi
           # Room for every shard runner to start, install and run its tests first.
           if [ "$BARRIER" = true ]; then echo "barrier=$(( $(date +%s) + 240 ))" >> "$GITHUB_OUTPUT"; fi
+          # Room for every shard and mover runner to start and install first.
+          if [ "$START" = true ]; then
+            start=$(( $(date +%s) + 150 ))
+            echo "start=$start" >> "$GITHUB_OUTPUT"
+            echo "barrier=$(( start + 60 ))" >> "$GITHUB_OUTPUT"
+          fi
       - id: key
         env:
           INPUT_WORKING-DIRECTORY: ${{ inputs.working-directory }}
           INPUT_HISTORY-KEY: ${{ inputs.history-key }}
           JOB: test
+          GITHUB_RUN_ID: ${{ github.run_id }}
         run: node tests/e2e/history.js key >> "$GITHUB_OUTPUT"
       - id: seed
         if: inputs.seed && github.run_attempt == 1
@@ -125,6 +149,36 @@ jobs:
           key: ${{ steps.key.outputs.prefix }}
           restore-keys: ${{ steps.key.outputs.prefix }}
           lookup-only: true
+
+  # Other runs publishing while the shards pin: mover k saves a newer entry of the history between
+  # the starts of shard k and shard k + 1, a save taking about 300 ms.
+  mover:
+    needs: setup
+    if: inputs.start-together
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        mover: [1, 2, 3, 4, 5, 6, 7, 8]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - env:
+          KEY: ${{ needs.setup.outputs.key }}
+          MOVER: ${{ matrix.mover }}
+        run: node tests/e2e/history.js seed "$KEY" "$((1000 + MOVER))"
+      - name: Wait for this mover's moment
+        id: moment
+        env:
+          AT: ${{ needs.setup.outputs.start }}
+          MOVER: ${{ matrix.mover }}
+        run: node tests/e2e/history.js wait-until "$AT" "$(( (MOVER - 1) * 300 - 150 ))" >> "$GITHUB_OUTPUT"
+      - if: steps.moment.outputs.late != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: .psp/history
+          key: ${{ needs.setup.outputs.prefix }}1-${{ matrix.mover }}0
 
   test:
     needs: setup
@@ -181,6 +235,8 @@ jobs:
           expect-mode: ${{ inputs.expect-mode }}
           expect-sha: ${{ matrix.rerun && needs.setup.outputs.seed-sha || '' }}
           barrier: ${{ needs.setup.outputs.barrier }}
+          start: ${{ needs.setup.outputs.start }}
+          history-prefix: ${{ needs.setup.outputs.prefix }}
 
   # The next run of the same history, with no finish job before it.
   warm:
@@ -268,23 +324,51 @@ jobs:
           key: ${{ needs.setup.outputs.prefix }}
           restore-keys: ${{ needs.setup.outputs.prefix }}
       - id: pin
+        uses: actions/cache/restore@v6
+        with:
+          path: .psp/pin
+          key: ${{ needs.setup.outputs.pin }}
+      - name: Require a later attempt to plan from the pin of an earlier one
+        if: github.run_attempt > 1 && steps.pin.outputs.cache-hit == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           NAME: ${{ needs.setup.outputs.pin }}
           REPO: ${{ github.repository }}
           RUN_ID: ${{ github.run_id }}
         run: |
-          n=$(gh api "repos/$REPO/actions/runs/$RUN_ID/artifacts?name=$NAME" --jq '.total_count')
-          echo "pinned=$([ "$n" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
-      - uses: actions/download-artifact@v8
-        with:
-          pattern: psp-record-*-${{ needs.setup.outputs.key12 }}-*
-          path: records
+          created=$(gh api "repos/$REPO/actions/caches?key=$NAME" --jq ".actions_caches[] | select(.key == \"$NAME\") | .created_at")
+          started=$(gh api "repos/$REPO/actions/runs/$RUN_ID" --jq .run_started_at)
+          echo "the pin was created $created, this attempt started $started"
+          [ "$(date -d "$created" +%s%N)" -lt "$(date -d "$started" +%s%N)" ] || { echo "::error::the pin was created in this attempt"; exit 1; }
+      # One at a time, so an artifact of an earlier attempt that a re-run of the whole workflow
+      # deleted, which the listings still return for minutes and fail to download, is skipped,
+      # while a record of this attempt that fails to download fails the job.
+      - name: Download the records
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KEY12: ${{ needs.setup.outputs.key12 }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          mkdir -p records
+          gh api --paginate "repos/$REPO/actions/runs/$RUN_ID/artifacts?per_page=100" \
+            --jq ".artifacts[] | select(.name | startswith(\"psp-record-\") and contains(\"-$KEY12-\")) | \"\(.id) \(.name)\"" |
+            while read -r id name; do
+              if gh api "repos/$REPO/actions/artifacts/$id/zip" > "$RUNNER_TEMP/a.zip" && unzip -q -o "$RUNNER_TEMP/a.zip" -d "records/$name-$id"; then
+                echo "downloaded $name"
+              else
+                case "$name" in
+                  *-attempt-"$ATTEMPT") echo "::error::the record $name of this attempt could not be downloaded"; exit 1 ;;
+                  *) echo "skipped $name, an earlier attempt's artifact that is gone" ;;
+                esac
+              fi
+            done
       - name: Require the history and the records
         env:
           BEFORE: ${{ needs.setup.outputs.before }}
           AFTER: ${{ steps.after.outputs.cache-matched-key }}
-          PINNED: ${{ steps.pin.outputs.pinned }}
+          PINNED: ${{ steps.pin.outputs.cache-hit }}
           EXPECTED: ${{ inputs.expect-history }}
           ENABLED: ${{ inputs.enabled }}
           FAIL_TEST: ${{ inputs.fail-test }}
@@ -301,6 +385,10 @@ jobs:
           fi
           if [ -n "$FAIL_TEST" ]; then
             grep -rqs '"status":"failed"' records || fail "no shard recorded the failing test"
+          fi
+          if [ "$ENABLED" != false ]; then
+            [ "$PINNED" = true ] || fail "no pin was saved"
+            node tests/e2e/history.js expect-pin "$RUN_ID" records
           fi
           case "$EXPECTED" in
             unchanged) [ "$AFTER" = "$BEFORE" ] || fail "the history changed" ;;

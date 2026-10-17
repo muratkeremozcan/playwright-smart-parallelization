@@ -10,17 +10,18 @@ const os = require('node:os');
 const path = require('node:path');
 const { actionInputs, readInputs, ACTION_INPUTS } = require('../lib/inputs');
 const { decide, preliminary, reporterPath, runAgeDays } = require('../lib/setup');
-const { pin } = require('../lib/pin');
+const { pin, pinText } = require('../lib/pin');
 const { onDefaultBranch, trust } = require('../lib/trust');
 const store = require('../lib/store');
 const { toolkitCache } = require('../lib/cache');
 const { fetchJobs, markdown, overheadFrom, simulate } = require('../lib/summary');
 const { applyRun, emptyHistory, serializeHistory } = require('../lib/history');
-const { cacheKey, cachePrefix, pinName } = require('../lib/identity');
+const { cacheKey, cachePrefix, pinKey } = require('../lib/identity');
 const { testKey } = require('../lib/plan/estimate');
-const { mapLimit, sha256 } = require('../lib/util');
+const { artifactGone, mapLimit, sha256 } = require('../lib/util');
 const { FIXTURE } = require('./support/fixture');
-const { modelArtifacts, modelCache, newWorld, cacheSave } = require('./support/model');
+const { modelArtifacts, modelCache, newWorld, cacheSave, runStore } = require('./support/model');
+const { downloadRecords } = require('../lib/finish');
 
 const tmp = (prefix) => fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 
@@ -186,187 +187,75 @@ describe('the pin', () => {
         prepared: p,
         runId: 7,
         job: 'test',
-        cache: modelCache(world, j.ws),
+        cache: modelCache(world, j.ws, opts.cacheOptions),
         artifacts: modelArtifacts(world, 7),
         sleep: async () => {},
         ...opts,
       });
     return { j, p, world, run };
   };
-  const pinArtifact = (world, p) => world.runs.get('7').get(pinName(p.key, 'test'));
+  const pinOf = (world, p) => world.cache.get(pinKey(p.key, 'test', 7));
+  const seed = (world, p, seq, text) =>
+    cacheSave(world, cacheKey(p.key, 1, seq), { 'history.json': Buffer.from(text) });
+  const NONE = { matchedKey: '', history: null, note: null };
 
   test('the first shard pins the newest history; a later shard reads the pin, not a newer entry', async () => {
     const { p, world, run } = setupPin();
     const first = serializeHistory(someHistory(p.key));
-    cacheSave(world, cacheKey(p.key, 1, 1), { 'history.json': Buffer.from(first) });
+    seed(world, p, 1, first);
     const a = await run();
     assert.deepStrictEqual(a, { matchedKey: cacheKey(p.key, 1, 1), history: first, note: null });
-    assert.ok(pinArtifact(world, p));
-    cacheSave(world, cacheKey(p.key, 1, 2), { 'history.json': Buffer.from('newer') });
+    assert.ok(pinOf(world, p));
+    seed(world, p, 2, 'newer');
     assert.deepStrictEqual(await run(), a);
   });
 
-  test('the shard whose upload creates the pin plans from its own bytes, with no read of it', async () => {
+  test('the shard whose save creates the pin plans from its own bytes, with no read of it after', async () => {
     const { p, world, run } = setupPin();
-    const first = serializeHistory(someHistory(p.key));
-    cacheSave(world, cacheKey(p.key, 1, 1), { 'history.json': Buffer.from(first) });
-    const artifacts = modelArtifacts(world, 7);
-    const finds = [];
-    const counted = { ...artifacts, find: (name) => (finds.push(name), artifacts.find(name)) };
-    const read = await run({ artifacts: counted });
-    assert.deepStrictEqual(read, { matchedKey: cacheKey(p.key, 1, 1), history: first, note: null });
-    assert.strictEqual(finds.length, 1, 'only the look before the upload');
-    assert.deepStrictEqual(await run(), read, 'a later shard downloads the same bytes');
+    seed(world, p, 1, serializeHistory(someHistory(p.key)));
+    const reads = [];
+    world.before = async (op, key) => {
+      if (op === 'restore' && key.startsWith('psp-pin-')) reads.push(key);
+    };
+    const read = await run();
+    assert.strictEqual(reads.length, 1, 'only the look before the save');
+    assert.deepStrictEqual(await run(), read, 'a later shard reads the same bytes');
   });
 
   test('the newest history restores while the shard looks for the pin', async () => {
     const { p, world, run } = setupPin();
-    cacheSave(world, cacheKey(p.key, 1, 1), {
-      'history.json': Buffer.from(serializeHistory(someHistory(p.key))),
-    });
+    seed(world, p, 1, serializeHistory(someHistory(p.key)));
     const order = [];
-    world.before = async (op) => {
-      order.push(`${op} starts`);
-      if (op === 'find') for (let i = 0; i < 5; i++) await new Promise((r) => setImmediate(r));
-      order.push(`${op} answers`);
+    world.before = async (op, key) => {
+      const what = `${key.startsWith('psp-pin-') ? 'pin' : 'history'} ${op}`;
+      order.push(`${what} starts`);
+      if (what === 'pin restore')
+        for (let i = 0; i < 5; i++) await new Promise((r) => setImmediate(r));
+      order.push(`${what} answers`);
     };
     await run();
-    assert.ok(order.indexOf('restore starts') < order.indexOf('find answers'), order.join(', '));
-  });
-
-  test('a re-run after the cache evicted every entry still reads the pin', async () => {
-    const { p, world, run } = setupPin();
-    const first = serializeHistory(someHistory(p.key));
-    cacheSave(world, cacheKey(p.key, 1, 1), { 'history.json': Buffer.from(first) });
-    const a = await run();
-    world.cache.clear();
-    assert.deepStrictEqual(await run(), a);
-  });
-
-  test('a re-run whose pin expired matches unpinned earlier shards and stops after pinned ones', async () => {
-    const { p, world, run } = setupPin();
-    const record = async (pinned, n) => {
-      const dir = tmp('psp-record-');
-      fs.writeFileSync(path.join(dir, 'record.json'), JSON.stringify({ pinned }));
-      await modelArtifacts(world, 7).upload(
-        `psp-record-test-${p.key.slice(0, 12)}-abc-${n}of2-attempt-1`,
-        [path.join(dir, 'record.json')],
-        dir
-      );
-    };
-    await record(false, 1);
-    assert.deepStrictEqual(await run({ attempt: 2 }), {
-      unpinned: true,
-      reason: 'the earlier attempt of this run ran unpinned, so this re-run does too',
-    });
-    await record(true, 2);
-    await assert.rejects(run({ attempt: 2 }), /is gone .* start a new run/);
-    // A first attempt never looks back, and a re-run with no earlier shard pins afresh.
-    const fresh = setupPin();
-    assert.deepStrictEqual(await fresh.run({ attempt: 2, retentionDays: '90' }), {
-      matchedKey: '',
-      history: null,
-      note: null,
-    });
-    // Artifacts kept shorter than a run can be re-run: a missing pin may have expired.
-    await assert.rejects(setupPin().run({ attempt: 2, retentionDays: '7' }), /kept 7 days/);
-    await assert.rejects(
-      setupPin().run({ attempt: 2, retentionDays: '7', runAge: async () => 9 }),
-      /kept 7 days/
+    assert.ok(
+      order.indexOf('history restore starts') < order.indexOf('pin restore answers'),
+      order.join(', ')
     );
-    // A run younger than the retention has lost no artifact: no shard ever pinned.
-    assert.deepStrictEqual(
-      await setupPin().run({ attempt: 2, retentionDays: '7', runAge: async () => 0.5 }),
-      { matchedKey: '', history: null, note: null }
-    );
-    assert.ok(await setupPin().run({ attempt: 1, retentionDays: '7' }));
-  });
-
-  test('a shard that cannot read the cache plans from the pin another shard wrote', async () => {
-    const { p, world, run } = setupPin();
-    const first = serializeHistory(someHistory(p.key));
-    cacheSave(world, cacheKey(p.key, 1, 1), { 'history.json': Buffer.from(first) });
-    const a = await run();
-    assert.deepStrictEqual(await run({ unreadable: 'no cache' }), a);
-    // The first shard without a cache pins no history, and says why.
-    const cold = setupPin();
-    assert.deepStrictEqual(await cold.run({ unreadable: 'no cache' }), {
-      matchedKey: '',
-      history: null,
-      note: 'no cache',
-    });
-  });
-
-  test("a re-run counts only earlier attempts' records, not a sibling's of its own attempt", async () => {
-    const { p, world, run } = setupPin();
-    const dir = tmp('psp-record-');
-    fs.writeFileSync(path.join(dir, 'record.json'), JSON.stringify({ pinned: true }));
-    await modelArtifacts(world, 7).upload(
-      `psp-record-test-${p.key.slice(0, 12)}-abc-1of2-attempt-2`,
-      [path.join(dir, 'record.json')],
-      dir
-    );
-    assert.deepStrictEqual(await run({ attempt: 2, retentionDays: '90' }), {
-      matchedKey: '',
-      history: null,
-      note: null,
-    });
   });
 
   test('no history is pinned too, so a shard that starts after a publish still plans native', async () => {
     const { p, world, run } = setupPin();
-    assert.deepStrictEqual(await run(), { matchedKey: '', history: null, note: null });
-    cacheSave(world, cacheKey(p.key, 1, 1), {
-      'history.json': Buffer.from(serializeHistory(someHistory(p.key))),
-    });
-    assert.deepStrictEqual(await run(), { matchedKey: '', history: null, note: null });
+    assert.deepStrictEqual(await run(), NONE);
+    seed(world, p, 1, serializeHistory(someHistory(p.key)));
+    assert.deepStrictEqual(await run(), NONE);
   });
 
-  test('two shards racing for the pin plan from the winner, even when the history moved between them', async () => {
-    const { j, p, world } = setupPin();
-    cacheSave(world, cacheKey(p.key, 1, 1), {
-      'history.json': Buffer.from(serializeHistory(someHistory(p.key))),
-    });
-    const other = tmp('psp-unit-');
-    let moved = false;
-    world.before = async (op) => {
-      // After the first history read, another run publishes a newer entry.
-      if (op === 'upload' && !moved) {
-        moved = true;
-        cacheSave(world, cacheKey(p.key, 1, 2), {
-          'history.json': Buffer.from(serializeHistory(someHistory(p.key)).replace('100', '101')),
-        });
-      }
-    };
-    const results = await Promise.all(
-      [j.ws, other].map((ws) =>
-        pin({
-          prepared: { ...p, workspace: ws },
-          runId: 7,
-          job: 'test',
-          cache: modelCache(world, ws),
-          artifacts: modelArtifacts(world, 7),
-          // A wait lets time pass, so the winner's upload completes.
-          sleep: () => new Promise((resolve) => setImmediate(resolve)),
-        })
-      )
-    );
-    assert.deepStrictEqual(results[0], results[1]);
-  });
-
-  test('a pin another shard is still uploading is waited for; one never readable fails the shard before any test', async () => {
-    // Another shard creates the pin between this shard's look and its upload, and finishes
+  test('a shard whose save lost waits for the winner and plans from its bytes; one never readable fails before any test', async () => {
+    // Another shard reserves the pin between this shard's look and its save, and finishes
     // uploading it only once this shard has waited.
     const racing = (p, world, done) => {
-      const name = pinName(p.key, 'test');
+      const key = pinKey(p.key, 'test', 7);
       const theirs = {
-        id: 999,
-        final: false,
         files: {
           'pin.json': Buffer.from(
-            JSON.stringify({
-              schema: 'playwright-smart-parallelization/pin',
-              version: 1,
+            pinText({
               key: p.key,
               runId: 7,
               job: 'test',
@@ -376,61 +265,221 @@ describe('the pin', () => {
             })
           ),
         },
+        created: 0,
+        final: false,
       };
-      world.before = async (op, n) => {
-        const store = world.runs.get('7');
-        if (op === 'upload' && n === name && !store.has(name)) store.set(name, theirs);
-        if (op === 'find') theirs.final = done();
+      world.before = async (op, k) => {
+        if (k !== key) return;
+        if (op === 'save' && !world.cache.has(key)) world.cache.set(key, theirs);
+        if (op === 'restore' && world.cache.get(key) === theirs) theirs.final = done();
       };
     };
     const { p, world, run } = setupPin();
+    seed(world, p, 1, serializeHistory(someHistory(p.key)));
     const waits = [];
     racing(p, world, () => waits.length > 0);
-    const read = await run({ sleep: async (ms) => waits.push(ms) });
+    const lines = [];
+    const read = await run({ sleep: async (ms) => waits.push(ms), log: (l) => lines.push(l) });
     assert.deepStrictEqual(waits, [250]);
     assert.deepStrictEqual(read, { matchedKey: '', history: null, note: 'theirs' });
+    assert.match(lines.join('\n'), /another shard pinned .* first/);
     const stuck = setupPin();
     racing(stuck.p, stuck.world, () => false);
-    await assert.rejects(
-      stuck.run(),
-      /was not found after 30s, and this shard could not upload it: .*Conflict.*stops before any test/
-    );
+    await assert.rejects(stuck.run(), /not readable after 30s, .* stops before any test/);
   });
 
-  test('a server with no artifact service leaves every shard unpinned', async () => {
-    const { run } = setupPin();
-    const artifacts = {
-      find: async () => {
-        throw Object.assign(new Error('no'), { name: 'GHESNotSupportedError' });
+  test('a save that failed for another reason than a lost race says so, and fails before any test', async () => {
+    const { j, world, run } = setupPin();
+    const cache = modelCache(world, j.ws);
+    Object.assign(cache, {
+      save: async () => {
+        cache.saveFailed = true;
+        return false;
       },
-    };
-    assert.deepStrictEqual(await run({ artifacts }), {
-      unpinned: true,
-      reason: 'this server has no artifact service to pin a snapshot in',
     });
+    const lines = [];
+    await assert.rejects(run({ cache, log: (l) => lines.push(l) }), /stops before any test/);
+    assert.match(lines.join('\n'), /could not be saved; this shard plans from another shard's pin/);
+  });
+
+  test('a job that cannot read and write the cache cannot pin, so it runs unpinned', async () => {
+    for (const [cacheOptions, reason] of [
+      [{ available: false }, /not available on this runner/],
+      [{ readable: false }, /cache mode does not let it read and write/],
+      [{ writable: false }, /cache mode does not let it read and write/],
+    ]) {
+      const { world, run } = setupPin();
+      const read = await run({ cacheOptions });
+      assert.strictEqual(read.unpinned, true);
+      assert.match(read.reason, reason);
+      assert.strictEqual(world.cache.size, 0, 'nothing saved');
+    }
+  });
+
+  test('a cache that refuses the save leaves the job unpinned, unless a pin is there', async () => {
+    const { j, world, run } = setupPin();
+    const denied = () => {
+      const cache = modelCache(world, j.ws);
+      return Object.assign(cache, {
+        save: async () => {
+          cache.writeDenied = true;
+          return false;
+        },
+      });
+    };
+    assert.deepStrictEqual(await run({ cache: denied() }), {
+      unpinned: true,
+      reason: 'the Actions cache refuses writes for this job, so this shard runs native',
+    });
+    const a = await run();
+    assert.deepStrictEqual(await run({ cache: denied() }), a);
   });
 
   test('a pin of another job or run is refused', async () => {
     const { p, world, run } = setupPin();
-    const dir = tmp('psp-pin-');
-    fs.writeFileSync(
-      path.join(dir, 'pin.json'),
-      JSON.stringify({
-        schema: 'playwright-smart-parallelization/pin',
-        version: 1,
-        key: p.key,
-        runId: 8,
-        job: 'test',
+    cacheSave(world, pinKey(p.key, 'test', 7), {
+      'pin.json': Buffer.from(
+        pinText({ key: p.key, runId: 8, job: 'test', matchedKey: '', history: null })
+      ),
+    });
+    await assert.rejects(run(), /not a pin of this job and run/);
+  });
+
+  describe('a re-run whose pin the cache evicted', () => {
+    /** Uploads the record of `shard` of attempt `attempt`, with the pin it kept unless `pin` is false. */
+    const record = async (world, p, { shard, attempt, mode, history = null, pin: keep = true }) => {
+      const dir = tmp('psp-record-');
+      fs.writeFileSync(
+        path.join(dir, 'record.json'),
+        JSON.stringify({
+          schema: 'playwright-smart-parallelization/record',
+          version: 1,
+          run: { id: 7, attempt },
+          key: p.key,
+          job: 'test',
+          shard: { current: shard, total: 2 },
+          mode,
+          snapshotSha: mode === 'balanced' ? sha256(history) : null,
+          corpusSha: 'abc',
+          corpus: null,
+          tests: [],
+        })
+      );
+      const files = [path.join(dir, 'record.json')];
+      if (keep) {
+        const matchedKey = history ? cacheKey(p.key, 1, 1) : '';
+        fs.writeFileSync(
+          path.join(dir, 'pin.json'),
+          pinText({ key: p.key, runId: 7, job: 'test', matchedKey, history })
+        );
+        files.push(path.join(dir, 'pin.json'));
+      }
+      await modelArtifacts(world, 7).upload(
+        `psp-record-test-${p.key.slice(0, 12)}-abc-${shard}of2-attempt-${attempt}`,
+        files,
+        dir
+      );
+    };
+
+    test('plans from the bytes the kept shards planned from, though the history moved on', async () => {
+      const { p, world, run } = setupPin();
+      const kept = serializeHistory(someHistory(p.key));
+      await record(world, p, { shard: 1, attempt: 1, mode: 'balanced', history: kept });
+      seed(world, p, 1, kept);
+      seed(world, p, 2, kept.replace('100', '101'));
+      const lines = [];
+      const read = await run({ attempt: 2, log: (l) => lines.push(l) });
+      assert.deepStrictEqual(read, {
+        matchedKey: cacheKey(p.key, 1, 1),
+        history: kept,
+        note: null,
+      });
+      assert.match(lines.join('\n'), /bytes the shards that already ran planned from/);
+      assert.ok(pinOf(world, p), 'and pins them again');
+    });
+
+    test('runs native when the kept shards ran native', async () => {
+      const { p, world, run } = setupPin();
+      await record(world, p, { shard: 1, attempt: 1, mode: 'native', pin: false });
+      seed(world, p, 1, serializeHistory(someHistory(p.key)));
+      assert.deepStrictEqual(await run({ attempt: 2 }), {
         matchedKey: '',
         history: null,
-      })
-    );
-    await modelArtifacts(world, 7).upload(
-      pinName(p.key, 'test'),
-      [path.join(dir, 'pin.json')],
-      dir
-    );
-    await assert.rejects(run(), /not a pin of this job and run/);
+        note: 'the shards of this run that already ran ran native',
+      });
+    });
+
+    test('takes the newest attempt of each shard', async () => {
+      const { p, world, run } = setupPin();
+      const old = serializeHistory(someHistory(p.key));
+      const kept = old.replace('100', '102');
+      await record(world, p, { shard: 1, attempt: 1, mode: 'balanced', history: old });
+      await record(world, p, { shard: 1, attempt: 2, mode: 'balanced', history: kept });
+      await record(world, p, { shard: 2, attempt: 2, mode: 'balanced', history: kept });
+      assert.strictEqual((await run({ attempt: 3 })).history, kept);
+    });
+
+    test('a shard of the first attempt that starts after the cache dropped the pin plans as the shards that already ran', async () => {
+      const { p, world, run } = setupPin();
+      const kept = serializeHistory(someHistory(p.key));
+      await record(world, p, { shard: 1, attempt: 1, mode: 'balanced', history: kept });
+      seed(world, p, 1, kept.replace('100', '101'));
+      assert.strictEqual((await run({ attempt: 1 })).history, kept);
+    });
+
+    test('a shard that cannot pin runs native, unless the shards that already ran planned from a pin', async () => {
+      const native = setupPin();
+      await record(native.world, native.p, { shard: 1, attempt: 1, mode: 'native', pin: false });
+      assert.strictEqual(
+        (await native.run({ attempt: 2, cacheOptions: { available: false } })).unpinned,
+        true
+      );
+      const { p, world, run } = setupPin();
+      const kept = serializeHistory(someHistory(p.key));
+      await record(world, p, { shard: 1, attempt: 1, mode: 'balanced', history: kept });
+      await assert.rejects(
+        run({ attempt: 2, cacheOptions: { writable: false } }),
+        /cannot plan as they did; re-run it where the job can read and write the cache/
+      );
+    });
+
+    test('fails before any test when the kept shards cannot all be matched', async () => {
+      const { p, world, run } = setupPin();
+      const kept = serializeHistory(someHistory(p.key));
+      await record(world, p, { shard: 1, attempt: 1, mode: 'balanced', history: kept, pin: false });
+      await assert.rejects(run({ attempt: 2 }), /no record .* holds its bytes.* start a new run/);
+      await record(world, p, { shard: 2, attempt: 1, mode: 'native', pin: false });
+      await assert.rejects(run({ attempt: 2 }), /different snapshots.* start a new run/);
+    });
+
+    test('with no record either, pins afresh only when no record can have expired', async () => {
+      // A first attempt never looks back, and a re-run with no earlier record pins afresh.
+      assert.deepStrictEqual(await setupPin().run({ attempt: 2, retentionDays: '90' }), NONE);
+      // Artifacts kept shorter than a run can be re-run: a missing record may have expired.
+      await assert.rejects(setupPin().run({ attempt: 2, retentionDays: '7' }), /kept 7 days/);
+      await assert.rejects(
+        setupPin().run({ attempt: 2, retentionDays: '7', runAge: async () => 9 }),
+        /kept 7 days/
+      );
+      // A run younger than the retention has lost no artifact.
+      assert.deepStrictEqual(
+        await setupPin().run({ attempt: 2, retentionDays: '7', runAge: async () => 0.5 }),
+        NONE
+      );
+      assert.ok(await setupPin().run({ attempt: 1, retentionDays: '7' }));
+    });
+
+    test('a server with no artifact service has no records to match', async () => {
+      const artifacts = {
+        list: async () => {
+          throw Object.assign(new Error('no'), { name: 'GHESNotSupportedError' });
+        },
+      };
+      assert.deepStrictEqual(
+        await setupPin().run({ attempt: 2, retentionDays: '90', artifacts }),
+        NONE
+      );
+    });
   });
 });
 
@@ -793,6 +842,59 @@ test('mapLimit keeps the order of the items and never runs more than the limit a
   assert.deepStrictEqual(await mapLimit([], 4, async () => 1), []);
 });
 
+test('an artifact is gone when its download answers 404', () => {
+  const notFound = new Error(
+    'Failed to GetSignedArtifactURL: Received non-retryable error: Failed request: (404) Not Found: artifact not found'
+  );
+  assert.strictEqual(artifactGone(notFound), true);
+  assert.strictEqual(
+    artifactGone(Object.assign(new Error('x'), { name: 'ArtifactNotFoundError' })),
+    true
+  );
+  assert.strictEqual(artifactGone(new Error('Failed request: (500) Internal Server Error')), false);
+  assert.strictEqual(artifactGone(null), false);
+});
+
+test('finish skips a gone artifact only when a later attempt of its job started', async () => {
+  const world = newWorld();
+  const upload = async (name, data) => {
+    const dir = tmp('psp-gone-');
+    fs.writeFileSync(path.join(dir, 'start.json'), JSON.stringify(data));
+    await modelArtifacts(world, 9).upload(name, [path.join(dir, 'start.json')], dir);
+  };
+  const start = (attempt) => ({
+    schema: 'playwright-smart-parallelization/start',
+    version: 1,
+    token: `t${attempt}`,
+    run: { id: 9, attempt },
+    key: 'k'.repeat(24),
+    job: 'test',
+    historyKey: '',
+  });
+  const key12 = 'k'.repeat(12);
+  await upload(`psp-start-test-${key12}-t1-1-attempt-1`, start(1));
+  await upload(`psp-start-test-${key12}-t2-1-attempt-2`, start(2));
+  const store = runStore(world, 9);
+  const read = (attempt) => downloadRecords(modelArtifacts(world, 9), tmp('psp-finish-'), attempt);
+  // A re-run of the whole workflow: attempt 1's marker is gone, attempt 2's job left its own.
+  store[0].gone = true;
+  assert.strictEqual((await read(2)).gone, 1);
+  // Only finish re-run in attempt 3: attempt 2's marker gone with no later start of its job.
+  store[0].gone = false;
+  store[1].gone = true;
+  await assert.rejects(read(3), /no later attempt of its job started/);
+  // This attempt's own artifact that cannot be downloaded fails the step.
+  await assert.rejects(read(2), /\(404\) Not Found/);
+  // A disabled shard's status stands for no test; a job named like one is still checked.
+  store[1].gone = false;
+  await upload('psp-record-test-kkkkkkkkkkkk-disabled-0123456789ab-attempt-1', start(1));
+  await upload(`psp-start-x-disabled-${key12}-t3-1-attempt-1`, { ...start(1), job: 'x-disabled' });
+  store[2].gone = true;
+  assert.strictEqual((await read(2)).gone, 1);
+  store[3].gone = true;
+  await assert.rejects(read(2), /no later attempt of its job started/);
+});
+
 describe('the toolkit cache adapter', () => {
   /** Runs `fn` with stdout captured: `{ value, out }`. */
   async function captured(fn) {
@@ -822,16 +924,25 @@ describe('the toolkit cache adapter', () => {
       '::warning::Cache reservation failed: already exists',
       '::warning::Failed to save: Unable to reserve cache with key k, another job may be creating this cache.',
     ];
-    const { value, out } = await captured(() => saving(-1, lines).save('d', 'k'));
+    const adapter = saving(-1, lines);
+    const { value, out } = await captured(() => adapter.save('d', 'k'));
     assert.strictEqual(value, false);
+    assert.strictEqual(adapter.saveFailed, false, 'another writer holds the key');
     assert.doesNotMatch(out, /::warning::/);
     assert.match(out, /^Failed to save: Unable to reserve cache with key k/m);
+    // The cache service v2 logs its lost reservation as a plain line.
+    const plain = saving(-1, [
+      'Failed to save: Unable to reserve cache with key k, another job may be creating this cache.',
+    ]);
+    await captured(() => plain.save('d', 'k'));
+    assert.strictEqual(plain.saveFailed, false);
   });
 
   test('an id with a logged failure, as the legacy service returns after a failed upload, did not create the entry', async () => {
     const adapter = saving(42, ['::warning::Failed to save: Cache upload failed']);
     const { value, out } = await captured(() => adapter.save('d', 'k'));
     assert.strictEqual(value, false);
+    assert.strictEqual(adapter.saveFailed, true, 'no other writer holds the key');
     assert.match(
       out,
       /::warning::Failed to save: Cache upload failed/,

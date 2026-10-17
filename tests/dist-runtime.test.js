@@ -2,10 +2,10 @@
 
 /**
  * The bundled main step and finish action run in Node with `--throw-deprecation` against a local
- * stand-in for the Actions artifact service: main reads its pin through an artifact download and
- * uploads its start marker, finish lists and downloads the markers. No step prints a deprecation
- * warning, such as the DEP0005 `new Buffer()` of the toolkit's unzip dependencies, which
- * scripts/build.js patches out.
+ * stand-in for the Actions cache and artifact services: main pins its snapshot through a cache
+ * save, or reads the pin through a cache restore, and uploads its start marker; finish lists and
+ * downloads the markers. No step prints a deprecation warning, such as the DEP0005 `new Buffer()`
+ * of the toolkit's unzip dependencies, which scripts/build.js patches out.
  */
 
 const { test, before, after } = require('node:test');
@@ -14,66 +14,25 @@ const fs = require('node:fs');
 const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
-const zlib = require('node:zlib');
 const { spawn } = require('node:child_process');
 const { FIXTURE, requireFixture } = require('./support/fixture');
 const { actionInputs, readInputs, ACTION_INPUTS } = require('../lib/inputs');
-const { pinName } = require('../lib/identity');
-const { SCHEMA: PIN_SCHEMA } = require('../lib/pin');
-const { canonicalJson } = require('../lib/util');
+const { pinKey } = require('../lib/identity');
 
 const DIST = path.join(__dirname, '..', 'dist');
 const RUN_ID = 4242;
 const SERVICE = 'github.actions.results.api.v1.ArtifactService';
-
-/** A zip archive that stores `files` (`{ name: Buffer }`) uncompressed. */
-function zip(files) {
-  const locals = [];
-  const centrals = [];
-  let offset = 0;
-  for (const [name, data] of Object.entries(files)) {
-    const fileName = Buffer.from(name);
-    const crc = zlib.crc32(data);
-    const header = (signature, size) => {
-      const b = Buffer.alloc(size);
-      b.writeUInt32LE(signature, 0);
-      return b;
-    };
-    const local = header(0x04034b50, 30);
-    local.writeUInt16LE(20, 4);
-    local.writeUInt32LE(crc, 14);
-    local.writeUInt32LE(data.length, 18);
-    local.writeUInt32LE(data.length, 22);
-    local.writeUInt16LE(fileName.length, 26);
-    const central = header(0x02014b50, 46);
-    central.writeUInt16LE(20, 4);
-    central.writeUInt16LE(20, 6);
-    central.writeUInt32LE(crc, 16);
-    central.writeUInt32LE(data.length, 20);
-    central.writeUInt32LE(data.length, 24);
-    central.writeUInt16LE(fileName.length, 28);
-    central.writeUInt32LE(offset, 42);
-    locals.push(local, fileName, data);
-    centrals.push(central, fileName);
-    offset += local.length + fileName.length + data.length;
-  }
-  const directory = Buffer.concat(centrals);
-  const end = Buffer.alloc(22);
-  end.writeUInt32LE(0x06054b50, 0);
-  end.writeUInt16LE(Object.keys(files).length, 8);
-  end.writeUInt16LE(Object.keys(files).length, 10);
-  end.writeUInt32LE(directory.length, 12);
-  end.writeUInt32LE(offset, 16);
-  return Buffer.concat([...locals, directory, end]);
-}
+const CACHE_SERVICE = 'github.actions.results.api.v1.CacheService';
 
 /**
- * The artifact service the toolkit talks to: the Twirp JSON API for list, signed URL, create and
- * finalize, a blob store for the signed URLs, and the jobs API finish reads.
+ * The services the toolkit talks to: the artifact service's Twirp JSON API for list, signed URL,
+ * create and finalize, the cache service's for download URL, create and finalize, where a key is
+ * created once, a blob store for the signed URLs, and the jobs API finish reads.
  */
 function artifactService() {
   const artifacts = new Map();
   const uploads = new Map();
+  const entries = new Map();
   let nextId = 1;
   const server = http.createServer((req, res) => {
     const chunks = [];
@@ -86,6 +45,47 @@ function artifactService() {
         res.end(JSON.stringify(value));
       };
       const base = `http://127.0.0.1:${server.address().port}`;
+      if (url.pathname.startsWith(`/twirp/${CACHE_SERVICE}/`)) {
+        const method = url.pathname.split('/').pop();
+        const request = JSON.parse(body.toString() || '{}');
+        if (method === 'GetCacheEntryDownloadURL') {
+          const found = entries.get(request.key);
+          if (!found || !found.final) return json(200, { ok: false });
+          return json(200, {
+            ok: true,
+            signedDownloadUrl: `${base}/cache-blob/${encodeURIComponent(request.key)}?sig=x`,
+            matchedKey: request.key,
+          });
+        }
+        if (method === 'CreateCacheEntry') {
+          if (entries.has(request.key)) return json(200, { ok: false, message: 'already exists' });
+          entries.set(request.key, { parts: [], final: false });
+          return json(200, {
+            ok: true,
+            signedUploadUrl: `${base}/cache-upload/${encodeURIComponent(request.key)}?sig=x`,
+          });
+        }
+        if (method === 'FinalizeCacheEntryUpload') {
+          entries.get(request.key).final = true;
+          return json(200, { ok: true, entryId: '1' });
+        }
+        return json(404, { code: 'not_found', msg: method });
+      }
+      if (url.pathname.startsWith('/cache-upload/')) {
+        const key = decodeURIComponent(url.pathname.slice('/cache-upload/'.length));
+        if (url.searchParams.get('comp') !== 'blocklist') entries.get(key).parts.push(body);
+        res.writeHead(201, { etag: '"1"', 'last-modified': new Date().toUTCString() });
+        return res.end();
+      }
+      if (url.pathname.startsWith('/cache-blob/')) {
+        const key = decodeURIComponent(url.pathname.slice('/cache-blob/'.length));
+        const data = Buffer.concat(entries.get(key).parts);
+        res.writeHead(200, {
+          'content-type': 'application/octet-stream',
+          'content-length': data.length,
+        });
+        return res.end(data);
+      }
       if (url.pathname.startsWith(`/twirp/${SERVICE}/`)) {
         const method = url.pathname.split('/').pop();
         // The toolkit sends proto field names.
@@ -148,11 +148,7 @@ function artifactService() {
       return json(404, {});
     });
   });
-  const add = (name, files) => {
-    const id = nextId++;
-    artifacts.set(name, { id, name, zip: zip(files) });
-  };
-  return { server, artifacts, add };
+  return { server, artifacts, entries };
 }
 
 let service;
@@ -187,6 +183,7 @@ function stepEnv(step) {
     GITHUB_SERVER_URL: 'https://github.com',
     ACTIONS_RUNTIME_TOKEN: token,
     ACTIONS_RESULTS_URL: `${base}/`,
+    ACTIONS_CACHE_SERVICE_V2: 'true',
     RUNNER_OS: 'Linux',
     RUNNER_ARCH: 'X64',
     RUNNER_NAME: 'local',
@@ -212,40 +209,34 @@ function runEntry(file, env) {
 
 before(async () => {
   requireFixture();
-  ws = fs.mkdtempSync(path.join(os.tmpdir(), 'psp-dist-ws-'));
+  // The real path, as the cache toolkit resolves the cached folders against the workspace.
+  ws = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'psp-dist-ws-')));
   for (const file of ['package.json', 'package-lock.json']) {
     fs.copyFileSync(path.join(FIXTURE, file), path.join(ws, file));
   }
   service = artifactService();
   await new Promise((resolve) => service.server.listen(0, '127.0.0.1', resolve));
-  const env = stepEnv('pin');
-  const prepared = actionInputs(readInputs(ACTION_INPUTS, env), env);
-  service.add(pinName(prepared.key, 'test'), {
-    'pin.json': Buffer.from(
-      canonicalJson({
-        schema: PIN_SCHEMA,
-        version: 1,
-        key: prepared.key,
-        runId: RUN_ID,
-        job: 'test',
-        matchedKey: '',
-        history: null,
-        note: null,
-      })
-    ),
-  });
 });
 
 after(() => service.server.close());
 
-test('the bundled main step downloads its pin and uploads its marker with no deprecation', async () => {
-  const run = await runEntry(path.join(DIST, 'main.js'), stepEnv('main'));
-  const output = `${run.stdout}${run.stderr}`;
-  assert.strictEqual(run.status, 0, output);
+test('the bundled main step pins through the cache, reads the pin back, and uploads its marker with no deprecation', async () => {
+  const env = stepEnv('main');
+  const { key } = actionInputs(readInputs(ACTION_INPUTS, env), env);
+  const pinned = await runEntry(path.join(DIST, 'main.js'), env);
+  const output = `${pinned.stdout}${pinned.stderr}`;
+  assert.strictEqual(pinned.status, 0, output);
   assert.doesNotMatch(output, /DeprecationWarning|DEP0\d{3}|::error/, output);
-  assert.match(run.stdout, /read the pin psp-pin-test-/);
-  assert.match(run.stdout, /uploaded psp-start-test-/);
+  assert.match(pinned.stdout, /pinned no history as psp-pin-v2-/);
+  assert.match(pinned.stdout, /uploaded psp-start-test-/);
+  assert.ok(service.entries.get(pinKey(key, 'test', RUN_ID)).final);
   assert.ok([...service.artifacts.keys()].some((name) => name.startsWith('psp-start-test-')));
+  // Another shard of the job restores the pin the first one saved.
+  const read = await runEntry(path.join(DIST, 'main.js'), stepEnv('main'));
+  const again = `${read.stdout}${read.stderr}`;
+  assert.strictEqual(read.status, 0, again);
+  assert.doesNotMatch(again, /DeprecationWarning|DEP0\d{3}|::error/, again);
+  assert.match(read.stdout, /read the pin psp-pin-v2-/);
 });
 
 test('the bundled finish action downloads the markers with no deprecation', async () => {

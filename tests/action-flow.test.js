@@ -13,10 +13,17 @@ const assert = require('node:assert');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { cacheRestore, cacheSave, finishJob, newWorld, shardJob } = require('./support/model');
+const {
+  cacheRestore,
+  cacheSave,
+  finishJob,
+  newWorld,
+  rerunAll,
+  shardJob,
+} = require('./support/model');
 const { FIXTURE, requireFixture } = require('./support/fixture');
 const { parseHistory } = require('../lib/history');
-const { cacheKey, cachePrefix, pinName } = require('../lib/identity');
+const { cacheKey, cachePrefix, pinKey } = require('../lib/identity');
 const { sha256 } = require('../lib/util');
 
 // The epoch of a chain the model starts: the day its shards publish on (PSP_TODAY).
@@ -146,6 +153,29 @@ describe('cold start, a warm run without finish, a re-run shard, a failed test a
     assert.match(finish.io.summaryText, /\| 2 \| 2 \| /, 'the latest attempt of shard 2');
   });
 
+  test('a re-run after the cache evicted the pin plans from the pin the kept shards hold', async () => {
+    const key = pinKey(keyOf(warm), 'test', 102);
+    assert.ok(world.cache.delete(key), 'the pin was in the cache');
+    const ctx = { ws: workspace(), world };
+    const again = await shardJob(ctx, {
+      runId: 102,
+      attempt: 3,
+      cwd: 'app',
+      command: command(1, 2),
+    });
+    assert.match(again.main.io.lines.join('\n'), /bytes the shards that already ran planned from/);
+    assert.strictEqual(
+      again.main.io.exported.PSP_SNAPSHOT_SHA,
+      warm[0].main.io.exported.PSP_SNAPSHOT_SHA
+    );
+    assert.strictEqual(planSha(again), planSha(warm[0]));
+    // It pinned those bytes again, so the next re-run reads them from the cache.
+    assert.ok(world.cache.has(key));
+    const finish = await finishOf(world, 102);
+    assert.strictEqual(finish.io.failed, null, finish.io.summaryText);
+    assert.strictEqual(finish.io.outputs.coverage, 'ok');
+  });
+
   test('finish over the cold run: every test ran exactly once', async () => {
     const finish = await finishOf(world, 101);
     assert.strictEqual(finish.io.failed, null, finish.io.summaryText);
@@ -174,7 +204,10 @@ describe('cold start, a warm run without finish, a re-run shard, a failed test a
       assert.strictEqual(job.user.status, 0, job.user.output);
       assert.doesNotMatch(job.user.output, /playwright-smart-parallelization/);
     }
-    assert.ok(![...world.runs.get('104').keys()].some((k) => k.startsWith('psp-pin-')), 'no pin');
+    assert.ok(
+      ![...world.cache.keys()].some((k) => k.startsWith('psp-pin-') && k.endsWith('-104')),
+      'no pin'
+    );
     assert.deepStrictEqual(newest(world, keyOf(cold)), before);
     // The jobs API answers two slow pages; a finish with nothing to check still reads them all
     // before it ends, so no request outlives the step and its operation count.
@@ -354,7 +387,7 @@ describe('history edge cases', () => {
     for (const job of jobs) {
       assert.strictEqual(
         job.main.io.outputs.reason,
-        'the Actions cache is not available on this runner'
+        'the Actions cache is not available on this runner, so this shard runs native'
       );
       assert.strictEqual(job.user.status, 0, job.user.output);
     }
@@ -403,23 +436,71 @@ describe('history edge cases', () => {
     assert.strictEqual(finish.io.failed, null, finish.io.summaryText);
   });
 
-  test('each job of a run pins its own snapshot', () => {
-    assert.notStrictEqual(pinName('k', 'a'), pinName('k', 'b'));
+  test('each job and each run pins its own snapshot', () => {
+    assert.notStrictEqual(pinKey('k', 'a', 1), pinKey('k', 'b', 1));
+    assert.notStrictEqual(pinKey('k', 'a', 1), pinKey('k', 'a', 2));
   });
 
-  test('a cache mode that refuses writes: the shards balance from the history and publish nothing', async () => {
+  test('a cache mode that refuses reads or writes: the shards cannot pin, so run native and publish nothing', async () => {
     requireFixture();
     const world = newWorld();
     await run(world, 801, 2);
     const before = [...world.cache.keys()].length;
+    // Read-only: the history is there, but no save can decide a pin, so balancing could split
+    // the shards over two snapshots.
     const jobs = await run(world, 802, 2, { cacheOptions: { writable: false } });
-    assert.strictEqual(jobs[0].main.io.outputs.mode, 'balanced');
+    for (const job of jobs) {
+      assert.strictEqual(job.main.io.outputs.mode, 'native');
+      assert.match(job.main.io.outputs.reason, /cache mode does not let it read and write/);
+      assert.strictEqual(job.user.status, 0, job.user.output);
+    }
     assert.match(jobs[0].post.lines.join('\n'), /cannot be read and written by this job/);
     assert.strictEqual([...world.cache.keys()].length, before);
+    assert.strictEqual((await finishOf(world, 802)).io.failed, null);
     const none = await run(world, 803, 2, { cacheOptions: { readable: false } });
     assert.match(none[0].main.io.outputs.reason, /cache mode does not let it read/);
     // Write-only: a shard that cannot read the history publishes nothing over it.
     assert.match(none[0].post.lines.join('\n'), /cannot be read and written by this job/);
     assert.strictEqual([...world.cache.keys()].length, before);
+  });
+});
+
+describe('a re-run of the whole workflow, which deletes the artifacts of the run', () => {
+  const world = newWorld();
+  let first;
+
+  before(async () => {
+    requireFixture();
+    await run(world, 901, 2);
+    first = await run(world, 902, 2);
+  });
+
+  test('every shard reads the pin of the first attempt, though the history moved on', async () => {
+    assert.strictEqual(first[0].main.io.outputs.mode, 'balanced');
+    rerunAll(world, 902);
+    const again = await run(world, 902, 2, { attempt: 2 });
+    for (const [i, job] of again.entries()) {
+      assert.match(job.main.io.lines.join('\n'), /read the pin/);
+      assert.strictEqual(
+        job.main.io.exported.PSP_SNAPSHOT_SHA,
+        first[i].main.io.exported.PSP_SNAPSHOT_SHA
+      );
+      assert.strictEqual(planSha(job), planSha(first[i]));
+    }
+    const finish = await finishOf(world, 902, { env: { GITHUB_RUN_ATTEMPT: '2' } });
+    assert.strictEqual(finish.io.failed, null, finish.io.summaryText);
+    assert.strictEqual(finish.io.outputs.coverage, 'ok');
+  });
+
+  test('with the pin evicted too, the shards of the re-run pin afresh, one snapshot for all', async () => {
+    rerunAll(world, 902);
+    world.cache.delete(pinKey(keyOf(first), 'test', 902));
+    const again = await run(world, 902, 2, { attempt: 3, inputs: {} });
+    const shas = again.map((job) => job.main.io.exported.PSP_SNAPSHOT_SHA);
+    assert.strictEqual(new Set(shas).size, 1);
+    assert.notStrictEqual(shas[0], first[0].main.io.exported.PSP_SNAPSHOT_SHA, 'a newer history');
+    assert.strictEqual(planSha(again[0]), planSha(again[1]));
+    const finish = await finishOf(world, 902, { env: { GITHUB_RUN_ATTEMPT: '3' } });
+    assert.strictEqual(finish.io.failed, null, finish.io.summaryText);
   });
 });
