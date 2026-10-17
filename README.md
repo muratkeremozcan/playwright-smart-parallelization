@@ -67,7 +67,7 @@ jobs:
       - run: npx playwright test --shard=${{ matrix.shard }}/${{ strategy.job-total }} $PSP_ARGS
 ```
 
-Any Playwright command works: an npm script as `npm run test:e2e -- --shard=1/4 $PSP_ARGS`, shell variables, filters and a project in a subdirectory.
+Your own `playwright test` command works as it is: an npm script as `npm run test:e2e -- --shard=1/4 $PSP_ARGS`, shell variables, filters and a project in a subdirectory.
 Each shard publishes its own test times from the default branch, so the next run balances with no extra job.
 
 For a cross-shard check that every test ran exactly once, and the shard times in the job summary, add the finish action to the job that merges your reports:
