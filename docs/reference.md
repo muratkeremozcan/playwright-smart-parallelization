@@ -11,6 +11,7 @@ Facts about the Action that the README example does not need. Every input is in 
 
 - Each shard uploads its blob report as `blob-report-<key>-<shard>-attempt-<n>`, so `pattern: blob-report-*` downloads them.
 - A blob reporter in your config writes into the Action's folder too, and `finish` merges it.
+- With `enabled: false` the Action adds no reporter; a blob reporter in your config still writes into the Action's folder, and `finish` merges it.
 - `finish` merges with the Playwright installed in `working-directory`, else `npx playwright@<version>`.
 - `merge-config` picks the merge reporters and needs Playwright installed in the finish job.
 

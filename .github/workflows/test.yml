@@ -99,6 +99,7 @@ jobs:
       history-key: e2e-rollback-${{ github.run_id }}
       seed: true
       enabled: 'false'
+      config: blob.config.js
       expect-mode: disabled
       expect-coverage: not checked
       expect-history: unchanged

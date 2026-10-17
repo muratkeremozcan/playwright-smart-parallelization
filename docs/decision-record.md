@@ -36,7 +36,7 @@ Shape A (per-shard `--test-list` files) is rejected: `--test-list` is a lossy se
 
 - Lowest Playwright is 1.63: 1.62 has the preprocess hook but no `--add-reporter`. Older or unknown versions run plain `--shard`.
 - Yarn Plug'n'Play runs plain `--shard`: the reporter has no `node_modules` to load Playwright from.
-- Every balanced and native shard adds the `blob` reporter, unless the command names one, and points every blob reporter at one file in a folder the Action owns (`PLAYWRIGHT_BLOB_OUTPUT_FILE`). A blob reporter in the user's config writes the same file; Playwright runs `onEnd` one reporter after another, so the second write replaces the first. Rollback adds no reporter.
+- Every balanced and native shard adds the `blob` reporter, unless the command names one, and points every blob reporter at one file in a folder the Action owns (`PLAYWRIGHT_BLOB_OUTPUT_FILE`). A blob reporter in the user's config writes the same file; Playwright runs `onEnd` one reporter after another, so the second write replaces the first. Rollback adds no reporter and sets the same blob variables, so a blob reporter of the user's config writes into the Action's folder; when a Playwright ignores them, the shard copies the report from Playwright's default folder.
 - Finish merges with the Playwright installed in `working-directory`, else `npx playwright@<plan version>` from npm. Under `pull_request_target` it uses npm only and ignores `merge-config`.
 - The Action needs Node 20: finish runs Playwright's CLI to merge the reports, and Playwright 1.64 needs Node 20. `main.js` checks it before any module loads.
 - A unit is one spec file of one project at one repeat. Whole files keep serial groups whole without private fields.

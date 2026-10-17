@@ -26,7 +26,13 @@ function workspace() {
   const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'psp-ws-'));
   const app = path.join(ws, 'app');
   fs.mkdirSync(app);
-  for (const file of ['playwright.config.js', 'package.json', 'package-lock.json']) {
+  for (const file of [
+    'playwright.config.js',
+    'blob.config.js',
+    'blob-outputfile.config.js',
+    'package.json',
+    'package-lock.json',
+  ]) {
     fs.copyFileSync(path.join(FIXTURE, file), path.join(app, file));
   }
   fs.cpSync(path.join(FIXTURE, 'tests'), path.join(app, 'tests'), { recursive: true });
@@ -201,6 +207,55 @@ describe('cold start, warm run, failed shard and rollback', () => {
     assert.strictEqual(off.finish.outcome, 'failure');
     assert.match(off.finish.summary, /shard \d exited with 1/);
     assert.deepStrictEqual(outcome(off.finish), ['disabled', 'not checked', 'unchanged']);
+  });
+
+  test('rollback: a blob reporter in the config still uploads one blob report per shard, and finish merges them', () => {
+    // The consumer's own config writes its blob report to blob-report next to the config. Rollback
+    // adds no reporter, so the Action uploads that folder. Its own workspace, as a fresh checkout
+    // is, so the folder it leaves behind reaches no other run.
+    const own = {
+      ws: workspace(),
+      world: { ...newWorld(), cache: ctx.world.cache, created: ctx.world.created },
+    };
+    const off = pipeline(own, 106, {
+      inputs: {
+        enabled: 'false',
+        command:
+          'npx playwright test --config=blob.config.js --project=chromium --grep-invert=oversized',
+      },
+    });
+    assert.strictEqual(off.plan.mode, 'disabled');
+    const key12 = off.plan.key.slice(0, 12);
+    for (const [n, s] of off.shards.entries()) {
+      assert.strictEqual(s.outcome, 'success');
+      assert.doesNotMatch(s.stdout, /--add-reporter/);
+      const files = own.world.artifacts.get(`blob-report-${key12}-${n + 1}-attempt-1`);
+      assert.ok(files, `blob-report-${key12}-${n + 1}-attempt-1`);
+      assert.ok(Object.keys(files).some((f) => f.endsWith('.zip')));
+    }
+    const merged = own.world.artifacts.get(`playwright-report-${key12}-106`);
+    assert.ok(merged && merged['index.html'], 'the merged HTML report');
+    assert.deepStrictEqual(outcome(off.finish), ['disabled', 'not checked', 'unchanged']);
+  });
+
+  test('rollback: a blob reporter with its own outputFile in the config still reaches finish', () => {
+    const own = {
+      ws: workspace(),
+      world: { ...newWorld(), cache: ctx.world.cache, created: ctx.world.created },
+    };
+    const off = pipeline(own, 107, {
+      inputs: {
+        enabled: 'false',
+        command:
+          'npx playwright test --config=blob-outputfile.config.js --project=chromium --grep-invert=oversized',
+      },
+    });
+    const key12 = off.plan.key.slice(0, 12);
+    for (const n of [1, 2]) {
+      const files = own.world.artifacts.get(`blob-report-${key12}-${n}-attempt-1`);
+      assert.ok(files && Object.keys(files).some((f) => f.endsWith('.zip')), `shard ${n}`);
+    }
+    assert.ok(own.world.artifacts.get(`playwright-report-${key12}-107`)['index.html']);
   });
 
   test('rollback: enabled false runs plain --shard, no reporter at all, no history write', () => {
