@@ -46,6 +46,10 @@ on:
         description: The coverage finish outputs, ok or not checked.
         type: string
         default: ok
+      config:
+        description: The Playwright config of the fixture, empty for its default one.
+        type: string
+        default: ''
       node-version:
         description: The Node that prepare and finish run on, empty for the runner's own.
         type: string
@@ -56,8 +60,9 @@ permissions:
   actions: read
 
 env:
-  # No blob reporter here: the Action adds one to every shard.
-  COMMAND: npx playwright test
+  # No blob reporter in the default config: the Action adds one to every shard. The rollback leg
+  # names blob.config.js, whose own blob reporter is what a rollback run uploads.
+  COMMAND: npx playwright test${{ inputs.config != '' && format(' --config={0}', inputs.config) || '' }}
   WORKING_DIRECTORY: fixtures/consumer
 
 jobs:
@@ -350,10 +355,9 @@ jobs:
             *) echo "::error::unknown expectation $EXPECTED"; exit 1 ;;
           esac
 
-      # Rollback adds no reporter, so it uploads no blob report and merges nothing.
+      # Every leg, rollback included, uploads one blob report per shard and merges them.
       - name: Require the blob reports and the merged report
         env:
-          ROLLBACK: ${{ inputs.expect-coverage == 'not checked' }}
           GH_TOKEN: ${{ github.token }}
           PLAN: ${{ needs.prepare.outputs.plan }}
           REPO: ${{ github.repository }}
@@ -362,11 +366,6 @@ jobs:
           key12=$(jq -r '.key[0:12]' <<< "$PLAN")
           total=$(jq -r .total <<< "$PLAN")
           names=$(gh api --paginate "repos/$REPO/actions/runs/$RUN_ID/artifacts?per_page=100" --jq '.artifacts[].name')
-          if [ "$ROLLBACK" = true ]; then
-            ! grep -qE "^(blob-report|playwright-report)-$key12-" <<< "$names" \
-              || { echo "::error::a rollback run uploaded a blob or merged report"; exit 1; }
-            exit 0
-          fi
           for shard in $(seq 1 "$total"); do
             grep -qE "^blob-report-$key12-$shard-attempt-[0-9]+$" <<< "$names" \
               || { echo "::error::no blob-report-$key12-$shard-attempt-N artifact"; exit 1; }

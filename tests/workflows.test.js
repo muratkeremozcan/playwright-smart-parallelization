@@ -50,3 +50,17 @@ test('the shard step contains a failure, so the shard job stays green and finish
   assert.match(guard.if, /inputs\.fail-test == ''/);
   assert.match(guard.env.OUTCOME, new RegExp(`steps\\.${step.id}\\.outcome`));
 });
+
+test('the rollback leg runs a config with its own blob reporter and requires its blob reports', () => {
+  const callers = YAML.parse(
+    fs.readFileSync(path.join(__dirname, '..', '.github', 'workflows', 'test.yml'), 'utf8')
+  ).jobs;
+  const rollback = callers['e2e-rollback'].with;
+  assert.strictEqual(rollback.enabled, 'false');
+  assert.strictEqual(rollback.config, 'blob.config.js');
+  const require = jobs.finish.steps.find(
+    (s) => s.name === 'Require the blob reports and the merged report'
+  );
+  assert.doesNotMatch(require.run, /ROLLBACK/, 'no leg is exempt from the blob reports');
+  assert.strictEqual(require.if, undefined);
+});
