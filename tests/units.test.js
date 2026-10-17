@@ -208,7 +208,13 @@ describe('the pin', () => {
     await assert.rejects(run({ attempt: 2 }), /is gone .* start a new run/);
     // A first attempt never looks back, and a re-run with no earlier shard pins afresh.
     const fresh = setupPin();
-    assert.deepStrictEqual(await fresh.run({ attempt: 2 }), { matchedKey: '', history: null });
+    assert.deepStrictEqual(await fresh.run({ attempt: 2, retentionDays: '90' }), {
+      matchedKey: '',
+      history: null,
+    });
+    // Artifacts kept shorter than a run can be re-run: a missing pin may have expired.
+    await assert.rejects(setupPin().run({ attempt: 2, retentionDays: '7' }), /kept 7 days/);
+    assert.ok(await setupPin().run({ attempt: 1, retentionDays: '7' }));
   });
 
   test('no history is pinned too, so a shard that starts after a publish still plans native', async () => {

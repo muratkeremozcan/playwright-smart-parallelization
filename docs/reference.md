@@ -38,4 +38,4 @@ Facts about the Action that the README example does not need. Every input is in 
 - The Action runs on the runner's Node 24. The reporter runs in your Node, which Playwright 1.63 and later needs at 20 or above.
 - Playwright below 1.63, an unknown Playwright version, or Yarn Plug'n'Play leave `$PSP_ARGS` empty: plain `--shard`.
 - Without an Actions cache, or with a cache mode that refuses reads, every shard runs native; a cache mode that refuses reads or writes publishes nothing.
-- The pin lives as long as the run's artifacts. A re-run after they expired stops before any test when earlier shards planned from the pin; start a new run.
+- The pin lives as long as the run's artifacts. With artifacts kept under 30 days, the time a run can be re-run, a re-run that finds no pin stops before any test; start a new run.
