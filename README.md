@@ -6,6 +6,20 @@ Native `--shard` splits by test count, and keeps each file whole without `fullyP
 With 2 shards, one can take 10 minutes and the other 15, and the run waits for the 15.
 This Action splits by past durations, kept in your repo's own Actions storage.
 
+## Results
+
+On [pw-parallel-test](https://github.com/muratkeremozcan/pw-parallel-test): 222 sleep-only tests, Playwright 1.64.1, 1 worker per shard, the Action at `063aba8`, medians from [RESULTS.md](https://github.com/muratkeremozcan/pw-parallel-test/blob/c0623de/RESULTS.md).
+
+| Shards           |  Slowest shard |     Completion | Machine time | Runs                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ---------------- | -------------: | -------------: | -----------: | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 4 shards, native |        177.4 s |        213.5 s |      492.5 s | [1](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/38973296352) [2](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/38974030426) [3](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/38974811974) [4](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/38990554377) [5](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/38991559284) [6](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/38992617135) |
+| 4 shards, Action | 110.1 s (-38%) | 160.0 s (-25%) |      514.0 s | [1](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/38990835836) [2](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/38991829616) [3](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/38992888743)                                                                                                                                                                                                                                                       |
+| 8 shards, native |        147.9 s |        185.5 s |      563.0 s | [1](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/38973698179) [2](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/38974426524) [3](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/38975244150) [4](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/38991083935) [5](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/38992068791) [6](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/38993116763) |
+| 8 shards, Action |  59.0 s (-60%) | 121.0 s (-35%) |      596.0 s | [1](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/38991381689) [2](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/38992311276) [3](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/38993402144)                                                                                                                                                                                                                                                       |
+
+The ideal slowest shard is 108.2 s at 4 shards and 58.0 s at 8.
+The Action adds about 5 s per shard (machine time +4% and +6%), and the first run, with no history, runs native.
+
 ## Usage
 
 Pin a commit sha until v1 is released.
