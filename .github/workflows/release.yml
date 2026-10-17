@@ -69,30 +69,33 @@ jobs:
       - name: Run the validate gates
         run: npm run validate
 
-      # The prepare phase of the Action from this checkout on the consumer fixture. A history key
-      # of this run alone finds no history, so prepare plans native sharding, uploads no snapshot
-      # and writes nothing: only the finish phase publishes a history.
+      # The main step of the Action from this checkout, then a short native Playwright run on the
+      # consumer fixture with $PSP_ARGS. A history key of this run alone finds no history, so the
+      # shard plans native, and publish-history false keeps the post step from writing one.
       - name: Run the deterministic Action smoke
         id: smoke
         uses: ./
         with:
-          phase: prepare
-          shards: '2'
           working-directory: fixtures/consumer
           history-key: release-smoke-${{ github.run_id }}-${{ github.run_attempt }}
+          publish-history: 'false'
+
+      - name: Run Playwright with PSP_ARGS
+        working-directory: fixtures/consumer
+        run: npx playwright test tests/cart.spec.js --project=chromium --shard=1/2 $PSP_ARGS
 
       - name: Require the smoke outputs
         env:
           MODE: ${{ steps.smoke.outputs.mode }}
           REASON: ${{ steps.smoke.outputs.reason }}
-          MATRIX: ${{ steps.smoke.outputs.matrix }}
-          PLAN: ${{ steps.smoke.outputs.plan }}
+          ARGS: ${{ steps.smoke.outputs.args }}
         run: |
           set -euo pipefail
           test "$MODE" = native
           test "$REASON" = 'no history yet'
-          test "$(jq -c . <<< "$MATRIX")" = '{"shard":[1,2]}'
-          jq -e '.mode == "native" and .total == 2 and (.playwright | type == "string")' <<< "$PLAN" >/dev/null
+          case "$ARGS" in --add-reporter=/*reporter.js) ;; *) exit 1 ;; esac
+          test "$ARGS" = "$PSP_ARGS"
+          jq -e '.mode == "native" and .shard == {"current": 1, "total": 2} and (.tests | length > 0)' "$PSP_RECORD" >/dev/null
 
       - name: Derive the next exact version
         id: version
@@ -365,27 +368,33 @@ jobs:
       - name: Run the validate gates
         run: npm run validate
 
+      # The main step of the Action from the published tag, then a short native Playwright run on the
+      # consumer fixture with $PSP_ARGS. A history key of this run alone finds no history, so the
+      # shard plans native, and publish-history false keeps the post step from writing one.
       - name: Run the deterministic Action smoke
         id: smoke
         uses: ./
         with:
-          phase: prepare
-          shards: '2'
           working-directory: fixtures/consumer
           history-key: release-smoke-${{ github.run_id }}-${{ github.run_attempt }}
+          publish-history: 'false'
+
+      - name: Run Playwright with PSP_ARGS
+        working-directory: fixtures/consumer
+        run: npx playwright test tests/cart.spec.js --project=chromium --shard=1/2 $PSP_ARGS
 
       - name: Require the smoke outputs
         env:
           MODE: ${{ steps.smoke.outputs.mode }}
           REASON: ${{ steps.smoke.outputs.reason }}
-          MATRIX: ${{ steps.smoke.outputs.matrix }}
-          PLAN: ${{ steps.smoke.outputs.plan }}
+          ARGS: ${{ steps.smoke.outputs.args }}
         run: |
           set -euo pipefail
           test "$MODE" = native
           test "$REASON" = 'no history yet'
-          test "$(jq -c . <<< "$MATRIX")" = '{"shard":[1,2]}'
-          jq -e '.mode == "native" and .total == 2 and (.playwright | type == "string")' <<< "$PLAN" >/dev/null
+          case "$ARGS" in --add-reporter=/*reporter.js) ;; *) exit 1 ;; esac
+          test "$ARGS" = "$PSP_ARGS"
+          jq -e '.mode == "native" and .shard == {"current": 1, "total": 2} and (.tests | length > 0)' "$PSP_RECORD" >/dev/null
 
       - name: Verify Marketplace publication
         env:

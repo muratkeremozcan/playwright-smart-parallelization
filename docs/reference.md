@@ -1,25 +1,42 @@
 # Reference
 
-Facts about the Action that the README example does not need. Every input is in [`action.yml`](../action.yml).
+Facts about the Action that the README example does not need. Every input is in [`action.yml`](../action.yml) and [`finish/action.yml`](../finish/action.yml).
+
+## The command
+
+- `$PSP_ARGS` holds `--add-reporter=<the Action's reporter>`, plus `--workers=<n>` when the `workers` input is set. Put it last and unquoted.
+- An npm script passes it through after `--`: `npm run test:e2e -- --shard=1/4 $PSP_ARGS`.
+- The shard comes from your own `--shard` (or `shard` in the config). A run without one is not balanced; it is recorded as one shard.
+- Playwright keeps only the last `--add-reporter`, so add your own reporters in the config, not on the command line.
+- The Action exports the reporter's options as `PSP_*` variables to the later steps of the job.
+
+## Workers
+
+- With `workers` set, `$PSP_ARGS` passes it to Playwright and the plan packs every shard for that many workers.
+- With `workers` unset, Playwright resolves the workers from the runner's CPUs and the plan packs for 1 worker per shard, so every shard plans the same on any runner.
 
 ## Outputs
 
-- `prepare` outputs `mode` (`balanced`, `native` or `disabled`) and `reason`.
-- `finish` outputs `mode`, `coverage` (`ok`, `failed` or `not checked`), `history` (`published`, `unchanged` or `failed`) and `overhead-ms`.
+- The Action outputs `mode` (`balanced`, `native` or `disabled`), `reason` and `args` (the value of `$PSP_ARGS`).
+- `finish` outputs `mode`, `coverage` (`ok`, `failed` or `not checked`) and `overhead-ms`.
 
-## Reports
+## Finish
 
-- Each shard uploads its blob report as `blob-report-<key>-<shard>-attempt-<n>`, so `pattern: blob-report-*` downloads them.
-- A blob reporter in your config writes into the Action's folder too, and `finish` merges it.
-- With `enabled: false` the Action adds no reporter; a blob reporter in your config still writes into the Action's folder, and `finish` merges it.
-- `finish` merges with the Playwright installed in `working-directory`, else `npx playwright@<version>`.
-- `merge-config` picks the merge reporters and needs Playwright installed in the finish job.
+- `finish` reads the run records the shards upload as `psp-record-*` artifacts, so it needs no blob reports and merges none; your own merge step stays yours.
+- It checks every sharded job of the run; with several sharded jobs and a finish for each, give each job its own `history-key` and pass the same one to its finish.
+- A matrix with another dimension next to `shard` that runs the same tests, such as `node: [20, 22]`, needs its own `history-key` per leg, such as `history-key: node-${{ matrix.node }}`, so each leg keeps its own records and history.
+- It reads the jobs API for the per-shard overhead, so its job needs `permissions: actions: read`.
 
 ## History
 
-- The history is keyed by command, working directory, workers, runner label and `history-key`; the shard count can change freely.
+- The history is keyed by working directory, workers, runner label and `history-key`; the shard count and the command's filters can change freely, since each test keeps its own samples.
+- Each shard publishes the samples of its passing tests, also when another test of the shard failed.
+- Every shard of a job and every re-run of one plans from one snapshot, pinned in a `psp-pin-*` artifact of the workflow run, never to the checked-out commit.
 - It lives in the Actions cache, which drops entries unused for 7 days, so a quiet repo starts cold again.
 
 ## Runner
 
-- The Action needs Node 20 or later on the runner.
+- The Action runs on the runner's Node 24. The reporter runs in your Node, which Playwright 1.63 and later needs at 20 or above.
+- Playwright below 1.63, an unknown Playwright version, or Yarn Plug'n'Play leave `$PSP_ARGS` empty: plain `--shard`.
+- Without an Actions cache, or with a cache mode that refuses reads, every shard runs native; a cache mode that refuses reads or writes publishes nothing.
+- The pin lives as long as the run's artifacts. With artifacts kept under 30 days, the time a run can be re-run, a re-run that finds no pin and is older than the retention stops before any test; start a new run. The Action reads the run's age with `github-token`, which needs `actions: read`.

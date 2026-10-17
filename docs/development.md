@@ -14,12 +14,16 @@ npm run validate
 
 `setup` runs `npm ci` in the root, in `fixtures/consumer` and in `qualification/flakiness`, the same installs CI runs.
 `validate` runs ESLint, Prettier in check mode, the unit tests (`node --test`) and `check:public`.
+The unit tests include `tests/dist.test.js`, which fails when the committed `dist/` differs from a fresh `npm run build`.
 `check:public` fails on private home-directory paths and credential-shaped tokens, because this repository is public.
 `npm run format` rewrites files with Prettier.
 
-The Action has no runtime dependencies.
-ESLint, Prettier and `yaml` are development tools only.
-All dependencies float to their latest versions, and the lockfile is committed.
+The Action is a JavaScript action, and `npm run build` bundles it with esbuild into `dist/`, which is committed, so a user installs nothing.
+Its runtime dependencies are the official `@actions/core`, `@actions/cache` and `@actions/artifact` toolkit, pinned exactly.
+`dist/reporter.js` is the reporter `$PSP_ARGS` adds to the user's command; it runs in the user's Node and bundles no toolkit.
+Run `npm run build` after any change to `lib/`, `src/` or `reporter/`, and commit `dist/` with it.
+ESLint, Prettier, esbuild and `yaml` are development tools only.
+The lockfile is committed.
 
 ## Qualification harness
 

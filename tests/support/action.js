@@ -4,13 +4,13 @@
  * Shards of the Action's reporter as harness partitions, and the records they write. A shard is
  * `{ args, env }`: `--shard=i/n` and one `--add-reporter` value that holds the harness reporter
  * and the Action's, since Playwright keeps only the last `--add-reporter`, and the reporter's
- * options in the environment, the way the run phase starts it.
+ * options in the environment, the way the main step exports them.
  */
 
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { REPORTER } = require('../../lib/run');
+const REPORTER = path.join(__dirname, '..', '..', 'reporter', 'reporter.js');
 const { checkRun } = require('../../lib/check');
 const { applyRun, emptyHistory, runSamples, serializeHistory } = require('../../lib/history');
 const { fingerprint } = require('../../lib/identity');
@@ -59,8 +59,6 @@ function actionPartition({
       ],
       env: {
         PSP_MODE: mode,
-        PSP_SHARD: String(i + 1),
-        PSP_TOTAL: String(total),
         PSP_WORKERS: String(workers),
         PSP_KEY: KEY,
         PSP_RECORD: path.join(recordDir, `record-${i + 1}.json`),
@@ -125,6 +123,7 @@ function runQualified(options, partition) {
 }
 
 module.exports = {
+  REPORTER,
   runQualified,
   HARNESS_REPORTER,
   KEY,

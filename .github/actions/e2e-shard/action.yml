@@ -1,0 +1,119 @@
+# One shard of the end-to-end pipeline, the way a consumer writes it: the Action from this
+# checkout, then the consumer's own Playwright command with $PSP_ARGS, in one of the shapes users
+# write. The steps of a consumer's job, plus the checks of what the main step decided. Its post step
+# runs at the end of the job; the pipeline's assert job checks what it published.
+name: e2e shard
+description: One shard of the e2e pipeline.
+
+inputs:
+  shard:
+    required: true
+  total:
+    required: true
+  shape:
+    description: plain, shell (shell variables and --grep "$FILTER") or npm (an npm script)
+    default: plain
+  working-directory:
+    description: The working-directory input of the Action; empty leaves it at its default.
+    default: ''
+  history-key:
+    required: true
+  enabled:
+    default: 'true'
+  fail-test:
+    description: A title the fixture fails on every attempt, empty for none.
+    default: ''
+  expect-mode:
+    required: true
+  expect-sha:
+    description: The snapshot sha the shard must plan from, empty for any.
+    default: ''
+  barrier:
+    description: A Unix time to wait for after Playwright, so every post step starts at once.
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - id: psp
+      uses: ./
+      with:
+        working-directory: ${{ inputs.working-directory || '.' }}
+        history-key: ${{ inputs.history-key }}
+        enabled: ${{ inputs.enabled }}
+        # The pull requests of this repository publish into their own cache scope.
+        publish-history: 'true'
+
+    - name: Require the decision of the main step
+      shell: bash
+      env:
+        MODE: ${{ steps.psp.outputs.mode }}
+        EXPECTED: ${{ inputs.expect-mode }}
+        EXPECTED_SHA: ${{ inputs.expect-sha }}
+        ARGS: ${{ steps.psp.outputs.args }}
+      run: |
+        fail() { echo "::error::$1"; exit 1; }
+        echo "mode $MODE, PSP_ARGS '$PSP_ARGS', snapshot ${PSP_SNAPSHOT_SHA:-none}"
+        [ "$MODE" = "$EXPECTED" ] || fail "the main step chose $MODE, expected $EXPECTED"
+        [ "$ARGS" = "$PSP_ARGS" ] || fail "the args output differs from PSP_ARGS"
+        if [ "$MODE" = disabled ]; then
+          [ -z "$PSP_ARGS" ] || fail "rollback exported PSP_ARGS '$PSP_ARGS'"
+        else
+          case "$PSP_ARGS" in --add-reporter=/*reporter.js) ;; *) fail "PSP_ARGS is '$PSP_ARGS'" ;; esac
+        fi
+        if [ -n "$EXPECTED_SHA" ] && [ "$PSP_SNAPSHOT_SHA" != "$EXPECTED_SHA" ]; then
+          fail "the shard planned from ${PSP_SNAPSHOT_SHA:-no snapshot}, expected $EXPECTED_SHA"
+        fi
+
+    - id: plain
+      if: inputs.shape == 'plain'
+      continue-on-error: true
+      shell: bash
+      working-directory: fixtures/consumer
+      env:
+        PSP_FIXTURE_FAIL: ${{ inputs.fail-test }}
+      run: npx playwright test --project=chromium --grep-invert=oversized --shard=${{ inputs.shard }}/${{ inputs.total }} $PSP_ARGS
+
+    - id: shell
+      if: inputs.shape == 'shell'
+      continue-on-error: true
+      shell: bash
+      working-directory: fixtures/consumer
+      env:
+        PSP_FIXTURE_FAIL: ${{ inputs.fail-test }}
+        SHARD: ${{ inputs.shard }}/${{ inputs.total }}
+      run: |
+        SUITES="tests/cart.spec.js tests/catalog.spec.js tests/checkout.spec.js"
+        FILTER="item|catalog|checkout"
+        npx playwright test $SUITES --project=chromium --grep "$FILTER" --shard=$SHARD $PSP_ARGS
+
+    - id: npm
+      if: inputs.shape == 'npm'
+      continue-on-error: true
+      shell: bash
+      working-directory: fixtures/consumer
+      env:
+        PSP_FIXTURE_FAIL: ${{ inputs.fail-test }}
+      run: npm run test:pw -- --project=chromium --grep-invert=oversized --shard=${{ inputs.shard }}/${{ inputs.total }} $PSP_ARGS
+
+    - name: Require the outcome of the Playwright step
+      shell: bash
+      env:
+        OUTCOME: ${{ inputs.shape == 'npm' && steps.npm.outcome || inputs.shape == 'shell' && steps.shell.outcome || steps.plain.outcome }}
+        FAIL_TEST: ${{ inputs.fail-test }}
+      run: |
+        echo "the Playwright step ended $OUTCOME"
+        # A failing test fails only the shards that ran it; the assert job checks that one did.
+        if [ -z "$FAIL_TEST" ] && [ "$OUTCOME" != success ]; then
+          echo "::error::the Playwright step ended $OUTCOME"
+          exit 1
+        fi
+
+    - name: Wait for every shard, so the post steps publish at once
+      if: inputs.barrier != ''
+      shell: bash
+      env:
+        AT: ${{ inputs.barrier }}
+      run: |
+        now=$(date +%s)
+        if [ "$now" -lt "$AT" ]; then sleep $((AT - now)); else echo "::warning::the barrier passed $((now - AT))s ago"; fi

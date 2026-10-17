@@ -6,5 +6,8 @@
   "license": "MIT",
   "devDependencies": {
     "@playwright/test": "latest"
+  },
+  "scripts": {
+    "test:pw": "playwright test"
   }
 }

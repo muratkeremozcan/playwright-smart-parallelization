@@ -19,9 +19,9 @@ const {
   runQualified,
   tempDir,
   writeSnapshot,
+  REPORTER,
 } = require('./support/action');
 const { FIXTURE, requireFixture } = require('./support/fixture');
-const { REPORTER } = require('../lib/run');
 const { nativePartition } = require('../harness/partitions');
 
 // The oversized serial file sleeps for nine seconds and adds nothing these tests need.
@@ -262,8 +262,6 @@ describe('the plan does not depend on Playwright --workers', () => {
           env: {
             ...process.env,
             PSP_MODE: 'balanced',
-            PSP_SHARD: '1',
-            PSP_TOTAL: '3',
             PSP_KEY: 'fixture-history-key',
             PSP_SNAPSHOT: snapshot.file,
             PSP_SNAPSHOT_SHA: snapshot.sha,

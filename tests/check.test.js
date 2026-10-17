@@ -1,5 +1,5 @@
 /**
- * The exactly-once check of the finish phase over synthetic records: every way a run can be
+ * The exactly-once check of the finish action over synthetic records: every way a run can be
  * incomplete, repeated, mixed or from elsewhere fails it, and a complete run passes.
  */
 
@@ -9,13 +9,13 @@ const {
   RECORD_SCHEMA,
   STATUS_SCHEMA,
   checkRun,
-  checkStatuses,
   latestAttempts,
   validateRecord,
+  validateStatus,
 } = require('../lib/check');
 
 const SHA = 'a'.repeat(64);
-const plan = { mode: 'balanced', total: 2, sha: SHA, runId: 7, fingerprint: 'fp' };
+const plan = { total: 2, runId: 7 };
 
 function record(shard, tests, extra = {}) {
   return {
@@ -77,19 +77,19 @@ describe('fails', () => {
   test('with a shard of another mode', () => {
     assert.match(
       problems([record(1, ['a', 'b']), record(2, ['c'], { mode: 'native' })]),
-      /mode native, the plan says balanced/
+      /different modes: balanced \(shards 1\) and native \(shards 2\)/
     );
   });
   test('with another fingerprint', () => {
     assert.match(
       problems([record(1, ['a', 'b']), record(2, ['c'], { fingerprint: 'other' })]),
-      /fingerprint other/
+      /different fingerprints: fp \(shards 1\) and other \(shards 2\)/
     );
   });
   test('with a shard that planned from another snapshot', () => {
     assert.match(
       problems([record(1, ['a', 'b']), record(2, ['c'], { snapshotSha: 'b'.repeat(64) })]),
-      /planned from snapshot/
+      /different snapshots/
     );
   });
   test('with two plans', () => {
@@ -174,37 +174,26 @@ test('a re-run shard counts its latest attempt only', () => {
   assert.deepStrictEqual(checkRun(plan, [rerun, record(1, ['a', 'b']), stale]).problems, []);
 });
 
-test('after a re-run of all jobs, a record of an earlier attempt covers nothing', () => {
-  const again = { ...plan, attempt: 2 };
-  const result = checkRun(again, [
+test('a record of an earlier attempt stands in for a shard the re-run did not repeat', () => {
+  // Every attempt of a run plans from the one pinned snapshot, so its records agree.
+  const result = checkRun(plan, [
     record(1, ['a', 'b'], { run: { id: 7, attempt: 1 } }),
     record(2, ['c'], { run: { id: 7, attempt: 2 } }),
   ]);
-  assert.match(result.problems.join('\n'), /no record for shard 1/);
+  assert.deepStrictEqual(result.problems, []);
 });
 
-describe('a disabled run', () => {
-  const status = (shard, exitCode, attempt = 1) => ({
+test('validateStatus takes the status a disabled shard leaves', () => {
+  const status = {
     schema: STATUS_SCHEMA,
     version: 1,
-    run: { id: 7, attempt },
-    shard: { current: shard, total: 2 },
-    exitCode,
-  });
-  const off = { mode: 'disabled', total: 2, runId: 7, attempt: 1 };
-
-  test('passes when every shard exited 0', () => {
-    assert.ok(checkStatuses(off, [status(1, 0), status(2, 0)]).ok);
-  });
-
-  test('fails on a failed or missing shard, and keeps the latest attempt', () => {
-    assert.match(
-      checkStatuses(off, [status(1, 0), status(2, 1)]).problems.join(),
-      /shard 2 exited with 1/
-    );
-    assert.match(checkStatuses(off, [status(1, 0)]).problems.join(), /no status for shard 2/);
-    assert.ok(checkStatuses(off, [status(1, 0), status(2, 1), status(2, 0, 2)]).ok);
-  });
+    mode: 'disabled',
+    run: { id: 7, attempt: 1 },
+    key: 'k',
+    job: 'test',
+  };
+  assert.ok(validateStatus(status));
+  assert.throws(() => validateStatus({ ...status, mode: 'native' }), /not a status record/);
 });
 
 test('validateRecord refuses something that is not a record', () => {

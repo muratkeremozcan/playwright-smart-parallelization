@@ -139,7 +139,7 @@ describe('this repository', () => {
   test('has no findings in any tracked or unignored file', () => {
     const root = path.join(__dirname, '..');
     const files = gate.listFiles(root);
-    assert.ok(files.includes('main.js'), 'the scan must see this repository files');
+    assert.ok(files.includes('action.yml'), 'the scan must see this repository files');
     const findings = gate.scanFiles(files, root);
     assert.deepStrictEqual(findings, []);
   });

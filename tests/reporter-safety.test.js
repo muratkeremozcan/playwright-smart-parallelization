@@ -22,9 +22,9 @@ const {
   runQualified,
   tempDir,
   writeSnapshot,
+  REPORTER,
 } = require('./support/action');
 const { FIXTURE, requireFixture } = require('./support/fixture');
-const { REPORTER } = require('../lib/run');
 const { runPartition } = require('../harness/index.js');
 
 const FORWARD = ['--grep-invert=oversized'];
@@ -65,7 +65,7 @@ describe('a shard with other snapshot bytes stops before any test', () => {
       [0, 1, 0]
     );
     assert.strictEqual(executed(run.shards[1]), 0);
-    assert.match(run.shards[1].output, /snapshot has sha .* pinned .*strict/);
+    assert.match(run.shards[1].output, /snapshot has sha .* the pin holds .*strict/);
     assert.ok(!run.violations.some((v) => v.kind === 'duplicate'));
     const result = checkRun(
       planOf({ mode: 'balanced', total: 3, sha: snapshot.sha }),
@@ -263,8 +263,6 @@ test('a clock that jumps a second on every read leaves the plan as it is', () =>
           ...process.env,
           NODE_OPTIONS: nodeOptions,
           PSP_MODE: 'balanced',
-          PSP_SHARD: '2',
-          PSP_TOTAL: '3',
           PSP_KEY: 'fixture-history-key',
           PSP_SNAPSHOT: snapshot.file,
           PSP_SNAPSHOT_SHA: snapshot.sha,
