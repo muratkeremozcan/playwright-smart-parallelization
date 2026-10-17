@@ -14,8 +14,9 @@
 # publish accepts finding its samples already in the history on a later attempt.
 #
 # The assert job also holds the time the Action's steps take to a budget (tests/e2e/timing.js):
-# the median of the main and post steps per shard job, twice that for any one shard job, and the
-# finish step.
+# twice the shard budget for the main and post steps of any one shard job, and the finish step.
+# The median per shard job is held over every leg by test.yml, or by the leg itself with
+# leg-median.
 name: E2E pipeline
 
 on:
@@ -73,9 +74,13 @@ on:
         type: string
         required: true
       shard-budget:
-        description: Seconds for the median of the Action's main and post steps per shard job.
+        description: Seconds for the median of the Action's main and post steps per shard job; twice it bounds every shard job.
         type: number
         default: 4
+      leg-median:
+        description: true holds this leg's own median to shard-budget; false leaves it to the median over every leg in test.yml.
+        type: boolean
+        default: false
       finish-budget:
         description: Seconds for the finish step, which reads the records of every leg of the run.
         type: number
@@ -328,4 +333,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SHARD_BUDGET: ${{ inputs.shard-budget }}
           FINISH_BUDGET: ${{ inputs.finish-budget }}
-        run: node tests/e2e/timing.js "$SHARD_BUDGET" "$FINISH_BUDGET"
+          LEG_MEDIAN: ${{ inputs.leg-median }}
+        run: node tests/e2e/timing.js leg "$SHARD_BUDGET" "$FINISH_BUDGET" "$LEG_MEDIAN"

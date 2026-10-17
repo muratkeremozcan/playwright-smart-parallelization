@@ -82,8 +82,30 @@ test('the legs cover cold and warm, eight shards, a re-run, a failure, rollback 
 
 test("the assert job holds the Action's step times to a budget, looser where every shard publishes at once", () => {
   const step = jobs.assert.steps.at(-1);
-  assert.match(step.run, /^node tests\/e2e\/timing\.js "\$SHARD_BUDGET" "\$FINISH_BUDGET"$/);
+  assert.match(
+    step.run,
+    /^node tests\/e2e\/timing\.js leg "\$SHARD_BUDGET" "\$FINISH_BUDGET" "\$LEG_MEDIAN"$/
+  );
   assert.ok(jobs.assert.needs.includes('finish'), 'the finish job has ended');
   const { inputs } = read('.github/workflows/e2e-pipeline.yml').on.workflow_call;
   assert.ok(callers['e2e-eight'].with['shard-budget'] > inputs['shard-budget'].default);
+});
+
+test('the median over every leg runs after every leg, and leaves out exactly the legs that hold their own', () => {
+  const legs = Object.entries(callers).filter(
+    ([, job]) => job.uses === './.github/workflows/e2e-pipeline.yml'
+  );
+  const timing = callers['e2e-timing'];
+  assert.deepStrictEqual([...timing.needs].sort(), legs.map(([name]) => name).sort());
+  assert.match(timing.if, /!cancelled\(\)/);
+  for (const [, job] of legs)
+    assert.match(job.name, /^e2e, /, 'runJobs finds a leg by its e2e, name');
+  const run = timing.steps.at(-1).run;
+  const [, budget, rest] = /^node tests\/e2e\/timing\.js run (\d+)((?: "[^"]+")*)$/.exec(run);
+  const excluded = [...rest.matchAll(/"([^"]+)"/g)].map((m) => m[1]).sort();
+  const own = legs.filter(([, job]) => job.with['leg-median'] === true).map(([, job]) => job.name);
+  assert.deepStrictEqual(excluded, own.sort());
+  const { inputs } = read('.github/workflows/e2e-pipeline.yml').on.workflow_call;
+  assert.strictEqual(Number(budget), inputs['shard-budget'].default);
+  assert.strictEqual(inputs['leg-median'].default, false);
 });

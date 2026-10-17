@@ -5,7 +5,15 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { judge, pipelineJobs, settledPipelineJobs, stepTimes } = require('./e2e/timing');
+const {
+  judge,
+  judgeRun,
+  parseArgs,
+  pipelineJobs,
+  runJobs,
+  settledJobs,
+  stepTimes,
+} = require('./e2e/timing');
 
 const PREFIX = '[playwright-smart-parallelization]';
 
@@ -142,9 +150,10 @@ test('waits until the jobs API lists every pipeline job as completed, then fails
     clock += ms;
   };
   const payloads = [lagging, lagging, settled];
-  const picked = await settledPipelineJobs({
+  const pick = (jobs) => pipelineJobs(jobs, 'runner assert');
+  const picked = await settledJobs({
     fetchJobs: async () => [assertJob, ...payloads.shift()],
-    runner: 'runner assert',
+    pick,
     boundMs: 60_000,
     intervalMs: 5_000,
     wait,
@@ -162,9 +171,9 @@ test('waits until the jobs API lists every pipeline job as completed, then fails
 
   clock = 0;
   await assert.rejects(
-    settledPipelineJobs({
+    settledJobs({
       fetchJobs: async () => [assertJob, ...lagging],
-      runner: 'runner assert',
+      pick,
       boundMs: 20_000,
       intervalMs: 5_000,
       wait,
@@ -173,4 +182,92 @@ test('waits until the jobs API lists every pipeline job as completed, then fails
     /^Error: the jobs API still lists e2e, x \/ test \(2, false\) as in_progress after 20s$/
   );
   assert.strictEqual(clock, 20_000);
+});
+
+test('a leg without its own median leaves it to the check over every leg, and keeps twice the budget per shard', () => {
+  const shard = (name, main, post) => ({ name, main, post });
+  const leg = judge({
+    shards: [shard('a', 2, 3), shard('b', 2, 3), shard('c', 4, 5)],
+    finish: { name: 'f', finish: 1 },
+    shardBudget: 4,
+    finishBudget: 8,
+    holdMedian: false,
+  });
+  assert.deepStrictEqual(leg.problems, [
+    'c spent 9.00s in the Action, over twice the budget of 4s',
+  ]);
+  assert.ok(leg.lines.includes('median main and post per shard job: 5.00s, held over every leg'));
+});
+
+test('holds the median over every shard job of every leg to the budget', () => {
+  const shard = (name, main, post) => ({ name, main, post });
+  const shards = [shard('a', 1, 1), shard('b', 2, 2.64), shard('c', 1, 1.5), shard('d', 1, 2)];
+  const ok = judgeRun({ shards, shardBudget: 4 });
+  assert.deepStrictEqual(ok.problems, []);
+  assert.deepStrictEqual(ok.lines, [
+    'median main and post over 4 shard jobs of every leg: 2.75s, budget 4s',
+  ]);
+  const slow = judgeRun({ shards: [shard('a', 2, 3), shard('b', 2, 2.5)], shardBudget: 4 });
+  assert.match(slow.problems[0], /median 4\.75s in the Action, over the budget of 4s/);
+  assert.deepStrictEqual(judgeRun({ shards: [{ name: 'a' }], shardBudget: 4 }).problems, [
+    'a logged no time for its main and post steps',
+  ]);
+  assert.deepStrictEqual(judgeRun({ shards: [], shardBudget: 4 }).problems, [
+    'no shard job of any leg was found',
+  ]);
+});
+
+test('picks the newest shard jobs of every leg but the excluded ones, without skipped jobs', () => {
+  const job = (name, attempt = 1, conclusion = 'success') => ({
+    name,
+    run_attempt: attempt,
+    conclusion,
+    status: 'completed',
+  });
+  const jobs = [
+    job('e2e, a / setup'),
+    job('e2e, a / test (1, false)'),
+    job('e2e, a / test (1, false)', 2),
+    job('e2e, a / warm (1)'),
+    job('e2e, a / warm', 1, 'skipped'),
+    job('e2e, b / test (2, false)', 1, 'skipped'),
+    job('e2e, eight / test (1, false)'),
+    job('e2e, a / finish'),
+    job("e2e, the Action's step times over every leg"),
+    job('qualification harness, native sharding, 2 shards'),
+  ];
+  const { shards, finish } = runJobs(jobs, ['e2e, eight']);
+  assert.deepStrictEqual(
+    shards.map((j) => [j.name, j.run_attempt]),
+    [
+      ['e2e, a / test (1, false)', 2],
+      ['e2e, a / warm (1)', 1],
+    ]
+  );
+  assert.strictEqual(finish, null);
+});
+
+test('reads the leg and run command lines, and refuses anything else', () => {
+  assert.deepStrictEqual(parseArgs(['leg', '4', '8', 'false']), {
+    mode: 'leg',
+    shardBudget: 4,
+    finishBudget: 8,
+    holdMedian: false,
+  });
+  assert.strictEqual(parseArgs(['leg', '8', '8', 'true']).holdMedian, true);
+  assert.deepStrictEqual(parseArgs(['run', '4', 'e2e, eight shards publishing at once']), {
+    mode: 'run',
+    shardBudget: 4,
+    excluded: ['e2e, eight shards publishing at once'],
+  });
+  for (const argv of [
+    [],
+    ['4', '8'],
+    ['leg', '4', '8'],
+    ['leg', '4', '8', 'yes'],
+    ['run', '0'],
+    ['other', '4'],
+  ]) {
+    assert.throws(() => parseArgs(argv), /^Error: usage: node tests\/e2e\/timing\.js leg/);
+  }
 });
