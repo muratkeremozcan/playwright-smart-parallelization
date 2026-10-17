@@ -64,6 +64,11 @@ var require_util = __commonJS({
       if (failed) throw failed.error;
       return results;
     }
+    var artifactGone = (error) => Boolean(error) && (error.name === "ArtifactNotFoundError" || /\(404\) Not Found/.test(String(error.message)));
+    function artifactAttempt(name) {
+      const found = /-attempt-(\d+)$/.exec(String(name));
+      return found ? Number(found[1]) : null;
+    }
     function compareVersions(a, b) {
       const pa = String(a).split(/[.-]/).map((part) => Number.parseInt(part, 10) || 0);
       const pb = String(b).split(/[.-]/).map((part) => Number.parseInt(part, 10) || 0);
@@ -73,6 +78,8 @@ var require_util = __commonJS({
       return 0;
     }
     module2.exports = {
+      artifactAttempt,
+      artifactGone,
       canonicalJson,
       compareVersions,
       formatMs: formatMs2,

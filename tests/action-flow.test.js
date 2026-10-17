@@ -487,7 +487,7 @@ describe('a re-run of the whole workflow, which deletes the artifacts of the run
       );
       assert.strictEqual(planSha(job), planSha(first[i]));
     }
-    const finish = await finishOf(world, 902);
+    const finish = await finishOf(world, 902, { env: { GITHUB_RUN_ATTEMPT: '2' } });
     assert.strictEqual(finish.io.failed, null, finish.io.summaryText);
     assert.strictEqual(finish.io.outputs.coverage, 'ok');
   });
@@ -500,7 +500,7 @@ describe('a re-run of the whole workflow, which deletes the artifacts of the run
     assert.strictEqual(new Set(shas).size, 1);
     assert.notStrictEqual(shas[0], first[0].main.io.exported.PSP_SNAPSHOT_SHA, 'a newer history');
     assert.strictEqual(planSha(again[0]), planSha(again[1]));
-    const finish = await finishOf(world, 902);
+    const finish = await finishOf(world, 902, { env: { GITHUB_RUN_ATTEMPT: '3' } });
     assert.strictEqual(finish.io.failed, null, finish.io.summaryText);
   });
 });

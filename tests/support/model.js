@@ -15,7 +15,8 @@
  *   one name at once each create an artifact of it; an artifact becomes visible to `find`, `list`
  *   and `download` one tick after its upload starts; ids are not in the order of creation, and
  *   `find` returns the highest id of a name, as the toolkit does; a re-run of the whole workflow
- *   deletes every artifact of the run (`rerunAll`), a re-run of some jobs deletes none.
+ *   deletes every artifact of the run (`rerunAll`), which the listing still returns while a
+ *   download of it fails with 404, and a re-run of some jobs deletes none.
  *
  * `world.before(op, key)` runs before every cache operation, so a test can let another writer act
  * between two steps of a compare-and-swap.
@@ -139,9 +140,12 @@ const nextArtifactId = (world) => {
   return (world.nextId * 7919) % 104729;
 };
 
-/** A re-run of the whole workflow: the service deletes every artifact of the run. */
+/**
+ * A re-run of the whole workflow: the service deletes every artifact of the run, though its
+ * listing still returns them for minutes, and a download of one fails with 404.
+ */
 function rerunAll(world, runId) {
-  runStore(world, runId).length = 0;
+  for (const artifact of runStore(world, runId)) artifact.gone = true;
 }
 
 /**
@@ -180,7 +184,11 @@ function modelArtifacts(world, runId, job = Symbol('job')) {
     },
     async download(artifactId, target) {
       const found = store.find((a) => a.id === artifactId);
-      if (!found) throw new Error(`artifact ${artifactId} not found`);
+      if (!found || found.gone) {
+        throw new Error(
+          'Failed to GetSignedArtifactURL: Received non-retryable error: Failed request: (404) Not Found: artifact not found'
+        );
+      }
       writeTree(target, found.files);
     },
   };

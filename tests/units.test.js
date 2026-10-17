@@ -18,9 +18,10 @@ const { fetchJobs, markdown, overheadFrom, simulate } = require('../lib/summary'
 const { applyRun, emptyHistory, serializeHistory } = require('../lib/history');
 const { cacheKey, cachePrefix, pinKey } = require('../lib/identity');
 const { testKey } = require('../lib/plan/estimate');
-const { mapLimit, sha256 } = require('../lib/util');
+const { artifactGone, mapLimit, sha256 } = require('../lib/util');
 const { FIXTURE } = require('./support/fixture');
-const { modelArtifacts, modelCache, newWorld, cacheSave } = require('./support/model');
+const { modelArtifacts, modelCache, newWorld, cacheSave, runStore } = require('./support/model');
+const { downloadRecords } = require('../lib/finish');
 
 const tmp = (prefix) => fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 
@@ -839,6 +840,59 @@ test('mapLimit keeps the order of the items and never runs more than the limit a
     /two/
   );
   assert.deepStrictEqual(await mapLimit([], 4, async () => 1), []);
+});
+
+test('an artifact is gone when its download answers 404', () => {
+  const notFound = new Error(
+    'Failed to GetSignedArtifactURL: Received non-retryable error: Failed request: (404) Not Found: artifact not found'
+  );
+  assert.strictEqual(artifactGone(notFound), true);
+  assert.strictEqual(
+    artifactGone(Object.assign(new Error('x'), { name: 'ArtifactNotFoundError' })),
+    true
+  );
+  assert.strictEqual(artifactGone(new Error('Failed request: (500) Internal Server Error')), false);
+  assert.strictEqual(artifactGone(null), false);
+});
+
+test('finish skips a gone artifact only when a later attempt of its job started', async () => {
+  const world = newWorld();
+  const upload = async (name, data) => {
+    const dir = tmp('psp-gone-');
+    fs.writeFileSync(path.join(dir, 'start.json'), JSON.stringify(data));
+    await modelArtifacts(world, 9).upload(name, [path.join(dir, 'start.json')], dir);
+  };
+  const start = (attempt) => ({
+    schema: 'playwright-smart-parallelization/start',
+    version: 1,
+    token: `t${attempt}`,
+    run: { id: 9, attempt },
+    key: 'k'.repeat(24),
+    job: 'test',
+    historyKey: '',
+  });
+  const key12 = 'k'.repeat(12);
+  await upload(`psp-start-test-${key12}-t1-1-attempt-1`, start(1));
+  await upload(`psp-start-test-${key12}-t2-1-attempt-2`, start(2));
+  const store = runStore(world, 9);
+  const read = (attempt) => downloadRecords(modelArtifacts(world, 9), tmp('psp-finish-'), attempt);
+  // A re-run of the whole workflow: attempt 1's marker is gone, attempt 2's job left its own.
+  store[0].gone = true;
+  assert.strictEqual((await read(2)).gone, 1);
+  // Only finish re-run in attempt 3: attempt 2's marker gone with no later start of its job.
+  store[0].gone = false;
+  store[1].gone = true;
+  await assert.rejects(read(3), /no later attempt of its job started/);
+  // This attempt's own artifact that cannot be downloaded fails the step.
+  await assert.rejects(read(2), /\(404\) Not Found/);
+  // A disabled shard's status stands for no test; a job named like one is still checked.
+  store[1].gone = false;
+  await upload('psp-record-test-kkkkkkkkkkkk-disabled-0123456789ab-attempt-1', start(1));
+  await upload(`psp-start-x-disabled-${key12}-t3-1-attempt-1`, { ...start(1), job: 'x-disabled' });
+  store[2].gone = true;
+  assert.strictEqual((await read(2)).gone, 1);
+  store[3].gone = true;
+  await assert.rejects(read(2), /no later attempt of its job started/);
 });
 
 describe('the toolkit cache adapter', () => {
