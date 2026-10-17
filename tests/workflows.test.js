@@ -80,10 +80,12 @@ test('the legs cover cold and warm, eight shards, a re-run, a failure, rollback 
   assert.match(callers['e2e-pr-head'].if, /github\.event_name == 'pull_request'/);
 });
 
-test("the assert job holds the Action's step times to a budget, looser where every shard publishes at once", () => {
+test("the assert job holds the Action's network operations to budgets after the finish job", () => {
   const step = jobs.assert.steps.at(-1);
-  assert.match(step.run, /^node tests\/e2e\/timing\.js "\$SHARD_BUDGET" "\$FINISH_BUDGET"$/);
+  assert.match(step.run, /^node tests\/e2e\/operations\.js "\$SHARDS" "\$ENABLED"$/);
+  assert.strictEqual(step.env.SHARDS, '${{ inputs.shards }}');
+  assert.strictEqual(step.env.ENABLED, '${{ inputs.enabled }}');
   assert.ok(jobs.assert.needs.includes('finish'), 'the finish job has ended');
   const { inputs } = read('.github/workflows/e2e-pipeline.yml').on.workflow_call;
-  assert.ok(callers['e2e-eight'].with['shard-budget'] > inputs['shard-budget'].default);
+  assert.strictEqual(inputs['shard-budget'], undefined, 'no wall-clock budget gates a run');
 });
