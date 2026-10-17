@@ -75,7 +75,7 @@ on:
       shard-budget:
         description: Seconds for the median of the Action's main and post steps per shard job.
         type: number
-        default: 3.5
+        default: 4
       finish-budget:
         description: Seconds for the finish step, which reads the records of every leg of the run.
         type: number

@@ -219,6 +219,21 @@ describe('the pin', () => {
     assert.deepStrictEqual(await run(), read, 'a later shard downloads the same bytes');
   });
 
+  test('the newest history restores while the shard looks for the pin', async () => {
+    const { p, world, run } = setupPin();
+    cacheSave(world, cacheKey(p.key, 1, 1), {
+      'history.json': Buffer.from(serializeHistory(someHistory(p.key))),
+    });
+    const order = [];
+    world.before = async (op) => {
+      order.push(`${op} starts`);
+      if (op === 'find') for (let i = 0; i < 5; i++) await new Promise((r) => setImmediate(r));
+      order.push(`${op} answers`);
+    };
+    await run();
+    assert.ok(order.indexOf('restore starts') < order.indexOf('find answers'), order.join(', '));
+  });
+
   test('a re-run after the cache evicted every entry still reads the pin', async () => {
     const { p, world, run } = setupPin();
     const first = serializeHistory(someHistory(p.key));
@@ -372,7 +387,7 @@ describe('the pin', () => {
     const waits = [];
     racing(p, world, () => waits.length > 0);
     const read = await run({ sleep: async (ms) => waits.push(ms) });
-    assert.deepStrictEqual(waits, [1000]);
+    assert.deepStrictEqual(waits, [250]);
     assert.deepStrictEqual(read, { matchedKey: '', history: null, note: 'theirs' });
     const stuck = setupPin();
     racing(stuck.p, stuck.world, () => false);
