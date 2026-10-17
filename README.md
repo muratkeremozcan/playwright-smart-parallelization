@@ -38,7 +38,7 @@ Runs: 2 workers native [1](https://github.com/muratkeremozcan/pw-parallel-test/a
 | 8 × 2            |  94.0 s |  92.0 s |    -2% |
 | 8 × 4            |  68.0 s |  74.0 s |    +9% |
 
-Completion runs from the first job start to the last job end of the same runs, with the Action's finish step.
+Completion runs from the first job start to the last job end of the same runs, with the Action's finish step and without two steps that only record its outputs for the benchmark.
 At 8 × 4 the suite is short: the Action keeps whole spec files as units under `fullyParallel` while native splits by test, and its steps add about 2 to 4 s per shard, so completion is 9% slower.
 
 The first experiment ran with `fullyParallel` off, where whole files are the unit for both native and the Action, which made it simpler to read.
