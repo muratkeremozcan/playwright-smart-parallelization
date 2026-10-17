@@ -36,8 +36,12 @@ describe('triggers and permissions', () => {
     assert.deepStrictEqual(Object.keys(WORKFLOW.on).sort(), ['release', 'workflow_dispatch']);
   });
 
-  test('runs one release at a time and never cancels one midway', () => {
-    assert.strictEqual(WORKFLOW.concurrency.group, 'playwright-smart-parallelization-release');
+  test('never cancels a release run, running or pending', () => {
+    assert.strictEqual(
+      WORKFLOW.concurrency.group,
+      'playwright-smart-parallelization-release-${{ github.event.release.tag_name || github.event_name }}',
+      'a publication has a group of its own, so no later run cancels it while it is pending'
+    );
     assert.strictEqual(WORKFLOW.concurrency['cancel-in-progress'], false);
   });
 

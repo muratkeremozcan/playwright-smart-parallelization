@@ -26,8 +26,11 @@ on:
 
 permissions: {}
 
+# Dispatches queue in one group. Each published tag has a group of its own, so a later dispatch or
+# publication never cancels a pending publication and skips its promotion; two promotions that
+# overlap are safe, because one older than the highest published release of its major fails.
 concurrency:
-  group: playwright-smart-parallelization-release
+  group: playwright-smart-parallelization-release-${{ github.event.release.tag_name || github.event_name }}
   cancel-in-progress: false
 
 jobs:
