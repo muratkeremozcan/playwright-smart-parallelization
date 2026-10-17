@@ -108,6 +108,36 @@ function pipelineJobs(jobs, runner) {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/**
+ * The pipeline's jobs once every one of them reports completed. The jobs API can list a job as
+ * in progress for tens of seconds after its last step ended, and such a job has no conclusion and
+ * so no log to time. Polls `fetchJobs` every `intervalMs` until every picked job is completed, and
+ * fails only after `boundMs`, naming the jobs still not completed. Returns `{ shards, finish }`.
+ */
+async function settledPipelineJobs({
+  fetchJobs,
+  runner,
+  boundMs = 180_000,
+  intervalMs = 5_000,
+  wait = sleep,
+  now = Date.now,
+}) {
+  const deadline = now() + boundMs;
+  for (;;) {
+    const picked = pipelineJobs(await fetchJobs(), runner);
+    const all = [...picked.shards, ...(picked.finish ? [picked.finish] : [])];
+    const open = all.filter((j) => j.status !== 'completed');
+    if (!open.length) return picked;
+    if (now() >= deadline) {
+      throw new Error(
+        `the jobs API still lists ${open.map((j) => `${j.name} as ${j.status}`).join(', ')} ` +
+          `after ${boundMs / 1000}s`
+      );
+    }
+    await wait(intervalMs);
+  }
+}
+
 async function api(env, route, { text = false } = {}) {
   const base = env.GITHUB_API_URL || 'https://api.github.com';
   // A job's log can take a few seconds to appear after the job ends.
@@ -128,13 +158,16 @@ async function main(env = process.env) {
     throw new Error('usage: node tests/e2e/timing.js SHARD_BUDGET FINISH_BUDGET');
   }
   const run = `/repos/${env.GITHUB_REPOSITORY}/actions/runs/${env.GITHUB_RUN_ID}`;
-  const jobs = [];
-  for (let page = 1; page <= 10; page++) {
-    const body = await api(env, `${run}/jobs?filter=all&per_page=100&page=${page}`);
-    jobs.push(...body.jobs);
-    if (body.jobs.length < 100) break;
-  }
-  const picked = pipelineJobs(jobs, env.RUNNER_NAME);
+  const fetchJobs = async () => {
+    const jobs = [];
+    for (let page = 1; page <= 10; page++) {
+      const body = await api(env, `${run}/jobs?filter=all&per_page=100&page=${page}`);
+      jobs.push(...body.jobs);
+      if (body.jobs.length < 100) break;
+    }
+    return jobs;
+  };
+  const picked = await settledPipelineJobs({ fetchJobs, runner: env.RUNNER_NAME });
   // A job that did not run to an end has no log to time.
   const logOf = async (j) => ({
     name: j.name,
@@ -162,4 +195,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { judge, pipelineJobs, stepTimes };
+module.exports = { judge, pipelineJobs, settledPipelineJobs, stepTimes };

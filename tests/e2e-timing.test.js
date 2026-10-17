@@ -5,7 +5,7 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { judge, pipelineJobs, stepTimes } = require('./e2e/timing');
+const { judge, pipelineJobs, settledPipelineJobs, stepTimes } = require('./e2e/timing');
 
 const PREFIX = '[playwright-smart-parallelization]';
 
@@ -112,4 +112,65 @@ test("picks the newest execution of each of its own pipeline's jobs, also on a r
     'never an older execution'
   );
   assert.throws(() => pipelineJobs(jobs, 'nobody'), /no running job of this run has the runner/);
+});
+
+test('waits until the jobs API lists every pipeline job as completed, then fails only after the bound', async () => {
+  const job = (name, status, extra = {}) => ({
+    name: `e2e, x / ${name}`,
+    status,
+    conclusion: status === 'completed' ? 'success' : null,
+    run_attempt: 1,
+    runner_name: `runner ${name}`,
+    ...extra,
+  });
+  const assertJob = job('assert', 'in_progress');
+  const lagging = [
+    job('test (1, false)', 'completed'),
+    job('test (2, false)', 'in_progress'),
+    job('finish', 'completed'),
+  ];
+  const settled = [
+    job('test (1, false)', 'completed'),
+    job('test (2, false)', 'completed'),
+    job('finish', 'completed'),
+  ];
+
+  let clock = 0;
+  const waits = [];
+  const wait = async (ms) => {
+    waits.push(ms);
+    clock += ms;
+  };
+  const payloads = [lagging, lagging, settled];
+  const picked = await settledPipelineJobs({
+    fetchJobs: async () => [assertJob, ...payloads.shift()],
+    runner: 'runner assert',
+    boundMs: 60_000,
+    intervalMs: 5_000,
+    wait,
+    now: () => clock,
+  });
+  assert.deepStrictEqual(waits, [5_000, 5_000]);
+  assert.deepStrictEqual(
+    picked.shards.map((j) => [j.name, j.status, j.conclusion]),
+    [
+      ['e2e, x / test (1, false)', 'completed', 'success'],
+      ['e2e, x / test (2, false)', 'completed', 'success'],
+    ]
+  );
+  assert.strictEqual(picked.finish.status, 'completed');
+
+  clock = 0;
+  await assert.rejects(
+    settledPipelineJobs({
+      fetchJobs: async () => [assertJob, ...lagging],
+      runner: 'runner assert',
+      boundMs: 20_000,
+      intervalMs: 5_000,
+      wait,
+      now: () => clock,
+    }),
+    /^Error: the jobs API still lists e2e, x \/ test \(2, false\) as in_progress after 20s$/
+  );
+  assert.strictEqual(clock, 20_000);
 });
