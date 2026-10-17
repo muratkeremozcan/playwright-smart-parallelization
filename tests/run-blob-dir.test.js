@@ -37,7 +37,7 @@ test('the default folder is blob-report at the nearest package root of the confi
   );
 });
 
-test('a disabled shard whose Playwright ignored the blob variables still hands over its blob report', () => {
+function disabledShard() {
   const ws = tmp('psp-blobws-');
   const app = path.join(ws, 'app');
   fs.mkdirSync(app);
@@ -62,6 +62,11 @@ test('a disabled shard whose Playwright ignored the blob variables still hands o
   };
   const plan = prepare.plan({ inputs, env }).outputs.plan;
   const setup = run.setup({ inputs: { plan, shard: '1' }, env });
+  return { env, plan, setup };
+}
+
+test('a disabled shard whose Playwright ignored the blob variables still hands over its blob report', () => {
+  const { env, plan, setup } = disabledShard();
   // A stand-in `npx` that, like an old Playwright, writes to the default folder whatever the
   // variables say.
   const bin = tmp('psp-blobbin-');
@@ -77,4 +82,21 @@ test('a disabled shard whose Playwright ignored the blob variables still hands o
   });
   assert.strictEqual(status, 0);
   assert.deepStrictEqual(fs.readdirSync(setup.outputs['blob-path']), ['report-1.zip']);
+});
+
+test('a blob report an earlier run left in the default folder is never handed over', () => {
+  const { env, plan, setup } = disabledShard();
+  fs.mkdirSync(path.join(env.GITHUB_WORKSPACE, 'app', 'blob-report'));
+  fs.writeFileSync(path.join(env.GITHUB_WORKSPACE, 'app', 'blob-report', 'report-1.zip'), 'old');
+  // This run writes no blob report at all.
+  const bin = tmp('psp-blobbin-');
+  fs.writeFileSync(path.join(bin, 'npx'), '#!/usr/bin/env node\n', { mode: 0o755 });
+  const status = run.exec({
+    inputs: { plan, shard: '1' },
+    env: { ...env, PATH: `${bin}${path.delimiter}${process.env.PATH}` },
+    stdio: 'ignore',
+  });
+  assert.strictEqual(status, 0);
+  const dir = setup.outputs['blob-path'];
+  assert.deepStrictEqual(fs.existsSync(dir) ? fs.readdirSync(dir) : [], []);
 });
