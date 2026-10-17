@@ -13,7 +13,10 @@
 # entry between each two starts: a shard that misses the pin reads another entry than the shard
 # before it, and every shard must still plan from one pinned snapshot. A mover that starts too
 # late to save in that window saves nothing, and the post steps wait a minute past it, so no mover
-# entry lands among the shards' own publishes.
+# entry lands among the shards' own publishes. The race gates nothing by its timing, which a runner
+# queue or the cache's visibility can blunt: the pin checks below hold whatever the timing, and
+# each shard reports in its job summary whether it met its moment and the history moved past its
+# pinned entry.
 #
 # A re-run reuses the history key, which is keyed on the run id only, so a leg that expects to
 # publish accepts finding its samples already in the history on a later attempt. Every shard of a
@@ -233,6 +236,7 @@ jobs:
           expect-sha: ${{ matrix.rerun && needs.setup.outputs.seed-sha || '' }}
           barrier: ${{ needs.setup.outputs.barrier }}
           start: ${{ needs.setup.outputs.start }}
+          history-prefix: ${{ needs.setup.outputs.prefix }}
 
   # The next run of the same history, with no finish job before it.
   warm:

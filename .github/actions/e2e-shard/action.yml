@@ -34,17 +34,21 @@ inputs:
   start:
     description: A Unix time; shard k starts the Action (k - 1) * 300 ms after it.
     default: ''
+  history-prefix:
+    description: The cache prefix of the history, for the report of a start-together shard.
+    default: ''
 
 runs:
   using: composite
   steps:
     - name: Wait for this shard's moment, so the main steps pin together
+      id: moment
       if: inputs.start != ''
       shell: bash
       env:
         AT: ${{ inputs.start }}
         SHARD: ${{ inputs.shard }}
-      run: node tests/e2e/history.js wait-until "$AT" "$(( (SHARD - 1) * 300 ))"
+      run: node tests/e2e/history.js wait-until "$AT" "$(( (SHARD - 1) * 300 ))" >> "$GITHUB_OUTPUT"
 
     - id: psp
       uses: ./
@@ -75,6 +79,30 @@ runs:
         if [ -n "$EXPECTED_SHA" ] && [ "$PSP_SNAPSHOT_SHA" != "$EXPECTED_SHA" ]; then
           fail "the shard planned from ${PSP_SNAPSHOT_SHA:-no snapshot}, expected $EXPECTED_SHA"
         fi
+
+    # How hard the race was, for the job summary: the gates are the pin checks of the assert job,
+    # which hold whatever the timing; this shows whether this shard met its moment and whether the
+    # history had moved past the pinned entry by the end of its main step.
+    - id: newest
+      if: inputs.start != ''
+      uses: actions/cache/restore@v6
+      with:
+        path: .psp/history
+        key: ${{ inputs.history-prefix }}
+        restore-keys: ${{ inputs.history-prefix }}
+        lookup-only: true
+    - name: Report the race this shard ran in
+      if: inputs.start != ''
+      shell: bash
+      env:
+        SHARD: ${{ inputs.shard }}
+        LATE: ${{ steps.moment.outputs.late }}
+        PLANNED: ${{ steps.psp.outputs.reason }}
+        NEWEST: ${{ steps.newest.outputs.cache-matched-key }}
+      run: |
+        line="shard $SHARD $([ "$LATE" = true ] && echo 'missed its moment' || echo 'met its moment'): planned from $PLANNED; newest entry after its main step: ${NEWEST:-none}"
+        echo "$line"
+        echo "- $line" >> "$GITHUB_STEP_SUMMARY"
 
     - id: plain
       if: inputs.shape == 'plain'
