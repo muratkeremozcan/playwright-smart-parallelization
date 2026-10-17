@@ -6,13 +6,12 @@
  * jobs API, takes the network operations each step of the Action counted (lib/operations.js), and
  * fails when a count goes over its budget:
  *
- *   node tests/e2e/operations.js SHARDS
+ *   node tests/e2e/operations.js SHARDS ENABLED
  *
  * The budgets (`budgets`) come from the Action's own code paths and constants, so a step that
  * starts making an operation its path does not make fails, while the races the Action is built
- * for, a pin two shards upload at once and a compare-and-swap that loses, stay within them. Only
- * operations that returned count against a budget; a call that threw is a failure of the service,
- * and is reported. The time each step took (src/index.js: "the main step took 1.23s") goes into
+ * for, a pin two shards upload at once and a compare-and-swap that loses, stay within them. A call
+ * that threw is a failure of the service: it is reported, and does not count against a budget. The time each step took (src/index.js: "the main step took 1.23s") goes into
  * the job summary as a report and fails nothing: wall-clock time on shared runners varies too much
  * to gate on.
  *
@@ -45,38 +44,55 @@ const RUN_ARTIFACTS = ['psp-record-', 'psp-start-'];
 const none = () => Object.fromEntries(KINDS.map((kind) => [kind, 0]));
 
 /**
- * The most operations of each kind a step may make. `shards` is the leg's shard count, `artifacts`
- * the run's record and start marker artifacts when this check reads them, which is no fewer than
- * the finish step found, since it ran before, and `jobs` the jobs of the run, which the finish
- * step reads.
+ * The most operations of each kind a step may make, from the Action's code paths. `run` is the
+ * leg: `shards` its shard count, `enabled` false for a rollback, `artifacts` the run's record and
+ * start marker artifacts when this check reads them, which is no fewer than the finish step found,
+ * since it ran before, and `jobs` the jobs of the run, which the finish step reads. `step` is what
+ * the step's own counts and job say about the path it took: `attempt` of its job, `failed` calls,
+ * and the `saves` and `lookups` of a post step.
  *
  * - main (lib/setup.js, lib/pin.js): one restore of the newest history; the start marker and the
- *   pin uploaded; the pin looked up once, and again after each wait in WAITS when another shard
- *   uploaded it first, plus the reads of a re-run; the pin downloaded once; one listing of earlier
- *   records and one request for the run's age, both only on a re-run.
+ *   pin uploaded; the pin looked up and downloaded once. Only a pin upload that threw, because
+ *   another shard uploaded it first, looks the pin up again after each wait in WAITS; only a
+ *   re-run lists earlier records, asks the run's age, and looks the pin up twice more.
  * - post (lib/publish.js, lib/store.js): the run record uploaded; at most attemptsFor(shards)
- *   saves, and at most three reads of the newest history before the first and four after each.
+ *   saves. Each save that did not create its key reads it back, except one that created it, which
+ *   only the last save can be, unless the attempts ran out. Without the pin's bytes every read of
+ *   the newest entry is one restore, at most one per save; with them it is one lookup and at most
+ *   two restores.
  * - finish (lib/finish.js, lib/summary.js): one listing; each record and start marker of the run
  *   downloaded once, those of every leg, since it lists them all; one jobs API request per page of
  *   100 jobs.
+ * - A rollback makes none, except the status record its post step uploads, and the finish step.
  */
-function budgets({ shards, artifacts = 0, jobs = 0 }, saves = 0) {
+function budgets(run, step = {}) {
+  const { shards, enabled = true, artifacts = 0, jobs = 0 } = run;
+  const { attempt = 1, failed = 0, saves = 0, lookups = 0 } = step;
+  const rerun = attempt > 1;
+  const most = attemptsFor(shards);
+  const readBacks = saves === 0 ? 0 : saves === most ? saves : saves - 1;
+  const newest = lookups > 0 ? 2 * lookups : Math.max(1, saves);
   return {
-    main: {
-      ...none(),
-      'cache-restore': 1,
-      'artifact-upload': 2,
-      'artifact-find': 3 + WAITS.length,
-      'artifact-download': 1,
-      'artifact-list': 1,
-      'api-request': 1,
-    },
-    post: {
-      ...none(),
-      'artifact-upload': 1,
-      'cache-save': attemptsFor(shards),
-      reads: 3 + 4 * saves,
-    },
+    main: enabled
+      ? {
+          ...none(),
+          'cache-restore': 1,
+          'artifact-upload': 2,
+          'artifact-find': 1 + (rerun ? 2 : 0) + (failed ? 1 + WAITS.length : 0),
+          'artifact-download': 1,
+          'artifact-list': rerun ? 1 : 0,
+          'api-request': rerun ? 1 : 0,
+        }
+      : none(),
+    post: enabled
+      ? {
+          ...none(),
+          'artifact-upload': 1,
+          'cache-save': most,
+          'cache-lookup': Math.max(1, saves),
+          'cache-restore': readBacks + newest,
+        }
+      : { ...none(), 'artifact-upload': 1 },
     finish: {
       ...none(),
       'artifact-list': 1,
@@ -88,30 +104,16 @@ function budgets({ shards, artifacts = 0, jobs = 0 }, saves = 0) {
 
 /** The problems of one step's counts against its budget. */
 function overBudget(name, step, counts, budget) {
-  const problems = [];
-  for (const kind of KINDS) {
-    if (step === 'post' && (kind === 'cache-restore' || kind === 'cache-lookup')) continue;
-    if (counts[kind] > budget[kind]) {
-      problems.push(
-        `${name} made ${counts[kind]} ${kind} in its ${step} step, over the budget of ${budget[kind]}`
-      );
-    }
-  }
-  if (step === 'post') {
-    const reads = counts['cache-restore'] + counts['cache-lookup'];
-    if (reads > budget.reads) {
-      problems.push(
-        `${name} read the history ${reads} times in its post step, over the budget of ${budget.reads} for ${counts['cache-save']} saves`
-      );
-    }
-  }
-  return problems;
+  return KINDS.filter((kind) => counts[kind] > budget[kind]).map(
+    (kind) =>
+      `${name} made ${counts[kind]} ${kind} in its ${step} step, over the budget of ${budget[kind]}`
+  );
 }
 
 /**
- * The verdict on a pipeline: `{ problems, lines }`. `shards` are `{ name, operations, times }`
- * with `operations` from `readOperations` and `times` from `stepTimes`, `finish` the same or null,
- * and `run` the `{ shards, artifacts, jobs }` of `budgets`.
+ * The verdict on a pipeline: `{ problems, lines }`. `shards` are `{ name, attempt, operations,
+ * times }` with `operations` from `readOperations` and `times` from `stepTimes`, `finish` the same
+ * or null, and `run` the leg of `budgets`.
  */
 function judge({ shards, finish, run }) {
   const problems = [];
@@ -139,7 +141,12 @@ function judge({ shards, finish, run }) {
         problems.push(`${shard.name} logged no network operations for its ${step} step`);
         continue;
       }
-      const budget = budgets(run, counts['cache-save'])[step];
+      const budget = budgets(run, {
+        attempt: shard.attempt,
+        failed: counts.failed,
+        saves: counts['cache-save'],
+        lookups: counts['cache-lookup'],
+      })[step];
       problems.push(...overBudget(shard.name, step, counts, budget));
     }
   }
@@ -232,8 +239,13 @@ async function api(env, route, { text = false } = {}) {
 
 async function main(env = process.env, argv = process.argv.slice(2)) {
   const shardCount = Number(argv[0]);
-  if (!Number.isInteger(shardCount) || shardCount < 1 || argv.length !== 1) {
-    throw new Error('usage: node tests/e2e/operations.js SHARDS');
+  if (
+    !Number.isInteger(shardCount) ||
+    shardCount < 1 ||
+    !['true', 'false'].includes(argv[1]) ||
+    argv.length !== 2
+  ) {
+    throw new Error('usage: node tests/e2e/operations.js SHARDS ENABLED');
   }
   const run = `/repos/${env.GITHUB_REPOSITORY}/actions/runs/${env.GITHUB_RUN_ID}`;
   const pages = async (route, key) => {
@@ -258,7 +270,12 @@ async function main(env = process.env, argv = process.argv.slice(2)) {
     const log = ['success', 'failure'].includes(j.conclusion)
       ? await api(env, `/repos/${env.GITHUB_REPOSITORY}/actions/jobs/${j.id}/logs`, { text: true })
       : '';
-    return { name: j.name, operations: readOperations(log), times: stepTimes(log) };
+    return {
+      name: j.name,
+      attempt: j.run_attempt || 1,
+      operations: readOperations(log),
+      times: stepTimes(log),
+    };
   };
   const shards = [];
   for (const j of picked.shards) shards.push(await read(j));
@@ -272,7 +289,7 @@ async function main(env = process.env, argv = process.argv.slice(2)) {
   const { problems, lines } = judge({
     shards,
     finish,
-    run: { shards: shardCount, artifacts, jobs: picked.jobs.length },
+    run: { shards: shardCount, enabled: argv[1] === 'true', artifacts, jobs: picked.jobs.length },
   });
   for (const line of lines) process.stdout.write(`${line}\n`);
   if (env.GITHUB_STEP_SUMMARY) {

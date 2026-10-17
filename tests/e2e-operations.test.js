@@ -90,38 +90,70 @@ test('an operation a step does not make on its path fails, whatever the time', (
 });
 
 test('the races the Action is built for stay within budget, and failed calls are only reported', () => {
-  // Lost the pin race: the pin read again after every wait, and a compare-and-swap lost often.
-  const saves = attemptsFor(3);
+  // Lost the pin race: the pin upload threw, and the pin was read again after every wait.
+  const most = attemptsFor(3);
   const raced = judge({
     ...pipeline(
-      {
-        ...MAIN,
-        'artifact-upload': 1,
-        'artifact-find': 2 + WAITS.length,
-        'artifact-download': 1,
-        failed: 4,
-      },
-      { ...POST, 'cache-save': saves, 'cache-restore': 3 + 4 * saves }
+      { ...MAIN, 'artifact-upload': 1, 'artifact-find': 2 + WAITS.length, failed: 1 },
+      // Every save but the last lost and read its key back, and read the newest again.
+      { ...POST, 'cache-save': 3, 'cache-restore': 2 + 3 }
     ),
     run: RUN,
   });
   assert.deepStrictEqual(raced.problems, []);
-  const over = judge({
-    ...pipeline(MAIN, { ...POST, 'cache-save': saves + 1, 'cache-restore': 1 }),
+  const spent = judge({
+    ...pipeline(MAIN, { ...POST, 'cache-save': most, 'cache-restore': 2 * most }),
     run: RUN,
   });
+  assert.deepStrictEqual(
+    spent.problems,
+    [],
+    'the attempts ran out, so the last save read back too'
+  );
+  const over = judge({ ...pipeline(MAIN, { ...POST, 'cache-save': most + 1 }), run: RUN });
   assert.match(
     over.problems[0],
-    new RegExp(`made ${saves + 1} cache-save in its post step, over the budget of ${saves}`)
+    new RegExp(`made ${most + 1} cache-save in its post step, over the budget of ${most}`)
   );
-  const reads = judge({
-    ...pipeline(MAIN, { ...POST, 'cache-restore': 6, 'cache-lookup': 2 }),
-    run: RUN,
-  });
+});
+
+test('on the uncontended path one more operation than the path makes fails', () => {
+  const problems = (main, post) => judge({ ...pipeline(main, post), run: RUN }).problems[0];
+  // A save that created its key, read back anyway.
   assert.match(
-    reads.problems[0],
-    /read the history 8 times in its post step, over the budget of 7 for 1 saves/
+    problems(MAIN, { ...POST, 'cache-restore': 2 }),
+    /made 2 cache-restore in its post step, over the budget of 1$/
   );
+  // With the pin's bytes: one lookup, and at most two restores of the newest entry.
+  assert.strictEqual(problems(MAIN, { ...POST, 'cache-lookup': 1, 'cache-restore': 2 }), undefined);
+  assert.match(
+    problems(MAIN, { ...POST, 'cache-lookup': 2 }),
+    /made 2 cache-lookup in its post step, over the budget of 1$/
+  );
+  // The pin read again although its upload never lost, and a listing on a first attempt.
+  assert.match(
+    problems({ ...MAIN, 'artifact-find': 2 }),
+    /made 2 artifact-find in its main step, over the budget of 1$/
+  );
+  assert.match(
+    problems({ ...MAIN, 'artifact-list': 1 }),
+    /made 1 artifact-list in its main step, over the budget of 0$/
+  );
+  // A re-run may list earlier records, ask the run's age and look the pin up twice more.
+  const rerun = pipeline({ ...MAIN, 'artifact-find': 3, 'artifact-list': 1, 'api-request': 1 });
+  for (const shard of rerun.shards) shard.attempt = 2;
+  assert.deepStrictEqual(judge({ ...rerun, run: RUN }).problems, []);
+});
+
+test('a rollback makes no network operations but the status record of its post step', () => {
+  const rollback = { ...RUN, enabled: false };
+  const disabled = pipeline({}, { 'artifact-upload': 1 });
+  assert.deepStrictEqual(judge({ ...disabled, run: rollback }).problems, []);
+  const leaked = pipeline({ 'cache-restore': 1 }, { 'artifact-upload': 1, 'cache-save': 1 });
+  assert.deepStrictEqual(judge({ ...leaked, run: rollback }).problems.slice(0, 2), [
+    'leg / test (1, false) made 1 cache-restore in its main step, over the budget of 0',
+    'leg / test (1, false) made 1 cache-save in its post step, over the budget of 0',
+  ]);
 });
 
 test('a step that logged no operations, or a missing finish job, fails', () => {
@@ -149,6 +181,7 @@ test('the finish budget follows the run: every record and start marker once, a p
   assert.strictEqual(budgets({ shards: 8, artifacts: 30, jobs: 99 }).finish['api-request'], 1);
   assert.strictEqual(budgets({ shards: 8, artifacts: 30, jobs: 100 }).finish['api-request'], 2);
   assert.strictEqual(budgets({ shards: 8 }).post['cache-save'], attemptsFor(8));
+  assert.strictEqual(budgets({ shards: 8 }, { saves: 1 }).post['cache-restore'], 1);
   for (const step of ['main', 'post', 'finish']) {
     for (const kind of KINDS) assert.ok(kind in budgets({ shards: 1 })[step], `${step} ${kind}`);
   }

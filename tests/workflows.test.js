@@ -82,8 +82,9 @@ test('the legs cover cold and warm, eight shards, a re-run, a failure, rollback 
 
 test("the assert job holds the Action's network operations to budgets after the finish job", () => {
   const step = jobs.assert.steps.at(-1);
-  assert.match(step.run, /^node tests\/e2e\/operations\.js "\$SHARDS"$/);
+  assert.match(step.run, /^node tests\/e2e\/operations\.js "\$SHARDS" "\$ENABLED"$/);
   assert.strictEqual(step.env.SHARDS, '${{ inputs.shards }}');
+  assert.strictEqual(step.env.ENABLED, '${{ inputs.enabled }}');
   assert.ok(jobs.assert.needs.includes('finish'), 'the finish job has ended');
   const { inputs } = read('.github/workflows/e2e-pipeline.yml').on.workflow_call;
   assert.strictEqual(inputs['shard-budget'], undefined, 'no wall-clock budget gates a run');

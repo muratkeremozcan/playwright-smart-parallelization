@@ -319,4 +319,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           SHARDS: ${{ inputs.shards }}
-        run: node tests/e2e/operations.js "$SHARDS"
+          ENABLED: ${{ inputs.enabled }}
+        run: node tests/e2e/operations.js "$SHARDS" "$ENABLED"
