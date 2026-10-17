@@ -202,12 +202,24 @@ jobs:
       # A literal: the expression `inputs.fail-test != ''` did not take effect here on the runner.
       # finish asserts the outcome of every leg, so a shard that fails in a leg that expects
       # success still turns the job that asserts finish red.
-      - uses: ./
+      - id: shard
+        uses: ./
         continue-on-error: true
         with:
           phase: run
           plan: ${{ needs.prepare.outputs.plan }}
           shard: ${{ matrix.shard }}
+      # A leg that fails no test on purpose requires the whole run phase to succeed, uploads
+      # included.
+      - name: Require the run phase
+        if: ${{ always() && inputs.fail-test == '' }}
+        env:
+          OUTCOME: ${{ steps.shard.outcome }}
+        run: |
+          if [ "$OUTCOME" != success ]; then
+            echo "::error::the run phase ended $OUTCOME"
+            exit 1
+          fi
 
   # Gated the way a consumer gates it: finish runs whatever the shards did.
   finish:

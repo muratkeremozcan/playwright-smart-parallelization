@@ -46,4 +46,7 @@ test('the shard step contains a failure, so the shard job stays green and finish
   const step = jobs.test.steps.find((s) => s.uses === './');
   assert.strictEqual(step.with.phase, 'run');
   assert.strictEqual(step['continue-on-error'], true);
+  const guard = jobs.test.steps.find((s) => s.name === 'Require the run phase');
+  assert.match(guard.if, /inputs\.fail-test == ''/);
+  assert.match(guard.env.OUTCOME, new RegExp(`steps\\.${step.id}\\.outcome`));
 });
