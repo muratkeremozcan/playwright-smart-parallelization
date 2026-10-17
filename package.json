@@ -18,7 +18,7 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "node --test tests/*.test.js qualification/lib/tests/*.test.js qualification/nsxbet/tests/unit/*.test.js qualification/flakiness/tests/unit/*.test.js measurements/tests/*.test.js research/shard-balancer/tests/unit/*.test.js",
+    "test": "node --require ./tests/support/temp.js --test tests/*.test.js qualification/lib/tests/*.test.js qualification/nsxbet/tests/unit/*.test.js qualification/flakiness/tests/unit/*.test.js measurements/tests/*.test.js research/shard-balancer/tests/unit/*.test.js",
     "check:public": "node scripts/check-public.js",
     "harness": "node harness/cli.js --cwd fixtures/consumer",
     "harness:negative": "node harness/cli.js --cwd fixtures/consumer --negative-control",
