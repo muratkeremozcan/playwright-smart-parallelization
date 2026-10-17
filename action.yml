@@ -1,370 +1,49 @@
 name: 'Playwright Smart Parallelization'
-description: 'Duration-balanced Playwright sharding for GitHub Actions: one Action, three phases (prepare, run, finish).'
+description: 'Duration-balanced Playwright sharding: one step before your own Playwright command, which adds $PSP_ARGS.'
 author: muratkeremozcan
 branding:
   icon: 'zap'
   color: 'green'
 
 inputs:
-  phase:
-    description: 'prepare (once, before the shard matrix), run (once per shard) or finish (once, after the shards).'
-    required: true
-  shards:
-    description: 'prepare: the number of shards.'
+  enabled:
+    description: 'false turns balancing off: PSP_ARGS is empty, so the run is plain Playwright, and nothing is pinned or published.'
     required: false
-    default: '2'
-  command:
-    description: |
-      prepare: the Playwright command each shard runs, without --shard. One command, no shell syntax;
-      the Action appends --shard, --workers and --add-reporter. It keys the history, so a filtered
-      command keeps a history of its own.
-    required: false
-    default: 'npx playwright test'
-  working-directory:
-    description: 'prepare: the directory of the Playwright project, relative to the workspace.'
-    required: false
-    default: '.'
+    default: 'true'
   workers:
-    description: 'prepare: workers per shard, passed to Playwright and to the plan. Empty leaves the config alone and plans for 1.'
+    description: 'Workers per shard. Adds --workers to PSP_ARGS, and the plan packs for them. Empty leaves the config alone and plans for 1.'
     required: false
     default: ''
+  working-directory:
+    description: 'The directory of the Playwright project, relative to the workspace, where its Playwright version is read. Empty searches from the workspace.'
+    required: false
+    default: '.'
   runner-label:
-    description: 'prepare: the runner class of the shard jobs, which the history belongs to. Empty means the prepare job runner.os-runner.arch.'
+    description: 'The runner class of the shard jobs, which the history belongs to. Empty means runner.os-runner.arch.'
     required: false
     default: ''
   history-key:
-    description: 'prepare: any extra text that separates one history from another, such as an environment name.'
-    required: false
-    default: ''
-  enabled:
-    description: 'prepare: false turns balancing off for the whole run: plain --shard, no reporter, no history write.'
-    required: false
-    default: 'true'
-  plan:
-    description: 'run and finish: the plan output of the prepare job.'
-    required: false
-    default: ''
-  shard:
-    description: 'run: this shard, from the matrix.'
-    required: false
-    default: ''
-  merge-config:
-    description: 'finish: a Playwright config, relative to working-directory, whose reporters merge-reports uses. Empty writes the HTML report.'
+    description: 'Any extra text that separates one history from another, such as a suite or an environment name.'
     required: false
     default: ''
   publish-history:
     description: |
-      finish: auto publishes the history from the repository's default branch only; true also from
-      same-repository branches and pull requests, which write into their own cache scope; false never.
-      Fork pull requests and pull_request_target never publish.
+      auto publishes each shard's samples from the repository's default branch only; true also from
+      same-repository branches and pull requests, which write into their own cache scope; false
+      never. Fork pull requests and pull_request_target never publish.
     required: false
     default: 'auto'
-  github-token:
-    description: 'finish: reads the jobs API to measure the per-shard overhead for the summary.'
-    required: false
-    default: ${{ github.token }}
 
 outputs:
-  matrix:
-    description: 'prepare: {"shard":[1..n]} for strategy.matrix.'
-    value: ${{ steps.prepare.outputs.matrix }}
-  plan:
-    description: 'prepare: the plan every run and finish step takes back.'
-    value: ${{ steps.prepare.outputs.plan }}
   mode:
-    description: 'prepare and finish: balanced, native or disabled.'
-    value: ${{ steps.prepare.outputs.mode || steps.finish.outputs.mode }}
+    description: 'balanced, native or disabled.'
   reason:
-    description: 'prepare: why the run has that mode.'
-    value: ${{ steps.prepare.outputs.reason }}
-  coverage:
-    description: 'finish: ok (every test ran exactly once), failed, or not checked (disabled).'
-    value: ${{ steps.finish.outputs.coverage }}
-  history:
-    description: 'finish: published, unchanged, or failed (a write was due and did not happen).'
-    value: ${{ steps.finish.outputs.history }}
-  overhead-ms:
-    description: 'finish: the median per-shard overhead outside Playwright; empty when the jobs API is unreadable, no shard job matches, coverage failed, or the run is disabled.'
-    value: ${{ steps.finish-check.outputs.overhead-ms }}
+    description: 'Why the shard has that mode.'
+  args:
+    description: 'The arguments in PSP_ARGS.'
 
 runs:
-  using: composite
-  steps:
-    - name: Check the phase and store the inputs
-      id: inputs
-      shell: bash
-      run: node "$GITHUB_ACTION_PATH/main.js" phase
-      env:
-        PSP_INPUT_PHASE: ${{ inputs.phase }}
-        PSP_INPUT_SHARDS: ${{ inputs.shards }}
-        PSP_INPUT_COMMAND: ${{ inputs.command }}
-        PSP_INPUT_WORKING_DIRECTORY: ${{ inputs.working-directory }}
-        PSP_INPUT_WORKERS: ${{ inputs.workers }}
-        PSP_INPUT_RUNNER_LABEL: ${{ inputs.runner-label }}
-        PSP_INPUT_HISTORY_KEY: ${{ inputs.history-key }}
-        PSP_INPUT_ENABLED: ${{ inputs.enabled }}
-        PSP_INPUT_PUBLISH_HISTORY: ${{ inputs.publish-history }}
-        PSP_INPUT_PLAN: ${{ inputs.plan }}
-        PSP_INPUT_SHARD: ${{ inputs.shard }}
-        PSP_INPUT_MERGE_CONFIG: ${{ inputs.merge-config }}
-
-    # prepare: decide the mode of the whole run and pin one history snapshot.
-    - name: Prepare, history key
-      id: prepare-key
-      if: inputs.phase == 'prepare'
-      shell: bash
-      run: node "$GITHUB_ACTION_PATH/main.js" prepare-key
-      env:
-        PSP_INPUTS_FILE: ${{ steps.inputs.outputs.file }}
-    - name: Prepare, restore the newest history
-      id: prepare-restore
-      if: inputs.phase == 'prepare' && steps.prepare-key.outputs.restore == 'true'
-      uses: actions/cache/restore@v6
-      with:
-        path: .psp/history
-        key: ${{ steps.prepare-key.outputs.prefix }}
-        restore-keys: ${{ steps.prepare-key.outputs.prefix }}
-    - name: Prepare, plan
-      id: prepare
-      if: inputs.phase == 'prepare'
-      shell: bash
-      run: node "$GITHUB_ACTION_PATH/main.js" prepare-plan
-      env:
-        PSP_INPUTS_FILE: ${{ steps.inputs.outputs.file }}
-        PSP_MATCHED_KEY: ${{ steps.prepare-restore.outputs.cache-matched-key }}
-    - name: Prepare, upload the snapshot
-      if: inputs.phase == 'prepare' && steps.prepare.outputs.mode == 'balanced'
-      uses: actions/upload-artifact@v7
-      with:
-        name: ${{ steps.prepare.outputs.artifact }}
-        path: ${{ steps.prepare.outputs.snapshot-dir }}
-        if-no-files-found: error
-        overwrite: true
-
-    # run: one shard.
-    - name: Run, setup
-      id: run-setup
-      if: inputs.phase == 'run'
-      shell: bash
-      run: node "$GITHUB_ACTION_PATH/main.js" run-setup
-      env:
-        PSP_INPUTS_FILE: ${{ steps.inputs.outputs.file }}
-    - name: Run, download the snapshot
-      if: inputs.phase == 'run' && steps.run-setup.outputs.mode == 'balanced'
-      uses: actions/download-artifact@v8
-      with:
-        name: ${{ steps.run-setup.outputs.artifact }}
-        path: ${{ steps.run-setup.outputs.snapshot-dir }}
-    - name: Run, Playwright
-      id: run
-      if: inputs.phase == 'run'
-      shell: bash
-      run: node "$GITHUB_ACTION_PATH/main.js" run-exec
-      env:
-        PSP_INPUTS_FILE: ${{ steps.inputs.outputs.file }}
-    - name: Run, upload the record
-      if: always() && inputs.phase == 'run' && steps.run-setup.outputs.record == 'true'
-      uses: actions/upload-artifact@v7
-      with:
-        name: ${{ steps.run-setup.outputs.record-name }}
-        path: ${{ steps.run-setup.outputs.record-path }}
-        if-no-files-found: ignore
-        overwrite: true
-    - name: Run, upload the blob report
-      if: always() && inputs.phase == 'run' && steps.run-setup.outcome == 'success'
-      uses: actions/upload-artifact@v7
-      with:
-        name: ${{ steps.run-setup.outputs.blob-name }}
-        path: ${{ steps.run-setup.outputs.blob-path }}
-        if-no-files-found: ignore
-        overwrite: true
-
-    # finish: check, summarize, merge the reports and publish the history.
-    - name: Finish, setup
-      id: finish-setup
-      if: inputs.phase == 'finish'
-      shell: bash
-      run: node "$GITHUB_ACTION_PATH/main.js" finish-setup
-      env:
-        PSP_INPUTS_FILE: ${{ steps.inputs.outputs.file }}
-    - name: Finish, download the records
-      if: inputs.phase == 'finish' && steps.finish-setup.outputs.records == 'true'
-      uses: actions/download-artifact@v8
-      with:
-        pattern: ${{ steps.finish-setup.outputs.records-pattern }}
-        path: ${{ steps.finish-setup.outputs.records-dir }}
-    - name: Finish, download the blob reports
-      if: inputs.phase == 'finish' && steps.finish-setup.outcome == 'success'
-      uses: actions/download-artifact@v8
-      with:
-        pattern: ${{ steps.finish-setup.outputs.blob-pattern }}
-        path: ${{ steps.finish-setup.outputs.blob-dir }}
-    - name: Finish, check the run
-      id: finish-check
-      if: always() && inputs.phase == 'finish' && steps.finish-setup.outcome == 'success'
-      shell: bash
-      run: node "$GITHUB_ACTION_PATH/main.js" finish-check
-      env:
-        PSP_INPUTS_FILE: ${{ steps.inputs.outputs.file }}
-        PSP_INPUT_GITHUB_TOKEN: ${{ inputs.github-token }}
-    - name: Finish, merge the blob reports
-      id: finish-report
-      if: always() && inputs.phase == 'finish' && steps.finish-setup.outcome == 'success'
-      shell: bash
-      run: node "$GITHUB_ACTION_PATH/main.js" finish-report
-      env:
-        PSP_INPUTS_FILE: ${{ steps.inputs.outputs.file }}
-    - name: Finish, upload the merged report
-      if: always() && steps.finish-report.outputs.merged == 'true'
-      uses: actions/upload-artifact@v7
-      with:
-        name: ${{ steps.finish-setup.outputs.report-name }}
-        path: ${{ steps.finish-setup.outputs.report-dir }}
-        overwrite: true
-
-    # compare-and-swap, attempt 1 of 3
-    - name: History, attempt 1, restore the newest entry
-      id: cas1-read
-      if: "!cancelled() && steps.finish-check.outputs.publish == 'true'"
-      uses: actions/cache/restore@v6
-      with:
-        path: .psp/history
-        key: ${{ steps.finish-check.outputs.prefix }}
-        restore-keys: ${{ steps.finish-check.outputs.prefix }}
-    - name: History, attempt 1, merge and write
-      id: cas1-write
-      if: "!cancelled() && steps.finish-check.outputs.publish == 'true'"
-      shell: bash
-      run: node "$GITHUB_ACTION_PATH/main.js" store-write
-      env:
-        PSP_INPUTS_FILE: ${{ steps.inputs.outputs.file }}
-        PSP_STATE_DIR: ${{ steps.finish-setup.outputs.state-dir }}
-        PSP_MATCHED_KEY: ${{ steps.cas1-read.outputs.cache-matched-key }}
-    - name: History, attempt 1, save
-      if: "!cancelled() && steps.cas1-write.outputs.save == 'true'"
-      uses: actions/cache/save@v6
-      with:
-        path: .psp/history
-        key: ${{ steps.cas1-write.outputs.key }}
-    - name: History, attempt 1, clear
-      if: "!cancelled() && steps.cas1-write.outputs.save == 'true'"
-      shell: bash
-      run: node "$GITHUB_ACTION_PATH/main.js" store-clear
-      env:
-        PSP_INPUTS_FILE: ${{ steps.inputs.outputs.file }}
-    - name: History, attempt 1, read the key back
-      id: cas1-check
-      if: "!cancelled() && steps.cas1-write.outputs.save == 'true'"
-      uses: actions/cache/restore@v6
-      with:
-        path: .psp/history
-        key: ${{ steps.cas1-write.outputs.key }}
-    - name: History, attempt 1, verify
-      id: cas1-verify
-      if: "!cancelled() && steps.cas1-write.outputs.save == 'true'"
-      shell: bash
-      run: node "$GITHUB_ACTION_PATH/main.js" store-verify
-      env:
-        PSP_INPUTS_FILE: ${{ steps.inputs.outputs.file }}
-        PSP_STATE_DIR: ${{ steps.finish-setup.outputs.state-dir }}
-        PSP_CACHE_HIT: ${{ steps.cas1-check.outputs.cache-hit }}
-    # compare-and-swap, attempt 2 of 3
-    - name: History, attempt 2, restore the newest entry
-      id: cas2-read
-      if: "!cancelled() && steps.cas1-verify.outputs.retry == 'true'"
-      uses: actions/cache/restore@v6
-      with:
-        path: .psp/history
-        key: ${{ steps.finish-check.outputs.prefix }}
-        restore-keys: ${{ steps.finish-check.outputs.prefix }}
-    - name: History, attempt 2, merge and write
-      id: cas2-write
-      if: "!cancelled() && steps.cas1-verify.outputs.retry == 'true'"
-      shell: bash
-      run: node "$GITHUB_ACTION_PATH/main.js" store-write
-      env:
-        PSP_INPUTS_FILE: ${{ steps.inputs.outputs.file }}
-        PSP_STATE_DIR: ${{ steps.finish-setup.outputs.state-dir }}
-        PSP_MATCHED_KEY: ${{ steps.cas2-read.outputs.cache-matched-key }}
-    - name: History, attempt 2, save
-      if: "!cancelled() && steps.cas2-write.outputs.save == 'true'"
-      uses: actions/cache/save@v6
-      with:
-        path: .psp/history
-        key: ${{ steps.cas2-write.outputs.key }}
-    - name: History, attempt 2, clear
-      if: "!cancelled() && steps.cas2-write.outputs.save == 'true'"
-      shell: bash
-      run: node "$GITHUB_ACTION_PATH/main.js" store-clear
-      env:
-        PSP_INPUTS_FILE: ${{ steps.inputs.outputs.file }}
-    - name: History, attempt 2, read the key back
-      id: cas2-check
-      if: "!cancelled() && steps.cas2-write.outputs.save == 'true'"
-      uses: actions/cache/restore@v6
-      with:
-        path: .psp/history
-        key: ${{ steps.cas2-write.outputs.key }}
-    - name: History, attempt 2, verify
-      id: cas2-verify
-      if: "!cancelled() && steps.cas2-write.outputs.save == 'true'"
-      shell: bash
-      run: node "$GITHUB_ACTION_PATH/main.js" store-verify
-      env:
-        PSP_INPUTS_FILE: ${{ steps.inputs.outputs.file }}
-        PSP_STATE_DIR: ${{ steps.finish-setup.outputs.state-dir }}
-        PSP_CACHE_HIT: ${{ steps.cas2-check.outputs.cache-hit }}
-    # compare-and-swap, attempt 3 of 3
-    - name: History, attempt 3, restore the newest entry
-      id: cas3-read
-      if: "!cancelled() && steps.cas2-verify.outputs.retry == 'true'"
-      uses: actions/cache/restore@v6
-      with:
-        path: .psp/history
-        key: ${{ steps.finish-check.outputs.prefix }}
-        restore-keys: ${{ steps.finish-check.outputs.prefix }}
-    - name: History, attempt 3, merge and write
-      id: cas3-write
-      if: "!cancelled() && steps.cas2-verify.outputs.retry == 'true'"
-      shell: bash
-      run: node "$GITHUB_ACTION_PATH/main.js" store-write
-      env:
-        PSP_INPUTS_FILE: ${{ steps.inputs.outputs.file }}
-        PSP_STATE_DIR: ${{ steps.finish-setup.outputs.state-dir }}
-        PSP_MATCHED_KEY: ${{ steps.cas3-read.outputs.cache-matched-key }}
-    - name: History, attempt 3, save
-      if: "!cancelled() && steps.cas3-write.outputs.save == 'true'"
-      uses: actions/cache/save@v6
-      with:
-        path: .psp/history
-        key: ${{ steps.cas3-write.outputs.key }}
-    - name: History, attempt 3, clear
-      if: "!cancelled() && steps.cas3-write.outputs.save == 'true'"
-      shell: bash
-      run: node "$GITHUB_ACTION_PATH/main.js" store-clear
-      env:
-        PSP_INPUTS_FILE: ${{ steps.inputs.outputs.file }}
-    - name: History, attempt 3, read the key back
-      id: cas3-check
-      if: "!cancelled() && steps.cas3-write.outputs.save == 'true'"
-      uses: actions/cache/restore@v6
-      with:
-        path: .psp/history
-        key: ${{ steps.cas3-write.outputs.key }}
-    - name: History, attempt 3, verify
-      id: cas3-verify
-      if: "!cancelled() && steps.cas3-write.outputs.save == 'true'"
-      shell: bash
-      run: node "$GITHUB_ACTION_PATH/main.js" store-verify
-      env:
-        PSP_INPUTS_FILE: ${{ steps.inputs.outputs.file }}
-        PSP_STATE_DIR: ${{ steps.finish-setup.outputs.state-dir }}
-        PSP_CACHE_HIT: ${{ steps.cas3-check.outputs.cache-hit }}
-
-    - name: Finish, conclude
-      id: finish
-      if: always() && inputs.phase == 'finish' && steps.finish-setup.outcome == 'success'
-      shell: bash
-      run: node "$GITHUB_ACTION_PATH/main.js" finish-conclude
-      env:
-        PSP_INPUTS_FILE: ${{ steps.inputs.outputs.file }}
+  using: node24
+  main: dist/main.js
+  post: dist/post.js
+  post-if: always()

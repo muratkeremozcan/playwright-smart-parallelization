@@ -1,0 +1,28 @@
+name: 'Playwright Smart Parallelization: finish'
+description: 'Optional: proves every test of the sharded run ran exactly once and writes the shard times to the job summary.'
+author: muratkeremozcan
+branding:
+  icon: 'check-circle'
+  color: 'green'
+
+inputs:
+  history-key:
+    description: 'Check only the shards that ran with this history-key. Empty checks every sharded job of the run.'
+    required: false
+    default: ''
+  github-token:
+    description: 'Reads the jobs API to measure the per-shard overhead for the summary.'
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  mode:
+    description: 'balanced, native, disabled, or mixed when the checked jobs differ.'
+  coverage:
+    description: 'ok (every test ran exactly once), failed, or not checked (disabled).'
+  overhead-ms:
+    description: 'The per-shard overhead outside Playwright; empty when the jobs API is unreadable or no shard job matches.'
+
+runs:
+  using: node24
+  main: main.js

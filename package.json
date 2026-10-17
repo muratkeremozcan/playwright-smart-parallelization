@@ -2,7 +2,7 @@
   "name": "playwright-smart-parallelization",
   "version": "0.0.0",
   "private": true,
-  "description": "GitHub Action for duration-balanced Playwright sharding.",
+  "description": "GitHub Action for duration-balanced Playwright sharding: one step before your own Playwright command.",
   "license": "MIT",
   "author": "Murat Kerem Ozcan",
   "repository": {
@@ -14,6 +14,7 @@
   },
   "scripts": {
     "setup": "npm ci && npm ci --prefix fixtures/consumer && npm ci --prefix qualification/flakiness",
+    "build": "node scripts/build.js",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -36,9 +37,15 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "esbuild": "0.28.2",
     "eslint": "^10.12.0",
     "globals": "^17.13.0",
     "prettier": "^3.9.10",
     "yaml": "^2.9.1"
+  },
+  "dependencies": {
+    "@actions/artifact": "6.2.1",
+    "@actions/cache": "6.3.0",
+    "@actions/core": "3.0.1"
   }
 }

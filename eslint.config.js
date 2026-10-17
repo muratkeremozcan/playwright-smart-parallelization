@@ -4,7 +4,7 @@ const js = require('@eslint/js');
 const globals = require('globals');
 
 module.exports = [
-  { ignores: ['node_modules/', '_bmad/', '_bmad-output/', '.claude/', '.agents/'] },
+  { ignores: ['node_modules/', 'dist/', '_bmad/', '_bmad-output/', '.claude/', '.agents/'] },
   js.configs.recommended,
   {
     files: ['**/*.js'],

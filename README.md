@@ -24,63 +24,36 @@ The Action adds about 5 s per shard (machine time +4% and +6%), and the first ru
 
 Pin a commit sha until v1 is released.
 
+Add one step before your Playwright command, and `$PSP_ARGS` at the end of it:
+
 ```yaml
-permissions:
-  contents: read
-  actions: read # finish reads the shard jobs to measure their overhead
-
 jobs:
-  prepare:
-    runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.psp.outputs.matrix }}
-      plan: ${{ steps.psp.outputs.plan }}
-    steps:
-      - uses: actions/checkout@v7
-      - id: psp
-        uses: muratkeremozcan/playwright-smart-parallelization@<sha>
-        with:
-          phase: prepare
-          shards: 4
-          command: npx playwright test
-
   test:
-    needs: prepare
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
-      - run: npm ci && npx playwright install --with-deps chromium # drop the install for a browser-free suite
+      - run: npm ci && npx playwright install --with-deps chromium
       - uses: muratkeremozcan/playwright-smart-parallelization@<sha>
-        with:
-          phase: run
-          plan: ${{ needs.prepare.outputs.plan }}
-          shard: ${{ matrix.shard }}
-
-  finish:
-    needs: [prepare, test]
-    if: ${{ !cancelled() }}
-    runs-on: ubuntu-latest
-    steps:
-      - uses: muratkeremozcan/playwright-smart-parallelization@<sha>
-        with:
-          phase: finish
-          plan: ${{ needs.prepare.outputs.plan }}
+      - run: npx playwright test --shard=${{ matrix.shard }}/${{ strategy.job-total }} $PSP_ARGS
 ```
 
-`finish` merges the shard reports, fails if any test ran twice or not at all, updates the history, and writes the shard times to the job summary.
+Your command stays yours: an npm script works as `npm run test:e2e -- --shard=1/4 $PSP_ARGS`, and so do shell variables, filters and a project in a subdirectory.
+Each shard publishes its own test times from the default branch, so the next run balances with no extra job.
 
-With the default `publish-history: auto`, only runs on the default branch write the history; pull requests, other branches and forks read it.
+For a cross-shard check that every test ran exactly once, and the shard times in the job summary, add the finish action to the job that merges your reports:
 
-Playwright below 1.63 runs plain `--shard` with no coverage check.
+```yaml
+- uses: muratkeremozcan/playwright-smart-parallelization/finish@<sha>
+```
 
-To turn balancing off, set `enabled: false` on `prepare`.
-The run goes back to plain `--shard`, and `finish` checks only the shard exit codes.
+To turn balancing off, set `enabled: false`: `$PSP_ARGS` is empty and the run is plain Playwright.
 
-All inputs are in [`action.yml`](action.yml); outputs, report names, the history key and the runner needs are in [`docs/reference.md`](docs/reference.md).
+All inputs are in [`action.yml`](action.yml); outputs, the history and the runner needs are in [`docs/reference.md`](docs/reference.md).
 
 ## What we know so far
 

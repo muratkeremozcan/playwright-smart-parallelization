@@ -115,27 +115,32 @@ describe('gates', () => {
   });
 
   for (const name of ['prepare', 'verify']) {
-    test(`${name} runs validate and the prepare smoke of the Action from this checkout`, () => {
+    test(`${name} runs validate, the main step of the Action and a native run with PSP_ARGS`, () => {
       const steps = jobs[name].steps;
       const validate = stepIndex(name, 'Run the validate gates');
       const smoke = stepIndex(name, 'Run the deterministic Action smoke');
+      const playwright = stepIndex(name, 'Run Playwright with PSP_ARGS');
       const outputs = stepIndex(name, 'Require the smoke outputs');
       assert.strictEqual(steps[validate].run, 'npm run validate');
       assert.ok(stepIndex(name, 'Install dependencies') < validate);
-      assert.ok(validate < smoke && smoke < outputs);
+      assert.ok(validate < smoke && smoke < playwright && playwright < outputs);
 
       const step = steps[smoke];
       assert.strictEqual(step.uses, './');
-      assert.strictEqual(step.with.phase, 'prepare', 'only prepare, which writes no history');
+      assert.strictEqual(step.with['publish-history'], 'false', 'the smoke writes no history');
       assert.strictEqual(step.with['working-directory'], 'fixtures/consumer');
       assert.match(step.with['history-key'], /github\.run_id.*github\.run_attempt/);
       assert.strictEqual(step.with.enabled, undefined, 'the smoke plans for real');
+      assert.strictEqual(step.with.phase, undefined);
+
+      assert.strictEqual(steps[playwright]['working-directory'], 'fixtures/consumer');
+      assert.match(steps[playwright].run, /--shard=1\/2 \$PSP_ARGS$/);
 
       const check = steps[outputs];
       assert.match(check.env.MODE, new RegExp(`steps\\.${step.id}\\.outputs\\.mode`));
       assert.match(check.run, /test "\$MODE" = native/);
       assert.match(check.run, /test "\$REASON" = 'no history yet'/);
-      assert.match(check.run, /\{"shard":\[1,2\]\}/);
+      assert.match(check.run, /\$PSP_RECORD/);
     });
   }
 

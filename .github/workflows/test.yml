@@ -1,9 +1,7 @@
-# Every gate the repository defines runs here: lint, format, unit tests and the public-repo check.
-# The `e2e` jobs run the Action from this checkout on the consumer fixture, each a full pipeline of
-# prepare, a three-shard matrix and finish against this repository's own Actions cache: a cold
-# start publishes the first history, a seeded history balances and publishes, a failed shard and
-# the rollback switch leave a seeded history as it was, and a race makes finish lose its first key
-# to another writer.
+# Every gate the repository defines runs here: lint, format, unit tests, the dist check and the
+# public-repo check. The `e2e` jobs run the Action from this checkout on the consumer fixture, each
+# a shard matrix whose jobs run the Action and their own Playwright command with $PSP_ARGS, and the
+# finish action after them, against this repository's own Actions cache.
 name: Test
 
 on:
@@ -13,7 +11,7 @@ on:
 
 permissions:
   contents: read
-  # The finish phase reads the jobs API to measure the per-shard overhead in its summary.
+  # The finish action reads the jobs API to measure the per-shard overhead in its summary.
   actions: read
 
 concurrency:
@@ -58,29 +56,40 @@ jobs:
 
   # Every leg has its own history key, keyed on the run id so a re-run finds it again. The legs
   # run only where the Action's trust rule lets them write: never for a fork pull request.
-  e2e-cold:
-    name: e2e, cold start
+  e2e-cold-warm:
+    name: e2e, cold start, then a warm run with no finish between
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     uses: ./.github/workflows/e2e-pipeline.yml
     with:
-      history-key: e2e-cold-${{ github.run_id }}
-      # prepare and finish on the lowest Node the Action supports (main.js).
-      node-version: '20'
+      history-key: e2e-cold-warm-${{ github.run_id }}
+      warm: true
       expect-mode: native
-      expect-history: changed
+      expect-history: published
 
-  e2e-balanced:
-    name: e2e, balanced publish
+  e2e-eight:
+    name: e2e, eight shards publishing at once
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     uses: ./.github/workflows/e2e-pipeline.yml
     with:
-      history-key: e2e-balanced-${{ github.run_id }}
+      history-key: e2e-eight-${{ github.run_id }}
+      shards: 8
+      barrier: true
+      expect-mode: native
+      expect-history: published
+
+  e2e-rerun:
+    name: e2e, balanced, and a re-run shard reads the same pin
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    uses: ./.github/workflows/e2e-pipeline.yml
+    with:
+      history-key: e2e-rerun-${{ github.run_id }}
       seed: true
+      rerun: true
       expect-mode: balanced
-      expect-history: changed
+      expect-history: published
 
   e2e-failed:
-    name: e2e, failed shard
+    name: e2e, a failing test
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     uses: ./.github/workflows/e2e-pipeline.yml
     with:
@@ -89,7 +98,7 @@ jobs:
       fail-test: adds an item
       expect-mode: balanced
       expect-finish: failure
-      expect-history: unchanged
+      expect-history: published
 
   e2e-rollback:
     name: e2e, rollback
@@ -99,20 +108,44 @@ jobs:
       history-key: e2e-rollback-${{ github.run_id }}
       seed: true
       enabled: 'false'
-      config: blob.config.js
       expect-mode: disabled
       expect-coverage: not checked
       expect-history: unchanged
 
-  e2e-race:
-    name: e2e, racing writers
+  e2e-shell:
+    name: e2e, shell variables and --grep "$FILTER", no working-directory
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     uses: ./.github/workflows/e2e-pipeline.yml
     with:
-      history-key: e2e-race-${{ github.run_id }}
-      race: true
-      expect-mode: native
-      expect-history: race
+      history-key: e2e-shell-${{ github.run_id }}
+      shards: 2
+      shape: shell
+      working-directory: ''
+      seed: true
+      expect-mode: balanced
+      expect-history: published
+
+  e2e-npm:
+    name: e2e, an npm script
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    uses: ./.github/workflows/e2e-pipeline.yml
+    with:
+      history-key: e2e-npm-${{ github.run_id }}
+      shape: npm
+      seed: true
+      expect-mode: balanced
+      expect-history: published
+
+  e2e-pr-head:
+    name: e2e, a pull request that checks out its head commit
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    uses: ./.github/workflows/e2e-pipeline.yml
+    with:
+      history-key: e2e-pr-head-${{ github.run_id }}
+      checkout-head: true
+      seed: true
+      expect-mode: balanced
+      expect-history: published
 
   # Each harness run is independent and spends most of its time in the fixture's serial sleeps, so
   # the runs are matrix legs that execute in parallel. A leg fails on any violation, and the

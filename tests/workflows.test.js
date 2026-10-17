@@ -1,8 +1,8 @@
 /**
- * Tests for the end-to-end pipeline workflow. Its seed jobs are skipped in most legs, and a job
- * whose `if:` has no status function gets an implicit success() that is false when any job it
- * needs, directly or through other jobs, was skipped. Every job that depends on a job that can be
- * skipped must therefore say when it runs.
+ * Tests for the end-to-end pipeline workflow and the shard action it runs. Its warm job is
+ * skipped in most legs, and a job whose `if:` has no status function gets an implicit success()
+ * that is false when any job it needs, directly or through other jobs, was skipped. Every job that
+ * depends on a job that can be skipped must therefore say when it runs.
  */
 
 const { test } = require('node:test');
@@ -11,8 +11,11 @@ const fs = require('node:fs');
 const path = require('node:path');
 const YAML = require('yaml');
 
-const file = path.join(__dirname, '..', '.github', 'workflows', 'e2e-pipeline.yml');
-const { jobs } = YAML.parse(fs.readFileSync(file, 'utf8'));
+const ROOT = path.join(__dirname, '..');
+const read = (file) => YAML.parse(fs.readFileSync(path.join(ROOT, file), 'utf8'));
+const { jobs } = read('.github/workflows/e2e-pipeline.yml');
+const shard = read('.github/actions/e2e-shard/action.yml');
+const callers = read('.github/workflows/test.yml').jobs;
 
 const needsOf = (name) => [jobs[name].needs ?? []].flat();
 const hasStatusFunction = (condition) =>
@@ -30,7 +33,7 @@ function ancestors(name, seen = new Set()) {
 
 test('every job below a job that can be skipped states a status function', () => {
   const skippable = Object.keys(jobs).filter((name) => jobs[name].if !== undefined);
-  assert.ok(skippable.includes('seed'), 'the seed job is conditional');
+  assert.ok(skippable.includes('warm'), 'the warm job is conditional');
   for (const name of Object.keys(jobs)) {
     const below = [...ancestors(name)].filter((a) => skippable.includes(a));
     if (below.length === 0) continue;
@@ -41,26 +44,38 @@ test('every job below a job that can be skipped states a status function', () =>
   }
 });
 
-test('the shard step contains a failure, so the shard job stays green and finish judges it', () => {
-  assert.strictEqual(jobs.test['continue-on-error'], undefined);
-  const step = jobs.test.steps.find((s) => s.uses === './');
-  assert.strictEqual(step.with.phase, 'run');
-  assert.strictEqual(step['continue-on-error'], true);
-  const guard = jobs.test.steps.find((s) => s.name === 'Require the run phase');
-  assert.match(guard.if, /inputs\.fail-test == ''/);
-  assert.match(guard.env.OUTCOME, new RegExp(`steps\\.${step.id}\\.outcome`));
+test('a shard runs the Action, then its own Playwright command with $PSP_ARGS in every shape', () => {
+  const steps = shard.runs.steps;
+  const action = steps.findIndex((s) => s.uses === './');
+  assert.ok(action >= 0);
+  for (const id of ['plain', 'shell', 'npm']) {
+    const step = steps.find((s) => s.id === id);
+    assert.ok(steps.indexOf(step) > action, id);
+    assert.match(step.run, /--shard=.+ \$PSP_ARGS$/m, id);
+    assert.strictEqual(step['working-directory'], 'fixtures/consumer');
+    assert.strictEqual(step['continue-on-error'], true, 'the assert job judges a failing test');
+  }
+  assert.match(steps.find((s) => s.id === 'shell').run, /--grep "\$FILTER"/);
+  assert.match(steps.find((s) => s.id === 'npm').run, /^npm run test:pw -- /);
+  assert.strictEqual(steps[action].with.phase, undefined);
 });
 
-test('the rollback leg runs a config with its own blob reporter and requires its blob reports', () => {
-  const callers = YAML.parse(
-    fs.readFileSync(path.join(__dirname, '..', '.github', 'workflows', 'test.yml'), 'utf8')
-  ).jobs;
-  const rollback = callers['e2e-rollback'].with;
-  assert.strictEqual(rollback.enabled, 'false');
-  assert.strictEqual(rollback.config, 'blob.config.js');
-  const require = jobs.finish.steps.find(
-    (s) => s.name === 'Require the blob reports and the merged report'
+test('the legs cover cold and warm, eight shards, a re-run, a failure, rollback and the command shapes', () => {
+  const legs = Object.fromEntries(
+    Object.entries(callers)
+      .filter(([, job]) => job.uses === './.github/workflows/e2e-pipeline.yml')
+      .map(([name, job]) => [name, job.with])
   );
-  assert.doesNotMatch(require.run, /ROLLBACK/, 'no leg is exempt from the blob reports');
-  assert.strictEqual(require.if, undefined);
+  assert.strictEqual(legs['e2e-cold-warm'].warm, true);
+  assert.strictEqual(legs['e2e-eight'].shards, 8);
+  assert.strictEqual(legs['e2e-eight'].barrier, true);
+  assert.strictEqual(legs['e2e-rerun'].rerun, true);
+  assert.ok(legs['e2e-failed']['fail-test']);
+  assert.strictEqual(legs['e2e-failed']['expect-history'], 'published');
+  assert.strictEqual(legs['e2e-rollback'].enabled, 'false');
+  assert.strictEqual(legs['e2e-shell'].shape, 'shell');
+  assert.strictEqual(legs['e2e-shell']['working-directory'], '');
+  assert.strictEqual(legs['e2e-npm'].shape, 'npm');
+  assert.strictEqual(legs['e2e-pr-head']['checkout-head'], true);
+  assert.match(callers['e2e-pr-head'].if, /github\.event_name == 'pull_request'/);
 });

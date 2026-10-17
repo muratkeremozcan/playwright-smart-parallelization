@@ -1,24 +1,26 @@
 'use strict';
 
 /**
- * The preprocess reporter the Action adds to every shard with `--add-reporter`. The user's config
- * stays untouched; Playwright loads it itself. The reporter reads its options from the `PSP_*`
- * environment the run phase sets, and uses only the public reporter API: `Reporter.preprocess`,
+ * The preprocess reporter that `$PSP_ARGS` adds to the user's command with `--add-reporter`. The
+ * user's config stays untouched; Playwright loads it itself. The reporter reads its options from
+ * the `PSP_*` environment the Action's main step exports, takes the shard from Playwright's own
+ * resolved `config.shard`, and uses only the public reporter API: `Reporter.preprocess`,
  * `TestRun.exclude` and `TestRun.skipSharding`. It reads no private field of Playwright and makes
  * no network call.
  *
- * Balanced mode: `preprocess` reads the snapshot the prepare job pinned, checks its sha, prices
- * every unit (one spec file of one project at one repeat), plans the run, excludes the units of
- * the other shards, turns Playwright's own split off and logs one plan line. Any problem with the
- * snapshot throws, so the shard fails before any test runs. Native mode leaves the split to
- * Playwright and only records. In both modes `onEnd` writes the run record the finish phase checks.
+ * Balanced mode: `preprocess` reads the pinned snapshot, checks its sha, prices every unit (one
+ * spec file of one project at one repeat), plans the run, excludes the units of the other shards,
+ * turns Playwright's own split off and logs one plan line. Any problem with the snapshot throws,
+ * so the shard fails before any test runs. Native mode, and any run without `--shard`, leaves the
+ * split to Playwright and only records. In every mode `onEnd` writes the run record that the
+ * Action's post step publishes from and the finish action checks.
  *
  *   PSP_MODE           balanced | native
- *   PSP_SHARD          this shard, PSP_TOTAL the shard count
  *   PSP_SNAPSHOT       the snapshot file (balanced), PSP_SNAPSHOT_SHA its sha
  *   PSP_KEY            the history key, PSP_WORKERS the workers the plan packs for
  *   PSP_RECORD         where onEnd writes the record
- *   PSP_RUN_ID, PSP_RUN_ATTEMPT, PSP_COMMIT, PSP_RUNNER_NAME, PSP_REASON   identity of the run
+ *   PSP_JOB, PSP_HISTORY_KEY, PSP_RUN_ID, PSP_RUN_ATTEMPT, PSP_COMMIT, PSP_RUNNER_NAME,
+ *   PSP_REASON         identity of the run
  */
 
 const fs = require('node:fs');
@@ -27,7 +29,7 @@ const { balance } = require('../lib/plan/balance');
 const { createEstimator, testKey } = require('../lib/plan/estimate');
 const { buildUnits, dependencyProjects, setupCosts, setupPhases } = require('../lib/plan/units');
 const { parseHistory } = require('../lib/history');
-const { RECORD_SCHEMA, RECORD_VERSION } = require('../lib/check');
+const { RECORD_SCHEMA, RECORD_VERSION, corpusSha } = require('../lib/check');
 const { fingerprint } = require('../lib/identity');
 const { formatMs, sha256, short, writeAtomic } = require('../lib/util');
 
@@ -39,7 +41,7 @@ function optionsFromEnv(env = process.env) {
   if (mode !== 'balanced' && mode !== 'native') {
     throw new Error(
       `${PREFIX} PSP_MODE must be balanced or native, got ${JSON.stringify(mode)}: ` +
-        'this reporter is added by the Action and reads its options from the environment'
+        'this reporter is added by $PSP_ARGS and reads its options from the environment the Action exports'
     );
   }
   const int = (name, fallback) => {
@@ -51,8 +53,6 @@ function optionsFromEnv(env = process.env) {
   };
   return {
     mode,
-    shard: int('PSP_SHARD'),
-    total: int('PSP_TOTAL'),
     workers: int('PSP_WORKERS', 1),
     snapshot: env.PSP_SNAPSHOT || null,
     snapshotSha: env.PSP_SNAPSHOT_SHA || null,
@@ -63,6 +63,8 @@ function optionsFromEnv(env = process.env) {
     commit: env.PSP_COMMIT || '',
     runner: env.PSP_RUNNER_NAME || '',
     reason: env.PSP_REASON || null,
+    job: env.PSP_JOB || '',
+    historyKey: env.PSP_HISTORY_KEY || '',
   };
 }
 
@@ -141,7 +143,7 @@ function readSnapshot(options) {
   const sha = sha256(text);
   if (sha !== options.snapshotSha) {
     throw new Error(
-      `the snapshot has sha ${short(sha)}, the prepare job pinned ${short(options.snapshotSha)}`
+      `the snapshot has sha ${short(sha)}, the pin holds ${short(options.snapshotSha)}`
     );
   }
   const history = parseHistory(text, { key: options.key, source: 'the snapshot' });
@@ -164,7 +166,9 @@ class SmartParallelizationReporter {
       run: { id: this.options.runId, attempt: this.options.attempt },
       commit: this.options.commit,
       runner: this.options.runner,
-      shard: { current: this.options.shard, total: this.options.total },
+      job: this.options.job,
+      historyKey: this.options.historyKey,
+      shard: { current: 1, total: 1 },
       mode: this.options.mode,
       reason: this.options.reason,
       key: this.options.key,
@@ -177,6 +181,7 @@ class SmartParallelizationReporter {
       projects: null,
       phases: null,
       corpus: null,
+      corpusSha: null,
     };
   }
 
@@ -186,20 +191,14 @@ class SmartParallelizationReporter {
 
   async preprocess({ config, suite, testRun }) {
     const { options } = this;
-    const label = `shard ${options.shard}/${options.total}`;
+    const shard = config.shard
+      ? { current: config.shard.current, total: config.shard.total }
+      : { current: 1, total: 1 };
+    const label = `shard ${shard.current}/${shard.total}`;
     this.config = config;
+    this.record.shard = shard;
     this.record.playwright = config.version;
     this.record.fingerprint = fingerprint(options.key, config.version);
-    if (
-      !config.shard ||
-      config.shard.current !== options.shard ||
-      config.shard.total !== options.total
-    ) {
-      throw new Error(
-        `${PREFIX} ${label}: Playwright runs ${config.shard ? `shard ${config.shard.current}/${config.shard.total}` : 'unsharded'}, ` +
-          'which is not the shard the Action started'
-      );
-    }
     const projects = projectsOf(config);
     assertNamedProjects(projects);
     const names = suite.suites.map((s) => s.title);
@@ -227,8 +226,15 @@ class SmartParallelizationReporter {
       }
     }
     this.record.corpus = tests.map((t) => [t.id, t.label]);
+    this.record.corpusSha = corpusSha(this.record.corpus);
     this.preprocessed = true;
 
+    if (!config.shard) {
+      this.record.mode = 'native';
+      this.record.reason = 'the command has no --shard';
+      log(`no --shard in the command, so this run is not balanced; ${tests.length} tests recorded`);
+      return;
+    }
     if (options.mode === 'native') {
       log(
         `${label}: native sharding${options.reason ? ` (${options.reason})` : ''}, ${tests.length} tests in the selection`
@@ -255,12 +261,12 @@ class SmartParallelizationReporter {
     );
     const plan = balance(
       units,
-      options.total,
+      shard.total,
       options.workers,
       setupCosts(setupTests, estimator),
       phases
     );
-    const mine = plan.shards[options.shard - 1];
+    const mine = plan.shards[shard.current - 1];
     const keep = new Set();
     for (const unit of mine.units) for (const index of members.get(unit.id)) keep.add(index);
     for (const projectSuite of suite.suites) {
@@ -291,8 +297,11 @@ class SmartParallelizationReporter {
     this.record.fingerprint =
       this.record.fingerprint || fingerprint(this.options.key, config.version);
     if (!this.preprocessed) {
+      if (config.shard) {
+        this.record.shard = { current: config.shard.current, total: config.shard.total };
+      }
       // Playwright without the preprocess hook split the suite itself; the record says so with no
-      // corpus, and the finish phase refuses it.
+      // corpus, and the finish action refuses it.
       log(`Playwright ${config.version} did not call preprocess, so this shard was not planned`);
     }
     this.tests = suite.allTests();

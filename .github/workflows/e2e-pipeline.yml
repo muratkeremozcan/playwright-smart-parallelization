@@ -1,16 +1,17 @@
-# One pipeline of the Action on the consumer fixture, the way a consumer wires it: a prepare job,
-# a shard matrix and a finish job, each using the Action from this checkout. The caller sets the
-# scenario and what it expects: the mode prepare chooses, the outcome of finish and what happens
-# to the newest history entry.
+# One pipeline of the Action on the consumer fixture, the way a consumer wires it: a shard matrix
+# whose jobs run the Action and then their own Playwright command with $PSP_ARGS
+# (.github/actions/e2e-shard), and the optional finish action in a job of its own. The caller
+# sets the scenario and what it expects; the assert job reads the history the shards published
+# and the records they uploaded.
 #
-# Entries are `<prefix><epoch>-<seq>`; the seeds use epoch 1. `seed` saves a history of a synthetic
-# run 1 under 1-1 before prepare, so prepare balances and a publish that should not happen, or one
-# that should and does not, changes the newest entry. `race` seeds after prepare so this run's
-# finish loses its first key to another writer: an entry under 1-2 created before an entry under
-# 1-1, so the newest entry by prefix is 1-1 and the writer's first choice, 1-2, is taken.
+# `seed` saves a history of a synthetic run 1 under <prefix>1-1 first, so the shards balance from
+# it. `warm` adds a second shard job after the first, with no finish between them: it must balance
+# from the history the first job's shards published. `rerun` adds one more matrix leg that runs
+# shard 2 again once the others have published: it must plan from the same pin, the seeded bytes.
+# `barrier` holds every shard after Playwright until one moment, so all post steps publish at once.
 #
 # A re-run reuses the history key, which is keyed on the run id only, so a leg that expects to
-# publish accepts finding its run already in the history on a later attempt.
+# publish accepts finding its samples already in the history on a later attempt.
 name: E2E pipeline
 
 on:
@@ -19,6 +20,17 @@ on:
       history-key:
         type: string
         required: true
+      shards:
+        type: number
+        default: 3
+      shape:
+        description: plain, shell or npm, the form of the Playwright command.
+        type: string
+        default: plain
+      working-directory:
+        description: The working-directory input of the Action; empty searches from the workspace.
+        type: string
+        default: fixtures/consumer
       enabled:
         type: string
         default: 'true'
@@ -29,7 +41,17 @@ on:
       seed:
         type: boolean
         default: false
-      race:
+      warm:
+        type: boolean
+        default: false
+      rerun:
+        type: boolean
+        default: false
+      barrier:
+        type: boolean
+        default: false
+      checkout-head:
+        description: Check out the pull request head and export it as GITHUB_SHA, as some workflows do.
         type: boolean
         default: false
       expect-mode:
@@ -38,183 +60,133 @@ on:
       expect-finish:
         type: string
         default: success
-      expect-history:
-        description: changed, unchanged or race
-        type: string
-        required: true
       expect-coverage:
-        description: The coverage finish outputs, ok or not checked.
+        description: The coverage finish outputs, ok, failed or not checked.
         type: string
         default: ok
-      config:
-        description: The Playwright config of the fixture, empty for its default one.
+      expect-history:
+        description: published (every passing test has one sample of this run) or unchanged.
         type: string
-        default: ''
-      node-version:
-        description: The Node that prepare and finish run on, empty for the runner's own.
-        type: string
-        default: ''
+        required: true
 
 permissions:
   contents: read
   actions: read
 
-env:
-  # No blob reporter in the default config: the Action adds one to every shard. The rollback leg
-  # names blob.config.js, whose own blob reporter is what a rollback run uploads.
-  COMMAND: npx playwright test${{ inputs.config != '' && format(' --config={0}', inputs.config) || '' }}
-  WORKING_DIRECTORY: fixtures/consumer
-
 jobs:
-  seed:
-    if: inputs.seed && github.run_attempt == 1
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - id: key
-        env:
-          PSP_INPUT_COMMAND: ${{ env.COMMAND }}
-          PSP_INPUT_WORKING_DIRECTORY: ${{ env.WORKING_DIRECTORY }}
-          PSP_INPUT_HISTORY_KEY: ${{ inputs.history-key }}
-        run: node tests/e2e/history.js key >> "$GITHUB_OUTPUT"
-      - name: Write the history of run 1
-        run: node tests/e2e/history.js seed "${{ steps.key.outputs.key }}" 1
-      - uses: actions/cache/save@v6
-        with:
-          path: .psp/history
-          key: ${{ steps.key.outputs.prefix }}1-1
-
-  prepare:
-    needs: seed
-    if: ${{ !cancelled() && needs.seed.result != 'failure' }}
+  setup:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
-      matrix: ${{ steps.psp.outputs.matrix }}
-      plan: ${{ steps.psp.outputs.plan }}
+      shards: ${{ steps.matrix.outputs.shards }}
+      include: ${{ steps.matrix.outputs.include }}
+      barrier: ${{ steps.matrix.outputs.barrier }}
+      key12: ${{ steps.key.outputs.key12 }}
+      prefix: ${{ steps.key.outputs.prefix }}
+      pin: ${{ steps.key.outputs.pin }}
+      seed-sha: ${{ steps.seed.outputs.sha }}
       before: ${{ steps.before.outputs.cache-matched-key }}
-      prefix: ${{ steps.prefix.outputs.prefix }}
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-
-      - if: inputs.node-version != ''
-        uses: actions/setup-node@v7
-        with:
-          node-version: ${{ inputs.node-version }}
-
-      - if: inputs.node-version != ''
+      - id: matrix
         env:
-          EXPECTED: ${{ inputs.node-version }}
+          TOTAL: ${{ inputs.shards }}
+          RERUN: ${{ inputs.rerun }}
+          BARRIER: ${{ inputs.barrier }}
         run: |
-          case "$(node --version)" in
-            "v$EXPECTED".*) echo "prepare runs on $(node --version)" ;;
-            *) echo "::error::expected Node $EXPECTED, got $(node --version)"; exit 1 ;;
-          esac
-
-      - id: psp
-        uses: ./
-        with:
-          phase: prepare
-          shards: 3
-          command: ${{ env.COMMAND }}
-          working-directory: ${{ env.WORKING_DIRECTORY }}
-          history-key: ${{ inputs.history-key }}
-          enabled: ${{ inputs.enabled }}
-
-      - id: prefix
+          echo "shards=$(seq -s, 1 "$TOTAL" | sed 's/^/[/; s/$/]/')" >> "$GITHUB_OUTPUT"
+          if [ "$RERUN" = true ]; then echo 'include=[{"shard":2,"rerun":true}]' >> "$GITHUB_OUTPUT"; else echo 'include=[]' >> "$GITHUB_OUTPUT"; fi
+          # Room for every shard runner to start, install and run its tests first.
+          if [ "$BARRIER" = true ]; then echo "barrier=$(( $(date +%s) + 240 ))" >> "$GITHUB_OUTPUT"; fi
+      - id: key
         env:
-          PLAN: ${{ steps.psp.outputs.plan }}
-        run: echo "prefix=psp-history-v2-$(jq -r .key <<< "$PLAN")-" >> "$GITHUB_OUTPUT"
-
+          INPUT_WORKING-DIRECTORY: ${{ inputs.working-directory }}
+          INPUT_HISTORY-KEY: ${{ inputs.history-key }}
+          JOB: test
+        run: node tests/e2e/history.js key >> "$GITHUB_OUTPUT"
+      - id: seed
+        if: inputs.seed && github.run_attempt == 1
+        run: node tests/e2e/history.js seed "${{ steps.key.outputs.key }}" 1 >> "$GITHUB_OUTPUT"
+      - if: inputs.seed && github.run_attempt == 1
+        uses: actions/cache/save@v6
+        with:
+          path: .psp/history
+          key: ${{ steps.key.outputs.prefix }}1-1
       - id: before
         uses: actions/cache/restore@v6
         with:
           path: .psp/history
-          key: ${{ steps.prefix.outputs.prefix }}
-          restore-keys: ${{ steps.prefix.outputs.prefix }}
+          key: ${{ steps.key.outputs.prefix }}
+          restore-keys: ${{ steps.key.outputs.prefix }}
           lookup-only: true
 
-      - name: Require the mode
-        env:
-          MODE: ${{ steps.psp.outputs.mode }}
-          EXPECTED: ${{ inputs.expect-mode }}
-          ATTEMPT: ${{ github.run_attempt }}
-        run: |
-          # On a re-run, a leg that started cold finds the history its first attempt published.
-          if [ "$MODE" != "$EXPECTED" ] && ! { [ "$ATTEMPT" -gt 1 ] && [ "$EXPECTED" = native ] && [ "$MODE" = balanced ]; }; then
-            echo "::error::prepare chose $MODE, expected $EXPECTED"
-            exit 1
-          fi
-
-  seed-taken-key:
-    if: ${{ !cancelled() && needs.prepare.result == 'success' && inputs.race && github.run_attempt == 1 }}
-    needs: prepare
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - name: Write the history of another writer
-        env:
-          PLAN: ${{ needs.prepare.outputs.plan }}
-        run: node tests/e2e/history.js seed "$(jq -r .key <<< "$PLAN")" 2
-      - uses: actions/cache/save@v6
-        with:
-          path: .psp/history
-          key: ${{ needs.prepare.outputs.prefix }}1-2
-
-  seed-newest:
-    if: ${{ !cancelled() && needs.seed-taken-key.result == 'success' && inputs.race && github.run_attempt == 1 }}
-    needs: [prepare, seed-taken-key]
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - name: Write the newest history
-        env:
-          PLAN: ${{ needs.prepare.outputs.plan }}
-        run: node tests/e2e/history.js seed "$(jq -r .key <<< "$PLAN")" 1
-      - uses: actions/cache/save@v6
-        with:
-          path: .psp/history
-          key: ${{ needs.prepare.outputs.prefix }}1-1
-      - id: newest
-        uses: actions/cache/restore@v6
-        with:
-          path: .psp/history
-          key: ${{ needs.prepare.outputs.prefix }}
-          restore-keys: ${{ needs.prepare.outputs.prefix }}
-          lookup-only: true
-      - name: Require 1-1 to be the newest entry
-        env:
-          NEWEST: ${{ steps.newest.outputs.cache-matched-key }}
-          EXPECTED: ${{ needs.prepare.outputs.prefix }}1-1
-        run: |
-          if [ "$NEWEST" != "$EXPECTED" ]; then
-            echo "::error::the newest entry is $NEWEST, expected $EXPECTED"
-            exit 1
-          fi
-
-  # Every job below the optional seed job states its condition: a skipped seed would otherwise
-  # skip it through the implicit success() of its needs.
   test:
-    needs: prepare
-    if: ${{ !cancelled() && needs.prepare.result == 'success' }}
+    needs: setup
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    env:
-      PSP_FIXTURE_FAIL: ${{ inputs.fail-test }}
+    timeout-minutes: 15
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+      matrix:
+        shard: ${{ fromJSON(needs.setup.outputs.shards) }}
+        rerun: [false]
+        include: ${{ fromJSON(needs.setup.outputs.include) }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          ref: ${{ inputs.checkout-head && github.event.pull_request.head.sha || '' }}
+      - if: inputs.checkout-head
+        env:
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: echo "GITHUB_SHA=$HEAD" >> "$GITHUB_ENV"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: fixtures/consumer/package-lock.json
+      - name: Install the consumer fixture
+        working-directory: fixtures/consumer
+        run: npm ci
+      # A re-run of shard 2: it starts once the other shards published, so the newest history is
+      # no longer the one the run pinned.
+      - name: Wait for the other shards to publish
+        if: matrix.rerun
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PREFIX: ${{ needs.setup.outputs.prefix }}
+          REPO: ${{ github.repository }}
+        run: |
+          for _ in $(seq 1 60); do
+            n=$(gh api "repos/$REPO/actions/caches?key=$PREFIX&per_page=100" --jq '.total_count')
+            [ "$n" -gt 1 ] && { echo "$n history entries"; exit 0; }
+            sleep 10
+          done
+          echo "::error::the other shards published nothing in 10 minutes"; exit 1
+      - uses: ./.github/actions/e2e-shard
+        with:
+          shard: ${{ matrix.shard }}
+          total: ${{ inputs.shards }}
+          shape: ${{ inputs.shape }}
+          working-directory: ${{ inputs.working-directory }}
+          history-key: ${{ inputs.history-key }}
+          enabled: ${{ inputs.enabled }}
+          fail-test: ${{ inputs.fail-test }}
+          expect-mode: ${{ github.run_attempt > 1 && inputs.expect-mode == 'native' && 'balanced' || inputs.expect-mode }}
+          expect-sha: ${{ matrix.rerun && needs.setup.outputs.seed-sha || '' }}
+          barrier: ${{ needs.setup.outputs.barrier }}
+
+  # The next run of the same history, with no finish job before it.
+  warm:
+    needs: [setup, test]
+    if: ${{ !cancelled() && inputs.warm }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -227,148 +199,111 @@ jobs:
       - name: Install the consumer fixture
         working-directory: fixtures/consumer
         run: npm ci
-      # A literal: the expression `inputs.fail-test != ''` did not take effect here on the runner.
-      # finish asserts the outcome of every leg, so a shard that fails in a leg that expects
-      # success still turns the job that asserts finish red.
-      - id: shard
-        uses: ./
-        continue-on-error: true
+      - uses: ./.github/actions/e2e-shard
         with:
-          phase: run
-          plan: ${{ needs.prepare.outputs.plan }}
           shard: ${{ matrix.shard }}
-      # A leg that fails no test on purpose requires the whole run phase to succeed, uploads
-      # included.
-      - name: Require the run phase
-        if: ${{ always() && inputs.fail-test == '' }}
-        env:
-          OUTCOME: ${{ steps.shard.outcome }}
-        run: |
-          if [ "$OUTCOME" != success ]; then
-            echo "::error::the run phase ended $OUTCOME"
-            exit 1
-          fi
+          total: '4'
+          working-directory: ${{ inputs.working-directory }}
+          history-key: ${{ inputs.history-key }}
+          expect-mode: balanced
 
   # Gated the way a consumer gates it: finish runs whatever the shards did.
   finish:
-    needs: [prepare, test, seed-newest]
-    if: ${{ !cancelled() && needs.prepare.result == 'success' && needs.seed-newest.result != 'failure' }}
+    needs: [setup, test, warm]
+    if: ${{ !cancelled() && needs.setup.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-
-      - if: inputs.node-version != ''
-        uses: actions/setup-node@v7
-        with:
-          node-version: ${{ inputs.node-version }}
-
-      - if: inputs.node-version != ''
-        env:
-          EXPECTED: ${{ inputs.node-version }}
-        run: |
-          case "$(node --version)" in
-            "v$EXPECTED".*) echo "finish runs on $(node --version)" ;;
-            *) echo "::error::expected Node $EXPECTED, got $(node --version)"; exit 1 ;;
-          esac
-
-      # The pull requests of this repository publish into their own cache scope.
       - id: finish
-        uses: ./
+        uses: ./finish
         continue-on-error: true
         with:
-          phase: finish
-          plan: ${{ needs.prepare.outputs.plan }}
-          publish-history: 'true'
-
-      - name: Require the finish outcome
+          history-key: ${{ inputs.history-key }}
+      - name: Require the finish outcome and outputs
         env:
           OUTCOME: ${{ steps.finish.outcome }}
-          EXPECTED: ${{ inputs.expect-finish }}
-        run: |
-          if [ "$OUTCOME" != "$EXPECTED" ]; then
-            echo "::error::finish ended $OUTCOME, expected $EXPECTED"
-            exit 1
-          fi
-
-      - name: Require the finish outputs
-        env:
           MODE: ${{ steps.finish.outputs.mode }}
           COVERAGE: ${{ steps.finish.outputs.coverage }}
-          HISTORY: ${{ steps.finish.outputs.history }}
           OVERHEAD: ${{ steps.finish.outputs.overhead-ms }}
-          EXPECTED_MODE: ${{ inputs.expect-mode }}
+          EXPECTED: ${{ inputs.expect-finish }}
           EXPECTED_COVERAGE: ${{ inputs.expect-coverage }}
-          EXPECTED_HISTORY: ${{ inputs.expect-history }}
-          ATTEMPT: ${{ github.run_attempt }}
         run: |
-          echo "finish outputs: mode $MODE, coverage $COVERAGE, history $HISTORY, overhead ${OVERHEAD:-none} ms"
+          echo "finish ended $OUTCOME: mode $MODE, coverage $COVERAGE, overhead ${OVERHEAD:-none} ms"
           fail() { echo "::error::$1"; exit 1; }
-          # On a re-run, a leg that started cold finds the history its first attempt published.
-          [ "$MODE" = "$EXPECTED_MODE" ] || { [ "$ATTEMPT" -gt 1 ] && [ "$MODE" = balanced ]; } || fail "mode $MODE, expected $EXPECTED_MODE"
+          [ "$OUTCOME" = "$EXPECTED" ] || fail "finish ended $OUTCOME, expected $EXPECTED"
           [ "$COVERAGE" = "$EXPECTED_COVERAGE" ] || fail "coverage $COVERAGE, expected $EXPECTED_COVERAGE"
-          case "$EXPECTED_HISTORY" in
-            unchanged) want=unchanged ;;
-            *) want=published ;;
-          esac
-          [ "$HISTORY" = "$want" ] || { [ "$ATTEMPT" -gt 1 ] && [ "$HISTORY" = unchanged ]; } || fail "history $HISTORY, expected $want"
-          # The jobs API is readable with actions: read, so every leg with records measures the overhead.
+          # The jobs API is readable with actions: read, so a checked run measures its overhead.
           if [ "$EXPECTED_COVERAGE" = ok ]; then
             [ -n "$OVERHEAD" ] || fail "the per-shard overhead was not measured"
           fi
 
+  assert:
+    needs: [setup, test, warm, finish]
+    if: ${{ !cancelled() && needs.setup.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Require every shard job to have passed
+        env:
+          TEST: ${{ needs.test.result }}
+          WARM: ${{ needs.warm.result }}
+        run: |
+          [ "$TEST" = success ] || { echo "::error::the shard jobs ended $TEST"; exit 1; }
+          [ "$WARM" = success ] || [ "$WARM" = skipped ] || { echo "::error::the warm jobs ended $WARM"; exit 1; }
       - id: after
         uses: actions/cache/restore@v6
         with:
           path: .psp/history
-          key: ${{ needs.prepare.outputs.prefix }}
-          restore-keys: ${{ needs.prepare.outputs.prefix }}
-
-      - name: Require the history
+          key: ${{ needs.setup.outputs.prefix }}
+          restore-keys: ${{ needs.setup.outputs.prefix }}
+      - id: pin
+        uses: actions/cache/restore@v6
+        with:
+          path: .psp/pin
+          key: ${{ needs.setup.outputs.pin }}
+          lookup-only: true
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: psp-record-*-${{ needs.setup.outputs.key12 }}-*
+          path: records
+      - name: Require the history and the records
         env:
-          BEFORE: ${{ needs.prepare.outputs.before }}
+          BEFORE: ${{ needs.setup.outputs.before }}
           AFTER: ${{ steps.after.outputs.cache-matched-key }}
-          PREFIX: ${{ needs.prepare.outputs.prefix }}
+          PINNED: ${{ steps.pin.outputs.cache-hit }}
           EXPECTED: ${{ inputs.expect-history }}
-          SEEDED: ${{ inputs.seed }}
+          ENABLED: ${{ inputs.enabled }}
+          FAIL_TEST: ${{ inputs.fail-test }}
           RUN_ID: ${{ github.run_id }}
           ATTEMPT: ${{ github.run_attempt }}
+          BARRIER: ${{ inputs.barrier }}
+          PREFIX: ${{ needs.setup.outputs.prefix }}
+          SHARDS: ${{ inputs.shards }}
         run: |
-          echo "newest entry before: ${BEFORE:-none}, after: ${AFTER:-none}"
-          runs="$RUN_ID"
-          [ "$SEEDED" = true ] && runs="1 $RUN_ID"
+          echo "newest entry before: ${BEFORE:-none}, after: ${AFTER:-none}, pinned: ${PINNED:-false}"
+          fail() { echo "::error::$1"; exit 1; }
+          if [ "$ENABLED" = false ]; then
+            [ "$PINNED" != true ] || fail "rollback pinned a snapshot"
+            [ -z "$(ls records 2>/dev/null | grep -v disabled)" ] || fail "rollback left run records"
+          fi
+          if [ -n "$FAIL_TEST" ]; then
+            grep -rqs '"status":"failed"' records || fail "no shard recorded the failing test"
+          fi
           case "$EXPECTED" in
-            unchanged) [ "$AFTER" = "$BEFORE" ] || { echo "::error::the history changed"; exit 1; } ;;
-            changed)
-              [ -n "$AFTER" ] || { echo "::error::nothing was published"; exit 1; }
-              if [ "$ATTEMPT" = 1 ] && [ "$AFTER" = "$BEFORE" ]; then echo "::error::nothing was published"; exit 1; fi
-              node tests/e2e/history.js expect-runs $runs ;;
-            race)
-              if [ "$ATTEMPT" = 1 ]; then
-                [ "$AFTER" = "${PREFIX}1-3" ] || { echo "::error::expected ${PREFIX}1-3, got $AFTER"; exit 1; }
-                node tests/e2e/history.js expect-runs 1 2 "$RUN_ID"
-              else
-                node tests/e2e/history.js expect-runs "$RUN_ID"
+            unchanged) [ "$AFTER" = "$BEFORE" ] || fail "the history changed" ;;
+            published)
+              [ -n "$AFTER" ] || fail "nothing was published"
+              if [ "$ATTEMPT" = 1 ] && [ "$AFTER" = "$BEFORE" ]; then fail "nothing was published"; fi
+              node tests/e2e/history.js expect-samples "$RUN_ID" records "$FAIL_TEST"
+              # Eight shards at once, cold: one entry per shard, the chain at 8.
+              if [ "$BARRIER" = true ] && [ "$ATTEMPT" = 1 ]; then
+                case "$AFTER" in "$PREFIX"*-"$SHARDS") ;; *) fail "expected the entry ${SHARDS} of a fresh chain, got $AFTER" ;; esac
               fi ;;
-            *) echo "::error::unknown expectation $EXPECTED"; exit 1 ;;
+            *) fail "unknown expectation $EXPECTED" ;;
           esac
-
-      # Every leg, rollback included, uploads one blob report per shard and merges them.
-      - name: Require the blob reports and the merged report
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PLAN: ${{ needs.prepare.outputs.plan }}
-          REPO: ${{ github.repository }}
-          RUN_ID: ${{ github.run_id }}
-        run: |
-          key12=$(jq -r '.key[0:12]' <<< "$PLAN")
-          total=$(jq -r .total <<< "$PLAN")
-          names=$(gh api --paginate "repos/$REPO/actions/runs/$RUN_ID/artifacts?per_page=100" --jq '.artifacts[].name')
-          for shard in $(seq 1 "$total"); do
-            grep -qE "^blob-report-$key12-$shard-attempt-[0-9]+$" <<< "$names" \
-              || { echo "::error::no blob-report-$key12-$shard-attempt-N artifact"; exit 1; }
-          done
-          grep -qx "playwright-report-$key12-$RUN_ID" <<< "$names" \
-            || { echo "::error::no merged report artifact playwright-report-$key12-$RUN_ID"; exit 1; }
