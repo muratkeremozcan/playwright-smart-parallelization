@@ -1,0 +1,217 @@
+/**
+ * The exactly-once check of the finish phase over synthetic records: every way a run can be
+ * incomplete, repeated, mixed or from elsewhere fails it, and a complete run passes.
+ */
+
+const { test, describe } = require('node:test');
+const assert = require('node:assert');
+const {
+  RECORD_SCHEMA,
+  STATUS_SCHEMA,
+  checkRun,
+  checkStatuses,
+  latestAttempts,
+  validateRecord,
+} = require('../lib/check');
+
+const SHA = 'a'.repeat(64);
+const plan = { mode: 'balanced', total: 2, sha: SHA, runId: 7, fingerprint: 'fp' };
+
+function record(shard, tests, extra = {}) {
+  return {
+    schema: RECORD_SCHEMA,
+    version: 1,
+    run: { id: 7, attempt: 1 },
+    shard: { current: shard, total: 2 },
+    mode: 'balanced',
+    fingerprint: 'fp',
+    planSha: 'p'.repeat(64),
+    snapshotSha: SHA,
+    predictedMs: [100, 100],
+    status: 'passed',
+    wallMs: 100,
+    testsMs: 90,
+    corpus: [
+      ['a', 'A'],
+      ['b', 'B'],
+      ['c', 'C'],
+    ],
+    tests: tests.map((id) => ({
+      id,
+      key: `["p","f","${id}"]`,
+      repeat: 0,
+      setup: false,
+      outcome: 'expected',
+      ran: true,
+      sample_ms: 10,
+    })),
+    ...extra,
+  };
+}
+
+const complete = () => [record(1, ['a', 'b']), record(2, ['c'])];
+const problems = (records, p = plan) => checkRun(p, records).problems.join('\n');
+
+test('a complete run passes', () => {
+  const result = checkRun(plan, complete());
+  assert.deepStrictEqual(result.problems, []);
+  assert.ok(result.ok && result.coverageOk && result.passed);
+});
+
+describe('fails', () => {
+  test('with no records', () => assert.match(problems([]), /no run records/));
+  test('with a missing shard', () =>
+    assert.match(problems([record(1, ['a', 'b'])]), /no record for shard 2/));
+  test('with two records of one shard and attempt', () => {
+    assert.match(
+      problems([...complete(), record(2, ['c'])]),
+      /shard 2 has more than one record of the same attempt/
+    );
+  });
+  test('with a record of another run', () => {
+    assert.match(
+      problems([record(1, ['a', 'b']), record(2, ['c'], { run: { id: 8, attempt: 1 } })]),
+      /record of run 8/
+    );
+  });
+  test('with a shard of another mode', () => {
+    assert.match(
+      problems([record(1, ['a', 'b']), record(2, ['c'], { mode: 'native' })]),
+      /mode native, the plan says balanced/
+    );
+  });
+  test('with another fingerprint', () => {
+    assert.match(
+      problems([record(1, ['a', 'b']), record(2, ['c'], { fingerprint: 'other' })]),
+      /fingerprint other/
+    );
+  });
+  test('with a shard that planned from another snapshot', () => {
+    assert.match(
+      problems([record(1, ['a', 'b']), record(2, ['c'], { snapshotSha: 'b'.repeat(64) })]),
+      /planned from snapshot/
+    );
+  });
+  test('with two plans', () => {
+    assert.match(
+      problems([record(1, ['a', 'b']), record(2, ['c'], { planSha: 'q'.repeat(64) })]),
+      /planned differently/
+    );
+  });
+  test('with two corpora', () => {
+    assert.match(
+      problems([record(1, ['a', 'b']), record(2, ['c'], { corpus: [['c', 'C']] })]),
+      /different test sets/
+    );
+  });
+  test('with no corpus', () => {
+    assert.match(
+      problems([record(1, ['a', 'b'], { corpus: null }), record(2, ['c'], { corpus: null })]),
+      /no corpus/
+    );
+  });
+  test('with a test in two shards', () => {
+    assert.match(
+      problems([record(1, ['a', 'b']), record(2, ['b', 'c'])]),
+      /1 test\(s\) ran in more than one shard: B/
+    );
+  });
+  test('with a test in no shard', () => {
+    assert.match(problems([record(1, ['a']), record(2, ['c'])]), /1 test\(s\) ran in no shard: B/);
+  });
+  test('with a test outside the corpus', () => {
+    assert.match(
+      problems([record(1, ['a', 'b']), record(2, ['c', 'z'])]),
+      /ran outside the corpus: z/
+    );
+  });
+  test('with a test that did not run', () => {
+    const records = complete();
+    records[1].tests[0].ran = false;
+    assert.match(problems(records), /1 test\(s\) did not run/);
+  });
+  test('with a failed shard, which leaves the coverage proven', () => {
+    const result = checkRun(plan, [record(1, ['a', 'b']), record(2, ['c'], { status: 'failed' })]);
+    assert.ok(result.coverageOk);
+    assert.strictEqual(result.ok, false);
+    assert.match(result.problems.join('\n'), /shard 2 ended with status failed/);
+  });
+  test('when every test skipped', () => {
+    const records = complete();
+    for (const r of records) for (const t of r.tests) t.outcome = 'skipped';
+    assert.match(problems(records), /every one of the 3 tests skipped/);
+  });
+});
+
+test('an intentional skip passes', () => {
+  const records = complete();
+  records[0].tests[0].outcome = 'skipped';
+  assert.deepStrictEqual(checkRun(plan, records).problems, []);
+});
+
+test('setup tests that every shard ran are not duplicates', () => {
+  const records = complete();
+  for (const r of records)
+    r.tests.push({
+      id: 's',
+      key: '["setup","s","s"]',
+      repeat: 0,
+      setup: true,
+      outcome: 'expected',
+      ran: true,
+      sample_ms: 5,
+    });
+  assert.deepStrictEqual(checkRun(plan, records).problems, []);
+});
+
+test('a re-run shard counts its latest attempt only', () => {
+  const stale = record(2, ['b', 'c'], { status: 'failed' });
+  const rerun = record(2, ['c'], { run: { id: 7, attempt: 2 } });
+  const result = checkRun(plan, [record(1, ['a', 'b']), stale, rerun]);
+  assert.deepStrictEqual(result.problems, []);
+  assert.strictEqual(latestAttempts([stale, rerun]).latest[0].run.attempt, 2);
+  assert.strictEqual(latestAttempts([rerun, stale]).latest[0].run.attempt, 2, 'in either order');
+  assert.deepStrictEqual(checkRun(plan, [rerun, record(1, ['a', 'b']), stale]).problems, []);
+});
+
+test('after a re-run of all jobs, a record of an earlier attempt covers nothing', () => {
+  const again = { ...plan, attempt: 2 };
+  const result = checkRun(again, [
+    record(1, ['a', 'b'], { run: { id: 7, attempt: 1 } }),
+    record(2, ['c'], { run: { id: 7, attempt: 2 } }),
+  ]);
+  assert.match(result.problems.join('\n'), /no record for shard 1/);
+});
+
+describe('a disabled run', () => {
+  const status = (shard, exitCode, attempt = 1) => ({
+    schema: STATUS_SCHEMA,
+    version: 1,
+    run: { id: 7, attempt },
+    shard: { current: shard, total: 2 },
+    exitCode,
+  });
+  const off = { mode: 'disabled', total: 2, runId: 7, attempt: 1 };
+
+  test('passes when every shard exited 0', () => {
+    assert.ok(checkStatuses(off, [status(1, 0), status(2, 0)]).ok);
+  });
+
+  test('fails on a failed or missing shard, and keeps the latest attempt', () => {
+    assert.match(
+      checkStatuses(off, [status(1, 0), status(2, 1)]).problems.join(),
+      /shard 2 exited with 1/
+    );
+    assert.match(checkStatuses(off, [status(1, 0)]).problems.join(), /no status for shard 2/);
+    assert.ok(checkStatuses(off, [status(1, 0), status(2, 1), status(2, 0, 2)]).ok);
+  });
+});
+
+test('validateRecord refuses something that is not a record', () => {
+  assert.throws(() => validateRecord({ schema: 'other' }), /not a run record/);
+  assert.throws(
+    () => validateRecord({ ...record(1, ['a']), tests: [{ id: 1 }] }),
+    /not a run record/
+  );
+  assert.ok(validateRecord(record(1, ['a'])));
+});

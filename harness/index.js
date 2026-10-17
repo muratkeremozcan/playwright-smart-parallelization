@@ -4,6 +4,28 @@
  * Qualification harness library. `listIntended` lists the leaves a run is meant to cover,
  * `runPartition` runs a partition shard by shard, and `qualify` checks coverage, execution
  * outcomes, serial integrity and dependency accounting and returns the report.
+ *
+ * Playwright answers every question about the selection: the harness reporter lists the leaves
+ * (one test in one project at one repeat) in list mode and in shard runs, so a listed key and a
+ * run key match by construction, and it records each project's dependencies from the config.
+ * Arguments forwarded after `--` reach Playwright exactly as given, in every spelling it accepts.
+ * A partition passes when every primary leaf was selected exactly once, each selected leaf ran to
+ * a result, no serial group was split across shards, and each shard ran the setup and teardown
+ * leaves its tests depend on exactly once.
+ *
+ * Proven selections, each against real Playwright: `--project`, `--grep`, `--grep-invert`,
+ * `--repeat-each`, `--no-deps`, `--config` or `-c`, file filters and project-level config.
+ * Rejected before any listing or run, because the harness cannot prove them exactly once:
+ * `--last-failed`, `--only-changed`, `--shard` (and a config that sets `shard`), `--list`, the `--`
+ * separator among the forwarded arguments, a focused test (`.only`) with `forbidOnly` off, a
+ * project without a name or two with one name, and an empty selection, even when Playwright
+ * accepts it with `--pass-with-no-tests`.
+ *
+ * The report holds the Playwright and Node versions, per-shard durations, the slowest shard and
+ * the imbalance. `npm run harness` runs it on the consumer fixture (`fixtures/consumer`, a
+ * browser-free project with setup and teardown projects, two browser projects, duplicate titles,
+ * parameterized tests, retries, serial and parallel suites) and `npm run harness:negative` runs
+ * the negative control. `PSP_FIXTURE_SKIP_ALL=1` makes every fixture test skip at runtime.
  */
 
 const { spawnSync } = require('node:child_process');

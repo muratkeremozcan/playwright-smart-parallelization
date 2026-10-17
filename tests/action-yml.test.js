@@ -1,84 +1,112 @@
 /**
  * Tests for action.yml, the public interface of the action.
  *
- * A step env that forgets an input changes what the action receives without changing anything
- * visible, so the wiring is pinned here: every declared input reaches the step under the
- * INPUT_ name that `getInput` style readers use, and nothing undeclared does.
+ * The file is rendered by scripts/render-action.js, so it must equal that output. Every Node step
+ * receives every input under its PSP_INPUT_ name except the token, which only the step that reads
+ * the jobs API gets, the only actions it uses are GitHub's official
+ * cache and artifact actions, and the compare-and-swap of the history is unrolled into exactly the
+ * attempts the store counts.
  */
 
 const { test, describe } = require('node:test');
 const assert = require('node:assert');
 const fs = require('node:fs');
-const os = require('node:os');
 const path = require('node:path');
-const { spawnSync } = require('node:child_process');
 const YAML = require('yaml');
+const { FILE, rendered } = require('../scripts/render-action');
+const { INPUTS, envName } = require('../lib/inputs');
+const { ATTEMPTS } = require('../lib/store');
+const { CACHE_PATH } = require('../lib/identity');
+const { STEPS } = require('../main');
 
-const action = YAML.parse(fs.readFileSync(path.join(__dirname, '..', 'action.yml'), 'utf8'));
-const inputs = Object.entries(action.inputs);
-const [step] = action.runs.steps;
+const text = fs.readFileSync(path.join(__dirname, '..', 'action.yml'), 'utf8');
+const action = YAML.parse(text);
+const steps = action.runs.steps;
+const nodeSteps = steps.filter((s) => s.run);
 
-describe('action.yml inputs', () => {
-  test('declares the planned workflow inputs', () => {
-    assert.deepStrictEqual(Object.keys(action.inputs).sort(), [
-      'config-path',
-      'enabled',
-      'filters',
-      'projects',
-      'retention-days',
-      'shard-count',
-      'timing-artifact-name',
-      'workers',
-      'working-directory',
-    ]);
+test('action.yml is the output of scripts/render-action.js', () => {
+  assert.strictEqual(path.resolve(FILE), path.resolve(__dirname, '..', 'action.yml'));
+  assert.strictEqual(text, rendered, 'run `node scripts/render-action.js --write`');
+});
+
+describe('inputs and outputs', () => {
+  test('declares the inputs the steps read, phase required and the rest optional with defaults', () => {
+    assert.deepStrictEqual(Object.keys(action.inputs).sort(), [...INPUTS].sort());
+    assert.strictEqual(action.inputs.phase.required, true);
+    for (const [name, input] of Object.entries(action.inputs)) {
+      if (name === 'phase') continue;
+      assert.strictEqual(input.required, false, name);
+      assert.strictEqual(typeof input.default, 'string', name);
+    }
+    assert.strictEqual(action.inputs.enabled.default, 'true');
   });
 
-  test('every input is provisional, optional and has a string default', () => {
-    for (const [name, input] of inputs) {
-      assert.match(input.description, /^\s*Provisional\./, `${name} must be marked provisional`);
-      assert.strictEqual(input.required, false, `${name} must be optional`);
-      assert.strictEqual(typeof input.default, 'string', `${name} needs a string default`);
+  test('outputs the matrix, the plan and the mode of the prepare step', () => {
+    assert.deepStrictEqual(Object.keys(action.outputs).sort(), ['matrix', 'mode', 'plan']);
+    assert.match(action.outputs.plan.value, /steps\.prepare\.outputs\.plan/);
+  });
+});
+
+describe('steps', () => {
+  test('is a composite action whose Node steps call main.js with a known step and every input', () => {
+    assert.strictEqual(action.runs.using, 'composite');
+    for (const step of nodeSteps) {
+      assert.strictEqual(step.shell, 'bash');
+      const match = /^node "\$GITHUB_ACTION_PATH\/main\.js" ([\w-]+)$/.exec(step.run);
+      assert.ok(match, step.run);
+      assert.ok(STEPS[match[1]], `main.js has the step ${match[1]}`);
+      for (const input of INPUTS.filter((i) => i !== 'github-token')) {
+        assert.strictEqual(
+          step.env[envName(input)],
+          `\${{ inputs.${input} }}`,
+          `${step.name} ${input}`
+        );
+      }
     }
   });
 
-  test('the rollback switch defaults to balancing on', () => {
-    assert.strictEqual(action.inputs.enabled.default, 'true');
-  });
-});
-
-describe('action.yml runs', () => {
-  test('is a composite action whose only step runs main.js from the action path', () => {
-    assert.strictEqual(action.runs.using, 'composite');
-    assert.strictEqual(action.runs.steps.length, 1);
-    assert.strictEqual(step.shell, 'bash');
-    assert.strictEqual(step.run, 'node "$GITHUB_ACTION_PATH/main.js"');
-    assert.strictEqual(
-      step.uses,
-      undefined,
-      'no third-party action may sit between a PR and the run'
-    );
+  test('gives the token to the step that reads the jobs API and to no other step', () => {
+    const holders = nodeSteps.filter((s) => envName('github-token') in s.env).map((s) => s.id);
+    assert.deepStrictEqual(holders, ['finish-check']);
   });
 
-  test('maps every input to INPUT_<NAME> and nothing else', () => {
-    const expected = Object.fromEntries(
-      inputs.map(([name]) => [`INPUT_${name.toUpperCase()}`, `\${{ inputs.${name} }}`])
-    );
-    assert.deepStrictEqual(step.env, expected);
+  test('uses only the official cache and artifact actions, pinned to a major', () => {
+    const uses = [...new Set(steps.filter((s) => s.uses).map((s) => s.uses))].sort();
+    assert.deepStrictEqual(uses, [
+      'actions/cache/restore@v6',
+      'actions/cache/save@v6',
+      'actions/download-artifact@v8',
+      'actions/upload-artifact@v7',
+    ]);
+    for (const step of steps.filter((s) => s.uses && s.uses.startsWith('actions/cache'))) {
+      assert.strictEqual(
+        step.with.path,
+        CACHE_PATH,
+        'one cache path, so every entry has one version'
+      );
+    }
   });
-});
 
-describe('action.yml run line, executed as a consumer runs it', () => {
-  test('fails with the not-implemented annotation from the action path', () => {
-    const result = spawnSync('bash', ['-c', step.run], {
-      encoding: 'utf8',
-      env: {
-        ...process.env,
-        GITHUB_ACTION_PATH: path.join(__dirname, '..'),
-        ...Object.fromEntries(Object.entries(step.env).map(([key]) => [key, 'x'])),
-      },
-      cwd: os.tmpdir(),
-    });
-    assert.strictEqual(result.status, 1, result.stderr);
-    assert.match(result.stdout, /^::error title=.*::.*not implemented yet/);
+  test(`unrolls ${ATTEMPTS} compare-and-swap attempts of read, write, save, clear, read back, verify`, () => {
+    for (let k = 1; k <= ATTEMPTS; k++) {
+      const ids = steps
+        .filter((s) => s.name && s.name.startsWith(`History, attempt ${k},`))
+        .map((s) => s.uses || s.run.split(' ').pop());
+      assert.deepStrictEqual(ids, [
+        'actions/cache/restore@v6',
+        'store-write',
+        'actions/cache/save@v6',
+        'store-clear',
+        'actions/cache/restore@v6',
+        'store-verify',
+      ]);
+    }
+    assert.ok(!steps.some((s) => s.name && s.name.startsWith(`History, attempt ${ATTEMPTS + 1},`)));
+  });
+
+  test('the record and blob uploads run after a failed Playwright step', () => {
+    const uploads = steps.filter((s) => s.name && /^Run, upload/.test(s.name));
+    assert.strictEqual(uploads.length, 2);
+    for (const step of uploads) assert.match(step.if, /^always\(\)/);
   });
 });

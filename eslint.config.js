@@ -19,4 +19,10 @@ module.exports = [
       'prefer-const': 'error',
     },
   },
+  {
+    // Playwright reads the fixtures a test or hook uses from the destructured first argument, so
+    // `async ({}, info) => {}` is how a test that uses none of them takes its info.
+    files: ['fixtures/consumer/lifecycle-tests/**/*.js'],
+    rules: { 'no-empty-pattern': 'off' },
+  },
 ];
