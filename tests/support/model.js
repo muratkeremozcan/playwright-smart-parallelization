@@ -10,8 +10,8 @@
  *   later, so a save onto a reserved or finalized key changes nothing and an exact restore of a
  *   key still uploading misses; a restore by prefix returns the newest entry created (what GitHub
  *   documents);
- * - the artifact store, one per run: a name is uploaded once in a run, and `list` and `download`
- *   read that run's artifacts back.
+ * - the artifact store, one per run: a name is created once in a run, a second upload of it fails,
+ *   and it becomes visible to `find`, `list` and `download` one tick after its upload starts.
  *
  * `world.before(op, key)` runs before every cache operation, so a test can let another writer act
  * between two steps of a compare-and-swap.
@@ -82,10 +82,12 @@ function cacheRestore(world, key, restoreKeys = []) {
 }
 
 /** The cache adapter of lib/cache.js over `world`, for the shard job in `workspace`. */
-function modelCache(world, workspace, { available = true } = {}) {
+function modelCache(world, workspace, { available = true, readable = true, writable = true } = {}) {
   return {
     writeDenied: false,
     available: () => available,
+    readable: () => readable,
+    writable: () => writable,
     async restore(dir, key, restoreKeys = []) {
       if (world.before) await world.before('restore', key);
       await tick();
@@ -115,14 +117,24 @@ function modelArtifacts(world, runId) {
   if (!world.runs.has(id)) world.runs.set(id, new Map());
   const store = world.runs.get(id);
   return {
+    // Like the service: a name is created at once and becomes visible a tick later.
     async upload(name, files, root) {
-      if (store.has(name)) throw new Error(`an artifact named ${name} exists`);
+      if (world.before) await world.before('upload', name);
+      if (store.has(name)) throw new Error(`(409) Conflict: an artifact named ${name} exists`);
       const tree = {};
       for (const file of files) tree[path.relative(root, file)] = fs.readFileSync(file);
-      store.set(name, { id: world.nextId++, files: tree });
+      const artifact = { id: world.nextId++, files: tree, final: false };
+      store.set(name, artifact);
+      await tick();
+      artifact.final = true;
+    },
+    async find(name) {
+      if (world.before) await world.before('find', name);
+      const found = store.get(name);
+      return found && found.final ? { name, id: found.id } : null;
     },
     async list() {
-      return [...store].map(([name, a]) => ({ name, id: a.id }));
+      return [...store].filter(([, a]) => a.final).map(([name, a]) => ({ name, id: a.id }));
     },
     async download(artifactId, target) {
       const found = [...store.values()].find((a) => a.id === artifactId);
@@ -200,7 +212,8 @@ function jobEnv(ctx, { runId, attempt = 1, job = 'test', inputs = {}, env = {} }
   };
 }
 
-const noSleep = async () => {};
+// A wait lets the other writers of the model move on.
+const noSleep = () => new Promise((resolve) => setImmediate(resolve));
 
 /** The main step of one shard job: `{ env, io, state, error }`. */
 async function mainStep(ctx, options) {
@@ -211,6 +224,7 @@ async function mainStep(ctx, options) {
       env,
       io,
       cache: options.cache || modelCache(ctx.world, ctx.ws, options.cacheOptions),
+      artifacts: modelArtifacts(ctx.world, env.GITHUB_RUN_ID),
       sleep: options.sleep || noSleep,
       reporter: options.reporter || REPORTER,
     });

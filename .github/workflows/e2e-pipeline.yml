@@ -263,11 +263,14 @@ jobs:
           key: ${{ needs.setup.outputs.prefix }}
           restore-keys: ${{ needs.setup.outputs.prefix }}
       - id: pin
-        uses: actions/cache/restore@v6
-        with:
-          path: .psp/pin
-          key: ${{ needs.setup.outputs.pin }}
-          lookup-only: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NAME: ${{ needs.setup.outputs.pin }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          n=$(gh api "repos/$REPO/actions/runs/$RUN_ID/artifacts?name=$NAME" --jq '.total_count')
+          echo "pinned=$([ "$n" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@v8
         with:
           pattern: psp-record-*-${{ needs.setup.outputs.key12 }}-*
@@ -276,7 +279,7 @@ jobs:
         env:
           BEFORE: ${{ needs.setup.outputs.before }}
           AFTER: ${{ steps.after.outputs.cache-matched-key }}
-          PINNED: ${{ steps.pin.outputs.cache-hit }}
+          PINNED: ${{ steps.pin.outputs.pinned }}
           EXPECTED: ${{ inputs.expect-history }}
           ENABLED: ${{ inputs.enabled }}
           FAIL_TEST: ${{ inputs.fail-test }}

@@ -16,7 +16,7 @@ const path = require('node:path');
 const { cacheRestore, cacheSave, finishJob, newWorld, shardJob } = require('./support/model');
 const { FIXTURE, requireFixture } = require('./support/fixture');
 const { parseHistory } = require('../lib/history');
-const { cacheKey, cachePrefix, pinKey } = require('../lib/identity');
+const { cacheKey, cachePrefix, pinName } = require('../lib/identity');
 const { sha256 } = require('../lib/util');
 
 // The epoch of a chain the model starts: the day its shards publish on (PSP_TODAY).
@@ -174,7 +174,7 @@ describe('cold start, a warm run without finish, a re-run shard, a failed test a
       assert.strictEqual(job.user.status, 0, job.user.output);
       assert.doesNotMatch(job.user.output, /playwright-smart-parallelization/);
     }
-    assert.ok(![...world.cache.keys()].some((k) => k.includes('-104-')), 'no pin');
+    assert.ok(![...world.runs.get('104').keys()].some((k) => k.startsWith('psp-pin-')), 'no pin');
     assert.deepStrictEqual(newest(world, keyOf(cold)), before);
     const finish = await finishOf(world, 104);
     assert.strictEqual(finish.io.failed, null);
@@ -392,6 +392,19 @@ describe('history edge cases', () => {
   });
 
   test('each job of a run pins its own snapshot', () => {
-    assert.notStrictEqual(pinKey('k', 1, 'a'), pinKey('k', 1, 'b'));
+    assert.notStrictEqual(pinName('k', 'a'), pinName('k', 'b'));
+  });
+
+  test('a cache mode that refuses writes: the shards balance from the history and publish nothing', async () => {
+    requireFixture();
+    const world = newWorld();
+    await run(world, 801, 2);
+    const before = [...world.cache.keys()].length;
+    const jobs = await run(world, 802, 2, { cacheOptions: { writable: false } });
+    assert.strictEqual(jobs[0].main.io.outputs.mode, 'balanced');
+    assert.match(jobs[0].post.lines.join('\n'), /cannot be written by this job/);
+    assert.strictEqual([...world.cache.keys()].length, before);
+    const none = await run(world, 803, 2, { cacheOptions: { readable: false } });
+    assert.match(none[0].main.io.outputs.reason, /cache mode does not let it read/);
   });
 });

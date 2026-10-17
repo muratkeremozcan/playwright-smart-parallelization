@@ -5,7 +5,7 @@
  * Actions cache folder of the Action (`.psp/history`):
  *
  *   node tests/e2e/history.js key                 print the history key, its cache prefix and the
- *                                                 pin key of JOB, from the INPUT_* inputs the
+ *                                                 pin artifact of JOB, from the INPUT_* inputs the
  *                                                 Action reads, to seed or inspect a history
  *   node tests/e2e/history.js seed KEY RUN_ID     write a valid history of one synthetic run and
  *                                                 print its sha
@@ -21,7 +21,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { applyRun, emptyHistory, parseHistory, serializeHistory } = require('../../lib/history');
-const { CACHE_PATH, HISTORY_FILE, cachePrefix, pinKey } = require('../../lib/identity');
+const { CACHE_PATH, HISTORY_FILE, cachePrefix, pinName } = require('../../lib/identity');
 const { ACTION_INPUTS, actionInputs, readInputs } = require('../../lib/inputs');
 const { testKey } = require('../../lib/plan/estimate');
 const { sha256 } = require('../../lib/util');
@@ -97,7 +97,7 @@ if (command === 'key') {
   const { key } = actionInputs(readInputs(ACTION_INPUTS), process.env);
   process.stdout.write(
     `key=${key}\nkey12=${key.slice(0, 12)}\nprefix=${cachePrefix(key)}\n` +
-      `pin=${pinKey(key, process.env.GITHUB_RUN_ID, process.env.JOB || 'test')}\n`
+      `pin=${pinName(key, process.env.JOB || 'test')}\n`
   );
 } else if (command === 'seed') seed(args[0], args[1]);
 else if (command === 'sha') process.stdout.write(`sha=${sha256(fs.readFileSync(file, 'utf8'))}\n`);

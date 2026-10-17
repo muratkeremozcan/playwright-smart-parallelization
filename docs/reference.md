@@ -30,11 +30,11 @@ Facts about the Action that the README example does not need. Every input is in 
 
 - The history is keyed by working directory, workers, runner label and `history-key`; the shard count and the command's filters can change freely, since each test keeps its own samples.
 - Each shard publishes the samples of its passing tests, also when another test of the shard failed.
-- Every shard of a job and every re-run of one plans from one snapshot, pinned to the workflow run and job, never to the checked-out commit.
+- Every shard of a job and every re-run of one plans from one snapshot, pinned in a `psp-pin-*` artifact of the workflow run, never to the checked-out commit.
 - It lives in the Actions cache, which drops entries unused for 7 days, so a quiet repo starts cold again.
 
 ## Runner
 
 - The Action runs on the runner's Node 24. The reporter runs in your Node, which Playwright 1.63 and later needs at 20 or above.
 - Playwright below 1.63, an unknown Playwright version, or Yarn Plug'n'Play leave `$PSP_ARGS` empty: plain `--shard`.
-- Without an Actions cache, or with one that refuses the run's writes, every shard runs native and nothing is published.
+- Without an Actions cache, or with a cache mode that refuses reads, every shard runs native; with one that refuses writes, nothing is published.

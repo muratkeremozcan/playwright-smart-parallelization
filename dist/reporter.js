@@ -1064,7 +1064,6 @@ var require_identity = __commonJS({
     var { sha256: sha2562 } = require_util();
     var MIN_PLAYWRIGHT = "1.63.0";
     var CACHE_PATH = ".psp/history";
-    var PIN_PATH = ".psp/pin";
     var HISTORY_FILE = "history.json";
     var PIN_FILE = "pin.json";
     function historyKey({ workingDirectory, workers, runnerLabel, historyKey: extra }) {
@@ -1085,7 +1084,7 @@ var require_identity = __commonJS({
       const found = /^([1-9]\d*)-([1-9]\d*)$/.exec(matched.slice(cachePrefix(key).length));
       return found ? { epoch: Number(found[1]), seq: Number(found[2]) } : null;
     }
-    var pinKey = (key, runId, job) => `psp-pin-v1-${key}-${runId}-${job || "job"}`;
+    var pinName = (key, job) => `psp-pin-${job || "job"}-${key}`;
     function recordName(record) {
       const corpus = record.corpusSha ? record.corpusSha.slice(0, 12) : "none";
       return `psp-record-${record.job || "job"}-${record.key.slice(0, 12)}-${corpus}-${record.shard.current}of${record.shard.total}-attempt-${record.run.attempt}`;
@@ -1095,13 +1094,12 @@ var require_identity = __commonJS({
       HISTORY_FILE,
       MIN_PLAYWRIGHT,
       PIN_FILE,
-      PIN_PATH,
       cacheKey,
       cachePrefix,
       cacheSlot,
       fingerprint: fingerprint2,
       historyKey,
-      pinKey,
+      pinName,
       recordName
     };
   }

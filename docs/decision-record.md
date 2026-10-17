@@ -34,7 +34,7 @@ Shape A (per-shard `--test-list` files) is rejected: `--test-list` is a lossy se
 
 ### Prepare dropped, finish optional (2026-10-17)
 
-The three-phase interface (a prepare job, a run step that owned the Playwright command, a finish job) is replaced before v1. A prepare job and a plan output cost every user two extra jobs of wiring, and owning the command broke npm scripts, shell variables and checkouts of another commit. Each shard now pins the snapshot itself, as playwright-shard-balancer's restore action does, and publishes its own samples by compare-and-swap, so the next run balances with no finish job. Finish stays as an optional check, because coverage across shards can only be proven after all of them, and a run without it still balances.
+The three-phase interface (a prepare job, a run step that owned the Playwright command, a finish job) is replaced before v1. A prepare job and a plan output cost every user two extra jobs of wiring, and owning the command broke npm scripts, shell variables and checkouts of another commit. Each shard now pins the snapshot itself, as playwright-shard-balancer's restore action does but in a run artifact, and publishes its own samples by compare-and-swap, so the next run balances with no finish job. Finish stays as an optional check, because coverage across shards can only be proven after all of them, and a run without it still balances.
 
 ## Rules
 
@@ -47,8 +47,8 @@ The three-phase interface (a prepare job, a run step that owned the Playwright c
 - Intentional skips are allowed and not flagged; a run where every test skipped fails finish.
 - One unnamed project (a config without `projects`) has the identity `''`; two or more unnamed or duplicate names are refused before any test.
 - The history key is working directory, workers, runner label and `history-key`. The command is the user's and runs after the Action, so a filter shares the history; each test keeps its own samples.
-- The pin is keyed by history key, run id and job id, never by the commit, so a workflow that checks out another commit plans the same on every shard and re-run.
-- A pin that never reads back fails the shard before any test, since a shard on other bytes could run a test twice or not at all. A cache that refuses writes refuses them for every shard, so every shard runs native.
+- The pin is an artifact of the workflow run named by job id and history key, never by the commit, so a workflow that checks out another commit plans the same on every shard and re-run. An artifact name is unique in a run, so the first upload wins, and an artifact outlives the cache's eviction, so a re-run days later still finds it.
+- A pin that is never found fails the shard before any test, since a shard on other bytes could run a test twice or not at all. A job whose cache mode refuses reads, or a runner without a cache, has no history on any shard, so every shard runs native unpinned; a job whose cache mode refuses writes publishes nothing.
 - Rollback (`enabled: false`) leaves `$PSP_ARGS` empty and uploads a status record, so finish tells a rollback from shards that never ran.
 - The plan packs for the `workers` input, or for 1 worker when it is unset, so every shard plans the same on any runner.
 

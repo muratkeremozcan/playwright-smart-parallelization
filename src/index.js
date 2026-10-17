@@ -32,6 +32,14 @@ const io = {
 function artifactClient() {
   const client = new DefaultArtifactClient();
   return {
+    async find(name) {
+      try {
+        return (await client.getArtifact(name)).artifact;
+      } catch (error) {
+        if (error.name === 'ArtifactNotFoundError') return null;
+        throw error;
+      }
+    },
     upload: (name, files, root) => client.uploadArtifact(name, files, root),
     list: async () => (await client.listArtifacts({ latest: true })).artifacts,
     download: (id, target) => client.downloadArtifact(id, { path: target }),
@@ -45,6 +53,7 @@ const STEPS = {
     const state = await setup({
       io,
       cache: toolkitCache(cache),
+      artifacts: artifactClient(),
       sleep,
       reporter: path.join(__dirname, 'reporter.js'),
     });

@@ -15,11 +15,11 @@ const { trust } = require('../lib/trust');
 const store = require('../lib/store');
 const { fetchJobs, markdown, overheadFrom, simulate } = require('../lib/summary');
 const { applyRun, emptyHistory, serializeHistory } = require('../lib/history');
-const { cacheKey, cachePrefix, pinKey } = require('../lib/identity');
+const { cacheKey, cachePrefix, pinName } = require('../lib/identity');
 const { testKey } = require('../lib/plan/estimate');
 const { sha256 } = require('../lib/util');
 const { FIXTURE } = require('./support/fixture');
-const { modelCache, newWorld, cacheSave } = require('./support/model');
+const { modelArtifacts, modelCache, newWorld, cacheSave } = require('./support/model');
 
 const tmp = (prefix) => fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 
@@ -154,21 +154,19 @@ describe('the pin', () => {
     const j = job();
     const p = prepared(j);
     const world = newWorld();
-    return {
-      j,
-      p,
-      world,
-      run: (opts = {}) =>
-        pin({
-          prepared: p,
-          runId: 7,
-          job: 'test',
-          cache: modelCache(world, j.ws),
-          sleep: async () => {},
-          ...opts,
-        }),
-    };
+    const run = (opts = {}) =>
+      pin({
+        prepared: p,
+        runId: 7,
+        job: 'test',
+        cache: modelCache(world, j.ws),
+        artifacts: modelArtifacts(world, 7),
+        sleep: async () => {},
+        ...opts,
+      });
+    return { j, p, world, run };
   };
+  const pinArtifact = (world, p) => world.runs.get('7').get(pinName(p.key, 'test'));
 
   test('the first shard pins the newest history; a later shard reads the pin, not a newer entry', async () => {
     const { p, world, run } = setupPin();
@@ -176,8 +174,17 @@ describe('the pin', () => {
     cacheSave(world, cacheKey(p.key, 1, 1), { 'history.json': Buffer.from(first) });
     const a = await run();
     assert.deepStrictEqual(a, { matchedKey: cacheKey(p.key, 1, 1), history: first });
-    assert.ok(world.cache.has(pinKey(p.key, 7, 'test')));
+    assert.ok(pinArtifact(world, p));
     cacheSave(world, cacheKey(p.key, 1, 2), { 'history.json': Buffer.from('newer') });
+    assert.deepStrictEqual(await run(), a);
+  });
+
+  test('a re-run after the cache evicted every entry still reads the pin', async () => {
+    const { p, world, run } = setupPin();
+    const first = serializeHistory(someHistory(p.key));
+    cacheSave(world, cacheKey(p.key, 1, 1), { 'history.json': Buffer.from(first) });
+    const a = await run();
+    world.cache.clear();
     assert.deepStrictEqual(await run(), a);
   });
 
@@ -199,9 +206,11 @@ describe('the pin', () => {
     let moved = false;
     world.before = async (op) => {
       // After the first history read, another run publishes a newer entry.
-      if (op === 'save' && !moved) {
+      if (op === 'upload' && !moved) {
         moved = true;
-        cacheSave(world, cacheKey(p.key, 1, 2), { 'history.json': Buffer.from('x') });
+        cacheSave(world, cacheKey(p.key, 1, 2), {
+          'history.json': Buffer.from(serializeHistory(someHistory(p.key)).replace('100', '101')),
+        });
       }
     };
     const results = await Promise.all(
@@ -211,7 +220,9 @@ describe('the pin', () => {
           runId: 7,
           job: 'test',
           cache: modelCache(world, ws),
-          sleep: async () => {},
+          artifacts: modelArtifacts(world, 7),
+          // A wait lets time pass, so the winner's upload completes.
+          sleep: () => new Promise((resolve) => setImmediate(resolve)),
         })
       )
     );
@@ -219,14 +230,13 @@ describe('the pin', () => {
   });
 
   test('a pin still uploading is waited for; one never readable fails the shard before any test', async () => {
-    const { world, run } = setupPin();
+    const { p, world, run } = setupPin();
     const waits = [];
     let uploading = true;
-    world.before = async (op, key) => {
+    world.before = async (op) => {
       // The pin stays mid-upload until the shard has waited once.
-      if (op === 'restore' && key.startsWith('psp-pin-') && world.cache.has(key)) {
-        world.cache.get(key).final = !uploading;
-      }
+      const artifact = op === 'find' && world.runs.get('7').get(pinName(p.key, 'test'));
+      if (artifact) artifact.final = !uploading;
     };
     await run({
       sleep: async (ms) => {
@@ -236,38 +246,46 @@ describe('the pin', () => {
     });
     assert.deepStrictEqual(waits, [1000]);
     const stuck = setupPin();
-    stuck.world.before = async (op, key) => {
-      if (op === 'restore' && key.startsWith('psp-pin-') && stuck.world.cache.has(key)) {
-        stuck.world.cache.get(key).final = false;
-      }
+    stuck.world.before = async (op) => {
+      const artifact = op === 'find' && stuck.world.runs.get('7').get(pinName(stuck.p.key, 'test'));
+      if (artifact) artifact.final = false;
     };
-    await assert.rejects(stuck.run(), /did not return the pin .* after 30s/);
+    await assert.rejects(stuck.run(), /was not found after 30s.*stops before any test/);
   });
 
-  test('a cache that refuses writes leaves every shard unpinned', async () => {
-    const { j, run, world } = setupPin();
-    const cache = { ...modelCache(world, j.ws), writeDenied: true, save: async () => false };
-    assert.deepStrictEqual(await run({ cache }), {
+  test('a server with no artifact service leaves every shard unpinned', async () => {
+    const { run } = setupPin();
+    const artifacts = {
+      find: async () => {
+        throw Object.assign(new Error('no'), { name: 'GHESNotSupportedError' });
+      },
+    };
+    assert.deepStrictEqual(await run({ artifacts }), {
       unpinned: true,
-      reason: 'the Actions cache refuses writes for this run, so no snapshot can be pinned',
+      reason: 'this server has no artifact service to pin a snapshot in',
     });
   });
 
   test('a pin of another job or run is refused', async () => {
     const { p, world, run } = setupPin();
-    cacheSave(world, pinKey(p.key, 7, 'test'), {
-      'pin.json': Buffer.from(
-        JSON.stringify({
-          schema: 'playwright-smart-parallelization/pin',
-          version: 1,
-          key: p.key,
-          runId: 8,
-          job: 'test',
-          matchedKey: '',
-          history: null,
-        })
-      ),
-    });
+    const dir = tmp('psp-pin-');
+    fs.writeFileSync(
+      path.join(dir, 'pin.json'),
+      JSON.stringify({
+        schema: 'playwright-smart-parallelization/pin',
+        version: 1,
+        key: p.key,
+        runId: 8,
+        job: 'test',
+        matchedKey: '',
+        history: null,
+      })
+    );
+    await modelArtifacts(world, 7).upload(
+      pinName(p.key, 'test'),
+      [path.join(dir, 'pin.json')],
+      dir
+    );
     await assert.rejects(run(), /not a pin of this job and run/);
   });
 });
