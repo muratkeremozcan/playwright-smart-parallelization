@@ -100,6 +100,9 @@ npm run validate
 `validate` runs lint, format check, unit tests, and a check that nothing private lands in this public repo.
 The harness, qualification, measurement and research commands are in [docs/development.md](docs/development.md).
 
+To release, run **Actions → Release → Run workflow** on `main` with a bump; the first release picks `major`, which takes the `v0.0.0` baseline to `v1.0.0`.
+Publish the draft it creates with **Publish this Action to the GitHub Marketplace** ticked, and the workflow moves `v1` to that release.
+
 ## License
 
 [MIT](LICENSE)
