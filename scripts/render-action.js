@@ -77,10 +77,10 @@ inputs:
     description: 'run: this shard, from the matrix.'
     required: false
     default: ''
-  blob-report:
-    description: 'run: the folder of the blob report, relative to working-directory, uploaded when present and merged by finish.'
+  merge-config:
+    description: 'finish: a Playwright config, relative to working-directory, whose reporters merge-reports uses. Empty writes the HTML report.'
     required: false
-    default: 'blob-report'
+    default: ''
   publish-history:
     description: |
       finish: auto publishes the history from the repository's default branch only; true also from
@@ -101,8 +101,20 @@ outputs:
     description: 'prepare: the plan every run and finish step takes back.'
     value: \${{ steps.prepare.outputs.plan }}
   mode:
-    description: 'prepare: balanced, native or disabled.'
-    value: \${{ steps.prepare.outputs.mode }}
+    description: 'prepare and finish: balanced, native or disabled.'
+    value: \${{ steps.prepare.outputs.mode || steps.finish.outputs.mode }}
+  reason:
+    description: 'prepare: why the run has that mode.'
+    value: \${{ steps.prepare.outputs.reason }}
+  coverage:
+    description: 'finish: ok (every test ran exactly once), failed, or not checked (disabled).'
+    value: \${{ steps.finish.outputs.coverage }}
+  history:
+    description: 'finish: published, unchanged, or failed (a write was due and did not happen).'
+    value: \${{ steps.finish.outputs.history }}
+  overhead-ms:
+    description: 'finish: the median per-shard overhead outside Playwright, empty when the jobs API is unreadable.'
+    value: \${{ steps.finish-check.outputs.overhead-ms }}
 
 runs:
   using: composite
@@ -281,6 +293,7 @@ ${envBlock(8, stateEnv({ PSP_CACHE_HIT: `\${{ steps.cas${k}-check.outputs.cache-
 }
 add(`
     - name: Finish, conclude
+      id: finish
       if: always() && inputs.phase == 'finish' && steps.finish-setup.outcome == 'success'
       shell: bash
       run: ${node('finish-conclude')}

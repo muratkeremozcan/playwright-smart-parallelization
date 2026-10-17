@@ -41,9 +41,24 @@ describe('inputs and outputs', () => {
     assert.strictEqual(action.inputs.enabled.default, 'true');
   });
 
-  test('outputs the matrix, the plan and the mode of the prepare step', () => {
-    assert.deepStrictEqual(Object.keys(action.outputs).sort(), ['matrix', 'mode', 'plan']);
+  test('outputs the matrix, plan, mode and reason of prepare and the outcome of finish', () => {
+    assert.deepStrictEqual(Object.keys(action.outputs).sort(), [
+      'coverage',
+      'history',
+      'matrix',
+      'mode',
+      'overhead-ms',
+      'plan',
+      'reason',
+    ]);
     assert.match(action.outputs.plan.value, /steps\.prepare\.outputs\.plan/);
+    assert.match(
+      action.outputs.mode.value,
+      /steps\.prepare\.outputs\.mode \|\| steps\.finish\.outputs\.mode/
+    );
+    for (const name of ['coverage', 'history']) {
+      assert.match(action.outputs[name].value, new RegExp(`steps\\.finish\\.outputs\\.${name}`));
+    }
   });
 });
 

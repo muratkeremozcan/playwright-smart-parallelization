@@ -42,13 +42,22 @@ on:
         description: changed, unchanged or race
         type: string
         required: true
+      expect-coverage:
+        description: The coverage finish outputs, ok or not checked.
+        type: string
+        default: ok
+      node-version:
+        description: The Node that prepare and finish run on, empty for the runner's own.
+        type: string
+        default: ''
 
 permissions:
   contents: read
   actions: read
 
 env:
-  COMMAND: npx playwright test --reporter=blob
+  # No blob reporter here: the Action adds one to every shard.
+  COMMAND: npx playwright test
   WORKING_DIRECTORY: fixtures/consumer
 
 jobs:
@@ -87,6 +96,11 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+
+      - if: inputs.node-version != ''
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ inputs.node-version }}
 
       - id: psp
         uses: ./
@@ -232,6 +246,20 @@ jobs:
         with:
           persist-credentials: false
 
+      - if: inputs.node-version != ''
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ inputs.node-version }}
+
+      - if: inputs.node-version != ''
+        env:
+          EXPECTED: ${{ inputs.node-version }}
+        run: |
+          case "$(node --version)" in
+            "v$EXPECTED".*) echo "finish runs on $(node --version)" ;;
+            *) echo "::error::expected Node $EXPECTED, got $(node --version)"; exit 1 ;;
+          esac
+
       # The pull requests of this repository publish into their own cache scope.
       - id: finish
         uses: ./
@@ -249,6 +277,32 @@ jobs:
           if [ "$OUTCOME" != "$EXPECTED" ]; then
             echo "::error::finish ended $OUTCOME, expected $EXPECTED"
             exit 1
+          fi
+
+      - name: Require the finish outputs
+        env:
+          MODE: ${{ steps.finish.outputs.mode }}
+          COVERAGE: ${{ steps.finish.outputs.coverage }}
+          HISTORY: ${{ steps.finish.outputs.history }}
+          OVERHEAD: ${{ steps.finish.outputs.overhead-ms }}
+          EXPECTED_MODE: ${{ inputs.expect-mode }}
+          EXPECTED_COVERAGE: ${{ inputs.expect-coverage }}
+          EXPECTED_HISTORY: ${{ inputs.expect-history }}
+          ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          echo "finish outputs: mode $MODE, coverage $COVERAGE, history $HISTORY, overhead ${OVERHEAD:-none} ms"
+          fail() { echo "::error::$1"; exit 1; }
+          # On a re-run, a leg that started cold finds the history its first attempt published.
+          [ "$MODE" = "$EXPECTED_MODE" ] || { [ "$ATTEMPT" -gt 1 ] && [ "$MODE" = balanced ]; } || fail "mode $MODE, expected $EXPECTED_MODE"
+          [ "$COVERAGE" = "$EXPECTED_COVERAGE" ] || fail "coverage $COVERAGE, expected $EXPECTED_COVERAGE"
+          case "$EXPECTED_HISTORY" in
+            unchanged) want=unchanged ;;
+            *) want=published ;;
+          esac
+          [ "$HISTORY" = "$want" ] || { [ "$ATTEMPT" -gt 1 ] && [ "$HISTORY" = unchanged ]; } || fail "history $HISTORY, expected $want"
+          # The jobs API is readable with actions: read, so every leg with records measures the overhead.
+          if [ "$EXPECTED_COVERAGE" = ok ]; then
+            [ -n "$OVERHEAD" ] || fail "the per-shard overhead was not measured"
           fi
 
       - id: after
@@ -287,13 +341,19 @@ jobs:
             *) echo "::error::unknown expectation $EXPECTED"; exit 1 ;;
           esac
 
-      - name: Require the merged report
+      - name: Require the blob reports and the merged report
         env:
           GH_TOKEN: ${{ github.token }}
           PLAN: ${{ needs.prepare.outputs.plan }}
           REPO: ${{ github.repository }}
           RUN_ID: ${{ github.run_id }}
         run: |
-          name="playwright-report-$(jq -r '.key[0:12]' <<< "$PLAN")-$RUN_ID"
-          count=$(gh api "repos/$REPO/actions/runs/$RUN_ID/artifacts?name=$name" --jq .total_count)
-          [ "$count" -ge 1 ] || { echo "::error::no merged report artifact $name"; exit 1; }
+          key12=$(jq -r '.key[0:12]' <<< "$PLAN")
+          total=$(jq -r .total <<< "$PLAN")
+          names=$(gh api --paginate "repos/$REPO/actions/runs/$RUN_ID/artifacts?per_page=100" --jq '.artifacts[].name')
+          for shard in $(seq 1 "$total"); do
+            grep -qE "^blob-report-$key12-$shard-attempt-[0-9]+$" <<< "$names" \
+              || { echo "::error::no blob-report-$key12-$shard-attempt-N artifact"; exit 1; }
+          done
+          grep -qx "playwright-report-$key12-$RUN_ID" <<< "$names" \
+            || { echo "::error::no merged report artifact playwright-report-$key12-$RUN_ID"; exit 1; }

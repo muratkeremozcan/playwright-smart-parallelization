@@ -88,7 +88,7 @@ describe('the arguments of a shard', () => {
         '-x',
         '--shard=2/3',
         '--workers=4',
-        '--add-reporter=dot,json,/action/reporter.js',
+        '--add-reporter=dot,json,blob,/action/reporter.js',
       ]
     );
   });
@@ -96,8 +96,17 @@ describe('the arguments of a shard', () => {
   test('passes no --workers when the input is empty', () => {
     assert.deepStrictEqual(
       shardArgv('npx playwright test', { shard: 1, total: 2, reporter: 'r.js' }),
-      ['npx', 'playwright', 'test', '--shard=1/2', '--add-reporter=r.js']
+      ['npx', 'playwright', 'test', '--shard=1/2', '--add-reporter=blob,r.js']
     );
+  });
+
+  test('adds the blob reporter once: never a second one next to a blob the command names', () => {
+    const last = (command) => shardArgv(command, { shard: 1, total: 2 }).pop();
+    assert.strictEqual(last('npx playwright test'), '--add-reporter=blob');
+    assert.strictEqual(last('npx playwright test --reporter=blob'), '--shard=1/2');
+    assert.strictEqual(last('npx playwright test --reporter list,blob'), '--shard=1/2');
+    assert.strictEqual(last('npx playwright test -r blob'), '--shard=1/2');
+    assert.strictEqual(last('npx playwright test --add-reporter=blob'), '--add-reporter=blob');
   });
 
   test('refuses an --add-reporter with no value', () => {

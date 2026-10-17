@@ -36,6 +36,9 @@ Shape A (per-shard `--test-list` files) is rejected: `--test-list` is a lossy se
 
 - Lowest Playwright is 1.63: 1.62 has the preprocess hook but no `--add-reporter`. Older or unknown versions run plain `--shard`.
 - Yarn Plug'n'Play runs plain `--shard`: the reporter has no `node_modules` to load Playwright from.
+- Every shard adds the `blob` reporter into a folder the Action owns (`PLAYWRIGHT_BLOB_OUTPUT_DIR`), unless the command names one, so finish always has reports to merge.
+- Finish merges with the Playwright installed in `working-directory`, else `npx playwright@<plan version>` from npm.
+- The Action code needs Node 18, the first with a global `fetch`; `main.js` checks it before any module loads.
 - A unit is one spec file of one project at one repeat. Whole files keep serial groups whole without private fields.
 - Intentional skips are allowed and not flagged; a run where every test skipped fails finish.
 - One unnamed project (a config without `projects`) has the identity `''`; two or more unnamed or duplicate names are refused before any test.
@@ -64,7 +67,7 @@ Shape A (per-shard `--test-list` files) is rejected: `--test-list` is a lossy se
 4. Failed, cancelled and incomplete runs write nothing; keys separate runner, workers and command: `tests/history.test.js`, `tests/action-flow.test.js`, `tests/phases.test.js`.
 5. Order, replay and permutation give one byte form: `tests/history.test.js`. The plan and the history read no clock; dates only expire entries.
 6. Window behavior and the passing-attempt sample: `tests/history.test.js`, `tests/lifecycle.test.js`. Its bias shows in the predicted and measured columns of every summary.
-7. Untrusted runs read and never write; forged plans are refused: `tests/phases.test.js`, `tests/action-flow.test.js`. Finish runs no code from the pull request; to merge the blob reports it fetches `playwright@<plan version>` from npm.
+7. Untrusted runs read and never write; forged plans are refused: `tests/phases.test.js`, `tests/action-flow.test.js`. A fork's finish may run code from its checkout (an installed Playwright, a `merge-config`) to merge the reports, and it never writes the history.
 
 ## Harvest acceptance rows
 

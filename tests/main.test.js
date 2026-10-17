@@ -9,7 +9,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
-const { main } = require('../main');
+const { MIN_NODE, main, nodeGuard } = require('../main');
 const { errorCommand, setOutputs } = require('../lib/util');
 
 const ROOT = path.join(__dirname, '..');
@@ -37,6 +37,17 @@ describe('main', () => {
     assert.strictEqual(result.status, 1);
     assert.match(result.stdout, /^::error title=playwright-smart-parallelization::/);
   });
+});
+
+test(`the Node guard fails below Node ${MIN_NODE} with a message, before any module loads`, () => {
+  assert.match(
+    nodeGuard('16.20.2'),
+    /needs Node 18 or later on the runner's PATH, found 16\.20\.2/
+  );
+  assert.strictEqual(nodeGuard('18.0.0'), null);
+  assert.strictEqual(nodeGuard(process.versions.node), null);
+  const source = fs.readFileSync(path.join(ROOT, 'main.js'), 'utf8');
+  assert.ok(source.indexOf('nodeGuard()') < source.indexOf("require('./lib/"));
 });
 
 test('outputs use a delimiter the value does not contain', () => {

@@ -64,6 +64,8 @@ jobs:
     uses: ./.github/workflows/e2e-pipeline.yml
     with:
       history-key: e2e-cold-${{ github.run_id }}
+      # prepare and finish on the lowest Node the Action supports (main.js).
+      node-version: '18'
       expect-mode: native
       expect-history: changed
 
@@ -98,6 +100,7 @@ jobs:
       seed: true
       enabled: 'false'
       expect-mode: disabled
+      expect-coverage: not checked
       expect-history: unchanged
 
   e2e-race:

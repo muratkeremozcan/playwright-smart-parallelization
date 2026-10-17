@@ -5,7 +5,27 @@
  * `node "$GITHUB_ACTION_PATH/main.js" <step>`. Each step reads the inputs from `PSP_INPUT_*`,
  * writes its outputs, log lines and job summary, and fails with an error annotation on any
  * problem. Zero runtime dependencies: no node_modules to audit and no bundle step.
+ *
+ * The steps run on the runner's own `node`. The lowest version is Node 18, the first with a global
+ * `fetch` for the jobs API; the check runs before any module of the Action loads.
  */
+
+const MIN_NODE = 18;
+
+/** The error for a Node below `MIN_NODE`, or null. */
+function nodeGuard(version = process.versions.node) {
+  const major = Number(String(version).split('.')[0]);
+  if (major >= MIN_NODE) return null;
+  return (
+    `playwright-smart-parallelization needs Node ${MIN_NODE} or later on the runner's PATH, ` +
+    `found ${version}; add actions/setup-node before this step`
+  );
+}
+
+if (require.main === module && nodeGuard()) {
+  process.stdout.write(`::error title=playwright-smart-parallelization::${nodeGuard()}\n`);
+  process.exit(1);
+}
 
 const path = require('node:path');
 const prepare = require('./lib/prepare');
@@ -83,4 +103,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { STEPS, main, root: path.resolve(__dirname) };
+module.exports = { MIN_NODE, STEPS, main, nodeGuard, root: path.resolve(__dirname) };

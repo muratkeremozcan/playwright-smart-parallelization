@@ -117,6 +117,12 @@ describe('prepare decides the mode of the whole run', () => {
     const result = prepare.plan({ inputs: inputs({ enabled: 'false' }), env: j.env });
     assert.strictEqual(planOf(result).mode, 'disabled');
     assert.deepStrictEqual(JSON.parse(result.outputs.matrix), { shard: [1, 2, 3] });
+    assert.strictEqual(result.outputs.mode, 'disabled');
+    assert.strictEqual(result.outputs.reason, 'the enabled input is false');
+    assert.match(
+      result.summary,
+      /Mode \*\*disabled\*\* for all 3 shards: the enabled input is false/
+    );
   });
 
   test('Playwright 1.62 has no --add-reporter: disabled; 1.63 restores history', () => {
@@ -238,10 +244,15 @@ describe('run checks everything before Playwright starts', () => {
     assert.deepStrictEqual(cmd.argv.slice(-3), [
       '--shard=2/3',
       '--workers=2',
-      `--add-reporter=${run.REPORTER}`,
+      `--add-reporter=blob,${run.REPORTER}`,
     ]);
     assert.strictEqual(cmd.env.PSP_MODE, 'balanced');
     assert.strictEqual(cmd.env.PSP_SNAPSHOT_SHA, JSON.parse(plan).sha);
+    // The blob reporter writes where the run step uploads from, a folder the Action owns.
+    assert.strictEqual(cmd.env.PLAYWRIGHT_BLOB_OUTPUT_DIR, setup.outputs['blob-path']);
+    assert.ok(setup.outputs['blob-path'].startsWith(j.env.RUNNER_TEMP));
+    const key12 = JSON.parse(plan).key.slice(0, 12);
+    assert.strictEqual(setup.outputs['blob-name'], `blob-report-${key12}-2-attempt-1`);
   });
 
   test('balanced: other snapshot bytes or none stop the shard', () => {
@@ -258,7 +269,7 @@ describe('run checks everything before Playwright starts', () => {
     );
   });
 
-  test('disabled: the plain command with --shard and the workers, no reporter', () => {
+  test('disabled: the plain command with --shard, the workers and the blob reporter only', () => {
     const { j, plan } = planned('disabled');
     const setup = run.setup({ inputs: { plan, shard: '3' }, env: j.env });
     assert.strictEqual(
@@ -272,6 +283,7 @@ describe('run checks everything before Playwright starts', () => {
       'test',
       '--shard=3/3',
       '--workers=2',
+      '--add-reporter=blob',
     ]);
   });
 
@@ -399,14 +411,14 @@ describe('finish', () => {
       fs.mkdirSync(path.join(blobs, name), { recursive: true });
       fs.writeFileSync(path.join(blobs, name, file), name);
     };
-    put('psp-blob-kkkkkkkkkkkk-9-1-attempt-1', 'report-a.zip');
-    put('psp-blob-kkkkkkkkkkkk-9-2-attempt-1', 'report-b.zip');
-    put('psp-blob-kkkkkkkkkkkk-9-2-attempt-2', 'report-c.zip');
+    put('blob-report-kkkkkkkkkkkk-1-attempt-1', 'report-a.zip');
+    put('blob-report-kkkkkkkkkkkk-2-attempt-1', 'report-b.zip');
+    put('blob-report-kkkkkkkkkkkk-2-attempt-2', 'report-c.zip');
     const merged = path.join(tmp('psp-merged-'), 'm');
     assert.strictEqual(finish.collectBlobs(blobs, merged, plan), 2);
     assert.deepStrictEqual(fs.readdirSync(merged).sort(), [
-      'psp-blob-kkkkkkkkkkkk-9-1-attempt-1-report-a.zip',
-      'psp-blob-kkkkkkkkkkkk-9-2-attempt-2-report-c.zip',
+      'blob-report-kkkkkkkkkkkk-1-attempt-1-report-a.zip',
+      'blob-report-kkkkkkkkkkkk-2-attempt-2-report-c.zip',
     ]);
     const single = tmp('psp-single-');
     fs.writeFileSync(path.join(single, 'report.zip'), 'x');
@@ -421,7 +433,7 @@ describe('finish', () => {
     const j = job();
     const plan = prepare.plan({ inputs: inputs(), env: j.env }).outputs.plan;
     const setup = finish.setup({ inputs: { plan }, env: j.env });
-    const name = `psp-blob-${JSON.parse(plan).key.slice(0, 12)}-42-1-attempt-1`;
+    const name = `blob-report-${JSON.parse(plan).key.slice(0, 12)}-1-attempt-1`;
     fs.mkdirSync(path.join(setup.outputs['blob-dir'], name));
     fs.writeFileSync(path.join(setup.outputs['blob-dir'], name, 'report.zip'), 'x');
     const calls = [];
@@ -437,9 +449,42 @@ describe('finish', () => {
       `playwright@${JSON.parse(plan).playwright}`,
       'merge-reports',
     ]);
+    assert.ok(calls[0].includes('--reporter=html'));
     const failed = finish.report({ inputs: { plan }, env: j.env, spawn: () => ({ status: 1 }) });
     assert.strictEqual(failed.outputs.merged, 'false');
     assert.match(failed.annotations[0], /failed with exit 1/);
+  });
+
+  test('report merges with the Playwright installed in the working directory, and merge-config', () => {
+    const j = job();
+    fs.symlinkSync(path.join(FIXTURE, 'node_modules'), path.join(j.app, 'node_modules'), 'dir');
+    const plan = JSON.parse(prepare.plan({ inputs: inputs(), env: j.env }).outputs.plan);
+    const local = finish.mergeCommand(plan, {}, j.env);
+    assert.strictEqual(local.command, process.execPath);
+    assert.match(local.args[0], /@playwright[\\/]test[\\/]cli\.js$/);
+    assert.deepStrictEqual(local.args.slice(1), ['merge-reports', '--reporter=html']);
+    const configured = finish.mergeCommand(plan, { 'merge-config': 'merge.config.js' }, j.env);
+    assert.deepStrictEqual(configured.args.slice(1), [
+      'merge-reports',
+      `--config=${path.join(j.app, 'merge.config.js')}`,
+    ]);
+    fs.rmSync(path.join(j.app, 'node_modules'));
+    assert.strictEqual(finish.mergeCommand(plan, {}, j.env).command, 'npx');
+    assert.strictEqual(finish.mergeCommand({ ...plan, playwright: null }, {}, j.env), null);
+  });
+
+  test('conclude outputs the mode, the coverage and the history', async () => {
+    const j = job();
+    const plan = prepare.plan({ inputs: inputs({ enabled: 'false' }), env: j.env }).outputs.plan;
+    finish.setup({ inputs: { plan }, env: j.env });
+    const checked = await finish.check({ inputs: { plan }, env: j.env, fetchImpl: null });
+    assert.match(checked.summary, /Coverage \*\*not checked\*\*/);
+    const out = finish.conclude({ inputs: { plan }, env: j.env }).outputs;
+    assert.deepStrictEqual(out, {
+      mode: 'disabled',
+      coverage: 'not checked',
+      history: 'unchanged',
+    });
   });
 });
 
@@ -681,7 +726,9 @@ describe('summary', () => {
     }));
     assert.deepStrictEqual(ok, { jobs: [{ id: 1 }] });
     const denied = await fetchJobs(env, async () => ({ ok: false, status: 403 }));
-    assert.match(denied.error, /403/);
+    assert.match(denied.error, /403: give the finish job `permissions: actions: read`/);
+    const broken = await fetchJobs(env, async () => ({ ok: false, status: 500 }));
+    assert.doesNotMatch(broken.error, /actions: read/);
     assert.match((await fetchJobs({}, async () => ({}))).error, /no token/);
   });
 });
