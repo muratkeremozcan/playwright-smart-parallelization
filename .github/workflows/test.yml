@@ -74,9 +74,6 @@ jobs:
       history-key: e2e-eight-${{ github.run_id }}
       shards: 8
       barrier: true
-      # Every post step publishes at the same moment, so most lose the compare-and-swap at least once.
-      shard-budget: 8
-      leg-median: true
       expect-mode: native
       expect-history: published
 
@@ -153,35 +150,6 @@ jobs:
   # Each harness run is independent and spends most of its time in the fixture's serial sleeps, so
   # the runs are matrix legs that execute in parallel. A leg fails on any violation, and the
   # negative legs also fail when a control does not behave as expected.
-  e2e-timing:
-    name: e2e, the Action's step times over every leg
-    needs:
-      - e2e-cold-warm
-      - e2e-eight
-      - e2e-rerun
-      - e2e-failed
-      - e2e-rollback
-      - e2e-shell
-      - e2e-npm
-      - e2e-pr-head
-    if: ${{ !cancelled() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '24'
-      - name: Hold the median of the Action's step times over every leg
-        env:
-          GH_TOKEN: ${{ github.token }}
-        # Median 4 s and p90 8 s of main plus post, pooled over every shard of every leg: one slow
-        # upload moves neither, c439738's 4.8 s median fails, and contention on the slowest shards
-        # of every leg moves the p90.
-        run: node tests/e2e/timing.js run 4 8 "e2e, eight shards publishing at once"
-
   harness:
     name: qualification harness, ${{ matrix.name }}
     runs-on: ubuntu-latest

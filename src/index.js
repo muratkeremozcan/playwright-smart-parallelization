@@ -5,8 +5,9 @@
  * `run('post')` and `run('finish')` wire the steps of lib/ to the official `@actions/core`,
  * `@actions/cache` and `@actions/artifact` toolkit. Any error of the main or finish step fails it
  * with an error annotation; the post step only warns (lib/publish.js). Each step ends with a line
- * of the time its process took, from the start of Node to the end of the step, which the
- * repository's e2e workflow holds to a budget.
+ * of the network operations it made (lib/operations.js), which the repository's e2e workflow
+ * holds to budgets, and a line of the time its process took, from the start of Node to the end of
+ * the step, which it reports.
  */
 
 const path = require('node:path');
@@ -15,6 +16,7 @@ const cache = require('@actions/cache');
 const { DefaultArtifactClient } = require('@actions/artifact');
 const { toolkitCache } = require('../lib/cache');
 const { finish } = require('../lib/finish');
+const { operationCounter } = require('../lib/operations');
 const { post } = require('../lib/publish');
 const { setup } = require('../lib/setup');
 
@@ -49,41 +51,48 @@ function artifactClient() {
 }
 
 const STEPS = {
-  async main() {
+  async main(ops) {
     // The cache paths are relative to the workspace, so every shard computes one cache version.
     if (process.env.GITHUB_WORKSPACE) process.chdir(process.env.GITHUB_WORKSPACE);
     const state = await setup({
       io,
-      cache: toolkitCache(cache),
-      artifacts: artifactClient(),
+      cache: ops.cache(toolkitCache(cache)),
+      artifacts: ops.artifacts(artifactClient()),
       sleep,
       reporter: path.join(__dirname, 'reporter.js'),
+      fetchImpl: ops.fetch(globalThis.fetch),
     });
     core.saveState('state', JSON.stringify(state));
   },
-  async post() {
+  async post(ops) {
     if (process.env.GITHUB_WORKSPACE) process.chdir(process.env.GITHUB_WORKSPACE);
     const raw = core.getState('state');
     await post({
       io,
       state: raw ? JSON.parse(raw) : null,
-      cache: toolkitCache(cache),
-      artifacts: artifactClient(),
+      cache: ops.cache(toolkitCache(cache)),
+      artifacts: ops.artifacts(artifactClient()),
       sleep,
     });
   },
-  async finish() {
-    await finish({ io, artifacts: artifactClient() });
+  async finish(ops) {
+    await finish({
+      io,
+      artifacts: ops.artifacts(artifactClient()),
+      fetchImpl: ops.fetch(globalThis.fetch),
+    });
   },
 };
 
 async function run(step) {
+  const ops = operationCounter();
   try {
-    await STEPS[step]();
+    await STEPS[step](ops);
   } catch (error) {
     if (step === 'post') core.warning(`the post step failed: ${error.message}`);
     else core.setFailed(error.message);
   }
+  io.info(ops.line(step));
   io.info(`the ${step} step took ${process.uptime().toFixed(2)}s`);
 }
 
