@@ -41,6 +41,9 @@ test('every job below a job that can be skipped states a status function', () =>
   }
 });
 
-test('the shard job contains a failure on purpose at job level', () => {
-  assert.match(String(jobs.test['continue-on-error']), /inputs\.fail-test/);
+test('the shard step contains a failure, so the shard job stays green and finish judges it', () => {
+  assert.strictEqual(jobs.test['continue-on-error'], undefined);
+  const step = jobs.test.steps.find((s) => s.uses === './');
+  assert.strictEqual(step.with.phase, 'run');
+  assert.strictEqual(step['continue-on-error'], true);
 });

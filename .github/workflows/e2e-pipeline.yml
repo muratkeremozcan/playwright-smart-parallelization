@@ -180,9 +180,6 @@ jobs:
   test:
     needs: prepare
     if: ${{ !cancelled() && needs.prepare.result == 'success' }}
-    # The step-level continue-on-error on the composite step below did not hold on the runner, so
-    # the leg that fails a test on purpose contains it at job level; finish asserts the outcome.
-    continue-on-error: ${{ inputs.fail-test != '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -202,8 +199,9 @@ jobs:
       - name: Install the consumer fixture
         working-directory: fixtures/consumer
         run: npm ci
-      # Literal true: finish asserts the outcome of every leg, so a shard that fails in a leg
-      # that expects success still turns the job that asserts finish red.
+      # A literal: the expression `inputs.fail-test != ''` did not take effect here on the runner.
+      # finish asserts the outcome of every leg, so a shard that fails in a leg that expects
+      # success still turns the job that asserts finish red.
       - uses: ./
         continue-on-error: true
         with:
