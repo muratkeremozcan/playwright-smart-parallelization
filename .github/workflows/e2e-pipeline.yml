@@ -340,10 +340,30 @@ jobs:
           started=$(gh api "repos/$REPO/actions/runs/$RUN_ID" --jq .run_started_at)
           echo "the pin was created $created, this attempt started $started"
           [ "$(date -d "$created" +%s%N)" -lt "$(date -d "$started" +%s%N)" ] || { echo "::error::the pin was created in this attempt"; exit 1; }
-      - uses: actions/download-artifact@v8
-        with:
-          pattern: psp-record-*-${{ needs.setup.outputs.key12 }}-*
-          path: records
+      # One at a time, so an artifact of an earlier attempt that a re-run of the whole workflow
+      # deleted, which the listings still return for minutes and fail to download, is skipped,
+      # while a record of this attempt that fails to download fails the job.
+      - name: Download the records
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KEY12: ${{ needs.setup.outputs.key12 }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          mkdir -p records
+          gh api --paginate "repos/$REPO/actions/runs/$RUN_ID/artifacts?per_page=100" \
+            --jq ".artifacts[] | select(.name | startswith(\"psp-record-\") and contains(\"-$KEY12-\")) | \"\(.id) \(.name)\"" |
+            while read -r id name; do
+              if gh api "repos/$REPO/actions/artifacts/$id/zip" > "$RUNNER_TEMP/a.zip" && unzip -q -o "$RUNNER_TEMP/a.zip" -d "records/$name-$id"; then
+                echo "downloaded $name"
+              else
+                case "$name" in
+                  *-attempt-"$ATTEMPT") echo "::error::the record $name of this attempt could not be downloaded"; exit 1 ;;
+                  *) echo "skipped $name, an earlier attempt's artifact that is gone" ;;
+                esac
+              fi
+            done
       - name: Require the history and the records
         env:
           BEFORE: ${{ needs.setup.outputs.before }}
