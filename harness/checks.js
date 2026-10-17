@@ -180,6 +180,8 @@ function checkShardRuns(shards) {
         kind: 'shard-failed',
         shard: shard.index,
         detail: `shard ${shard.index} exited with code ${shard.exitCode}`,
+        // The end of the shard's output, so a failure names its cause wherever it is reported.
+        output: String(shard.output || '').slice(-2000),
       });
     } else if (!shard.leaves) {
       violations.push({

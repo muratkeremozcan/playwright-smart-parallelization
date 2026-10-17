@@ -15,6 +15,7 @@ npm run validate
 `setup` runs `npm ci` in the root, in `fixtures/consumer` and in `qualification/flakiness`, the same installs CI runs.
 `validate` runs ESLint, Prettier in check mode, the unit tests (`node --test`) and `check:public`.
 The unit tests include `tests/dist.test.js`, which fails when the committed `dist/` differs from a fresh `npm run build`.
+`npm test` loads `tests/support/temp.js`, so each test process and every process it starts make their temporary folders under one folder that is removed when the process exits.
 `check:public` fails on private home-directory paths and credential-shaped tokens, because this repository is public.
 `npm run format` rewrites files with Prettier.
 
