@@ -49,17 +49,18 @@ const none = () => Object.fromEntries(KINDS.map((kind) => [kind, 0]));
  * start marker artifacts when this check reads them, which is no fewer than the finish step found,
  * since it ran before, and `jobs` the jobs of the run, which the finish step reads. `step` is what
  * the step's own counts and job say about the path it took: `attempt` of its job, `failed` calls,
- * and the `saves` and `lookups` of a post step.
+ * and the `lost` saves and `lookups` of a post step.
  *
  * - main (lib/setup.js, lib/pin.js): one restore of the newest history; the start marker and the
  *   pin uploaded; the pin looked up and downloaded once. Only a pin upload that threw, because
  *   another shard uploaded it first, looks the pin up again after each wait in WAITS; only a
  *   re-run lists earlier records, asks the run's age, and looks the pin up twice more.
  * - post (lib/publish.js, lib/store.js): the run record uploaded; at most attemptsFor(shards)
- *   saves. Each save that did not create its key reads it back, except one that created it, which
- *   only the last save can be, unless the attempts ran out. Without the pin's bytes every read of
- *   the newest entry is one restore, at most one per save; with them it is one lookup and at most
- *   two restores.
+ *   saves. Each lost save, which did not create its key, reads it back with one restore, and may
+ *   read the newest entry again; the first read of the newest entry comes before any save. A read
+ *   of the newest entry is one restore, or, once the step holds bytes of the history, one lookup
+ *   and at most two restores. So restores are at most 1 + 2 lost + lookups, and lookups at most
+ *   1 + lost: a save that created its key reads nothing back.
  * - finish (lib/finish.js, lib/summary.js): one listing; each record and start marker of the run
  *   downloaded once, those of every leg, since it lists them all; one jobs API request per page of
  *   100 jobs.
@@ -67,11 +68,8 @@ const none = () => Object.fromEntries(KINDS.map((kind) => [kind, 0]));
  */
 function budgets(run, step = {}) {
   const { shards, enabled = true, artifacts = 0, jobs = 0 } = run;
-  const { attempt = 1, failed = 0, saves = 0, lookups = 0 } = step;
+  const { attempt = 1, failed = 0, lost = 0, lookups = 0 } = step;
   const rerun = attempt > 1;
-  const most = attemptsFor(shards);
-  const readBacks = saves === 0 ? 0 : saves === most ? saves : saves - 1;
-  const newest = lookups > 0 ? 2 * lookups : Math.max(1, saves);
   return {
     main: enabled
       ? {
@@ -88,9 +86,9 @@ function budgets(run, step = {}) {
       ? {
           ...none(),
           'artifact-upload': 1,
-          'cache-save': most,
-          'cache-lookup': Math.max(1, saves),
-          'cache-restore': readBacks + newest,
+          'cache-save': attemptsFor(shards),
+          'cache-lookup': 1 + lost,
+          'cache-restore': 1 + 2 * lost + lookups,
         }
       : { ...none(), 'artifact-upload': 1 },
     finish: {
@@ -144,7 +142,7 @@ function judge({ shards, finish, run }) {
       const budget = budgets(run, {
         attempt: shard.attempt,
         failed: counts.failed,
-        saves: counts['cache-save'],
+        lost: counts.lost,
         lookups: counts['cache-lookup'],
       })[step];
       problems.push(...overBudget(shard.name, step, counts, budget));

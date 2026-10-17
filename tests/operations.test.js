@@ -55,6 +55,7 @@ test('counts the calls that returned by kind, and the calls that threw apart', a
     'artifact-download': 1,
     'api-request': 1,
     failed: 1,
+    lost: 1,
   });
   assert.strictEqual(ops.fetch(undefined), undefined, 'no fetch stays no fetch');
 });
@@ -64,14 +65,15 @@ test('the line a step ends with lists every kind, and reads back from a job log'
   const line = ops.line('post');
   assert.strictEqual(
     line,
-    `the post step made network operations: ${KINDS.map((k) => `${k} 0`).join(', ')}; failed 0`
+    `the post step made network operations: ${KINDS.map((k) => `${k} 0`).join(', ')}; failed 0; lost 0`
   );
   const log = [
     `2026-10-17T12:00:00.0000000Z [playwright-smart-parallelization] ${line.replace('cache-save 0', 'cache-save 2')}\r`,
-    '2026-10-17T12:00:00.0000000Z the post step made network operations: cache-save 9; failed 0',
+    '2026-10-17T12:00:00.0000000Z the post step made network operations: cache-save 9; failed 0; lost 0',
   ].join('\n');
   const read = readOperations(log);
   assert.strictEqual(read.post['cache-save'], 2);
   assert.strictEqual(read.post.failed, 0);
+  assert.strictEqual(read.post.lost, 0);
   assert.strictEqual(read.main, undefined);
 });

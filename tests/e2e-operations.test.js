@@ -20,7 +20,7 @@ const log = (steps) => {
     const line = ops
       .line(step)
       .replace(/(\S+) 0/g, (all, kind) => (kind in counts ? `${kind} ${counts[kind]}` : all))
-      .replace(/failed 0$/, `failed ${counts.failed || 0}`);
+      .replace(/failed 0; lost 0$/, `failed ${counts.failed || 0}; lost ${counts.lost || 0}`);
     lines.push(`2026-10-17T12:00:00.0000000Z ${PREFIX} ${line}`);
     lines.push(`2026-10-17T12:00:00.0000000Z ${PREFIX} the ${step} step took 1.50s`);
   }
@@ -95,14 +95,14 @@ test('the races the Action is built for stay within budget, and failed calls are
   const raced = judge({
     ...pipeline(
       { ...MAIN, 'artifact-upload': 1, 'artifact-find': 2 + WAITS.length, failed: 1 },
-      // Every save but the last lost and read its key back, and read the newest again.
-      { ...POST, 'cache-save': 3, 'cache-restore': 2 + 3 }
+      // Two saves lost: each read its key back and the newest entry again.
+      { ...POST, 'cache-save': 3, lost: 2, 'cache-restore': 1 + 2 * 2 }
     ),
     run: RUN,
   });
   assert.deepStrictEqual(raced.problems, []);
   const spent = judge({
-    ...pipeline(MAIN, { ...POST, 'cache-save': most, 'cache-restore': 2 * most }),
+    ...pipeline(MAIN, { ...POST, 'cache-save': most, lost: most, 'cache-restore': 1 + 2 * most }),
     run: RUN,
   });
   assert.deepStrictEqual(
@@ -110,6 +110,18 @@ test('the races the Action is built for stay within budget, and failed calls are
     [],
     'the attempts ran out, so the last save read back too'
   );
+  // A duplicate publisher: its only save lost, it read the winner back, and that held its samples.
+  const duplicate = judge({
+    ...pipeline(MAIN, { ...POST, lost: 1, 'cache-restore': 2 }),
+    run: RUN,
+  });
+  assert.deepStrictEqual(duplicate.problems, []);
+  // Restores before the step held any bytes, then lookups once it did.
+  const mixed = judge({
+    ...pipeline(MAIN, { ...POST, 'cache-save': 4, lost: 3, 'cache-lookup': 1, 'cache-restore': 6 }),
+    run: RUN,
+  });
+  assert.deepStrictEqual(mixed.problems, []);
   const over = judge({ ...pipeline(MAIN, { ...POST, 'cache-save': most + 1 }), run: RUN });
   assert.match(
     over.problems[0],
@@ -181,7 +193,9 @@ test('the finish budget follows the run: every record and start marker once, a p
   assert.strictEqual(budgets({ shards: 8, artifacts: 30, jobs: 99 }).finish['api-request'], 1);
   assert.strictEqual(budgets({ shards: 8, artifacts: 30, jobs: 100 }).finish['api-request'], 2);
   assert.strictEqual(budgets({ shards: 8 }).post['cache-save'], attemptsFor(8));
-  assert.strictEqual(budgets({ shards: 8 }, { saves: 1 }).post['cache-restore'], 1);
+  assert.strictEqual(budgets({ shards: 8 }).post['cache-restore'], 1);
+  assert.strictEqual(budgets({ shards: 8 }, { lost: 3, lookups: 1 }).post['cache-restore'], 8);
+  assert.strictEqual(budgets({ shards: 8 }, { lost: 3 }).post['cache-lookup'], 4);
   for (const step of ['main', 'post', 'finish']) {
     for (const kind of KINDS) assert.ok(kind in budgets({ shards: 1 })[step], `${step} ${kind}`);
   }
