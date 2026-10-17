@@ -402,9 +402,12 @@ describe('history edge cases', () => {
     const before = [...world.cache.keys()].length;
     const jobs = await run(world, 802, 2, { cacheOptions: { writable: false } });
     assert.strictEqual(jobs[0].main.io.outputs.mode, 'balanced');
-    assert.match(jobs[0].post.lines.join('\n'), /cannot be written by this job/);
+    assert.match(jobs[0].post.lines.join('\n'), /cannot be read and written by this job/);
     assert.strictEqual([...world.cache.keys()].length, before);
     const none = await run(world, 803, 2, { cacheOptions: { readable: false } });
     assert.match(none[0].main.io.outputs.reason, /cache mode does not let it read/);
+    // Write-only: a shard that cannot read the history publishes nothing over it.
+    assert.match(none[0].post.lines.join('\n'), /cannot be read and written by this job/);
+    assert.strictEqual([...world.cache.keys()].length, before);
   });
 });

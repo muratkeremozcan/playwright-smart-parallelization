@@ -188,6 +188,29 @@ describe('the pin', () => {
     assert.deepStrictEqual(await run(), a);
   });
 
+  test('a re-run whose pin expired matches unpinned earlier shards and stops after pinned ones', async () => {
+    const { p, world, run } = setupPin();
+    const record = async (pinned, n) => {
+      const dir = tmp('psp-record-');
+      fs.writeFileSync(path.join(dir, 'record.json'), JSON.stringify({ pinned }));
+      await modelArtifacts(world, 7).upload(
+        `psp-record-test-${p.key.slice(0, 12)}-abc-${n}of2-attempt-1`,
+        [path.join(dir, 'record.json')],
+        dir
+      );
+    };
+    await record(false, 1);
+    assert.deepStrictEqual(await run({ attempt: 2 }), {
+      unpinned: true,
+      reason: 'the earlier attempt of this run ran unpinned, so this re-run does too',
+    });
+    await record(true, 2);
+    await assert.rejects(run({ attempt: 2 }), /is gone .* start a new run/);
+    // A first attempt never looks back, and a re-run with no earlier shard pins afresh.
+    const fresh = setupPin();
+    assert.deepStrictEqual(await fresh.run({ attempt: 2 }), { matchedKey: '', history: null });
+  });
+
   test('no history is pinned too, so a shard that starts after a publish still plans native', async () => {
     const { p, world, run } = setupPin();
     assert.deepStrictEqual(await run(), { matchedKey: '', history: null });

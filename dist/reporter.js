@@ -1145,6 +1145,7 @@ function optionsFromEnv(env = process.env) {
     runner: env.PSP_RUNNER_NAME || "",
     reason: env.PSP_REASON || null,
     job: env.PSP_JOB || "",
+    pinned: env.PSP_PINNED === "true",
     historyKey: env.PSP_HISTORY_KEY || ""
   };
 }
@@ -1232,6 +1233,7 @@ var SmartParallelizationReporter = class {
       commit: this.options.commit,
       runner: this.options.runner,
       job: this.options.job,
+      pinned: this.options.pinned,
       historyKey: this.options.historyKey,
       shard: { current: 1, total: 1 },
       mode: this.options.mode,

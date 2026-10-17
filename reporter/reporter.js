@@ -19,6 +19,7 @@
  *   PSP_SNAPSHOT       the snapshot file (balanced), PSP_SNAPSHOT_SHA its sha
  *   PSP_KEY            the history key, PSP_WORKERS the workers the plan packs for
  *   PSP_RECORD         where onEnd writes the record
+ *   PSP_PINNED         whether the mode came from a pinned snapshot
  *   PSP_JOB, PSP_HISTORY_KEY, PSP_RUN_ID, PSP_RUN_ATTEMPT, PSP_COMMIT, PSP_RUNNER_NAME,
  *   PSP_REASON         identity of the run
  */
@@ -64,6 +65,7 @@ function optionsFromEnv(env = process.env) {
     runner: env.PSP_RUNNER_NAME || '',
     reason: env.PSP_REASON || null,
     job: env.PSP_JOB || '',
+    pinned: env.PSP_PINNED === 'true',
     historyKey: env.PSP_HISTORY_KEY || '',
   };
 }
@@ -167,6 +169,7 @@ class SmartParallelizationReporter {
       commit: this.options.commit,
       runner: this.options.runner,
       job: this.options.job,
+      pinned: this.options.pinned,
       historyKey: this.options.historyKey,
       shard: { current: 1, total: 1 },
       mode: this.options.mode,
