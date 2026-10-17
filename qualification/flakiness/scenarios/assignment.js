@@ -314,11 +314,15 @@ function splitShards(ctx) {
   const dir = ctx.dir('split');
   const base = (name) => partitionOf({ shards: 2, dir: ctx.dir(name), timings });
 
+  // Every test of the other file takes longer than the longest test of the baseline, in another
+  // order, so the two shards plan differently and print different loads: at the 0.1 s the loads
+  // are printed in, durations near the baseline's could print the same loads (it happened in CI).
+  const longest = Math.max(0, ...testDurations(timings).values());
   const other = mapDurations(
     timings,
     (() => {
       let n = 0;
-      return () => 100 + ((n++ * 37) % 900);
+      return () => longest + 100 + ((n++ * 37) % 900);
     })(),
     path.join(dir, 'other-timings.json')
   );
@@ -350,8 +354,11 @@ function splitShards(ctx) {
   const planned = (run) => run.raw.map((shard) => parsePlan(shard.output) !== null);
 
   const damagedShard = broken.raw[1];
-  const planLinesDiffer =
-    loadsOf([parsePlan(mismatch.raw[0].output), parsePlan(mismatch.raw[1].output)]).length > 1;
+  const planLoads = mismatch.raw.map((shard) => {
+    const plan = parsePlan(shard.output);
+    return plan ? plan.loads : null;
+  });
+  const planLinesDiffer = loadsOf(mismatch.raw.map((shard) => parsePlan(shard.output))).length > 1;
   return [
     {
       id: '5.mismatched-timings',
@@ -361,6 +368,7 @@ function splitShards(ctx) {
       evidence: {
         coverageViolations: coverageKinds(mismatch.kinds),
         exits: mismatch.raw.map((shard) => shard.exitCode),
+        planLoads,
         planLinesDiffer,
       },
     },
