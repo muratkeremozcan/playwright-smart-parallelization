@@ -85,8 +85,9 @@ function judge({ shards, finish, shardBudget, finishBudget }) {
 /**
  * The jobs of the pipeline that runs this check, from every execution of the run: the newest
  * execution of each job name whose name starts like the name of the running job on `runner`, so a
- * re-run of only the assert job still reads the shard and finish jobs it follows.
- * Returns `{ shards, finish }`; a job that was skipped or cancelled left no times.
+ * re-run of only the assert job still reads the shard and finish jobs it follows. A skipped job
+ * never ran; any other newest execution counts, so one that was cancelled or timed out reports
+ * no times instead of an older execution's. Returns `{ shards, finish }`.
  */
 function pipelineJobs(jobs, runner) {
   const own = jobs.find((j) => j.runner_name === runner && j.status === 'in_progress');
@@ -94,7 +95,7 @@ function pipelineJobs(jobs, runner) {
   const prefix = own.name.slice(0, own.name.lastIndexOf(' / ') + 3);
   const newest = new Map();
   for (const j of jobs) {
-    if (!j.name.startsWith(prefix) || !['success', 'failure'].includes(j.conclusion)) continue;
+    if (!j.name.startsWith(prefix) || j === own || j.conclusion === 'skipped') continue;
     const seen = newest.get(j.name);
     if (!seen || (j.run_attempt || 1) > (seen.run_attempt || 1)) newest.set(j.name, j);
   }
@@ -134,11 +135,16 @@ async function main(env = process.env) {
     if (body.jobs.length < 100) break;
   }
   const picked = pipelineJobs(jobs, env.RUNNER_NAME);
+  // A job that did not run to an end has no log to time.
   const logOf = async (j) => ({
     name: j.name,
-    ...stepTimes(
-      await api(env, `/repos/${env.GITHUB_REPOSITORY}/actions/jobs/${j.id}/logs`, { text: true })
-    ),
+    ...(['success', 'failure'].includes(j.conclusion)
+      ? stepTimes(
+          await api(env, `/repos/${env.GITHUB_REPOSITORY}/actions/jobs/${j.id}/logs`, {
+            text: true,
+          })
+        )
+      : {}),
   });
   const shards = [];
   for (const j of picked.shards) shards.push(await logOf(j));

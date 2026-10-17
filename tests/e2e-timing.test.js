@@ -88,6 +88,8 @@ test("picks the newest execution of each of its own pipeline's jobs, also on a r
     job('leg / test (2, false)', 2),
     job('leg / warm (1)', 1),
     job('leg / finish', 1),
+    job('leg / finish', 2, 'timed_out'),
+    job('leg / warm', 1, 'skipped'),
     job('leg / assert', 1, 'failure'),
     job('leg / assert', 2, null, { status: 'in_progress', runner_name: 'r2' }),
     job('other / test (1, false)', 1),
@@ -99,9 +101,15 @@ test("picks the newest execution of each of its own pipeline's jobs, also on a r
     [
       ['leg / test (1, false)', 1],
       ['leg / test (2, false)', 2],
+      ['leg / test (3, false)', 1],
       ['leg / warm (1)', 1],
     ]
   );
-  assert.strictEqual(picked.finish.name, 'leg / finish');
+  assert.strictEqual(picked.shards[2].conclusion, 'cancelled', 'reports no times');
+  assert.deepStrictEqual(
+    [picked.finish.run_attempt, picked.finish.conclusion],
+    [2, 'timed_out'],
+    'never an older execution'
+  );
   assert.throws(() => pipelineJobs(jobs, 'nobody'), /no running job of this run has the runner/);
 });
