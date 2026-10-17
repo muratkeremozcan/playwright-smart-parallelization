@@ -101,7 +101,10 @@ test('the median over every leg runs after every leg, and leaves out exactly the
   for (const [, job] of legs)
     assert.match(job.name, /^e2e, /, 'runJobs finds a leg by its e2e, name');
   const run = timing.steps.at(-1).run;
-  const [, budget, rest] = /^node tests\/e2e\/timing\.js run (\d+)((?: "[^"]+")*)$/.exec(run);
+  const [, budget, p90, rest] = /^node tests\/e2e\/timing\.js run (\d+) (\d+)((?: "[^"]+")*)$/.exec(
+    run
+  );
+  assert.ok(Number(p90) > Number(budget));
   const excluded = [...rest.matchAll(/"([^"]+)"/g)].map((m) => m[1]).sort();
   const own = legs.filter(([, job]) => job.with['leg-median'] === true).map(([, job]) => job.name);
   assert.deepStrictEqual(excluded, own.sort());

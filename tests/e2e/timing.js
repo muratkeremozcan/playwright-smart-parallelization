@@ -7,17 +7,19 @@
  *
  *   node tests/e2e/timing.js leg SHARD_BUDGET FINISH_BUDGET LEG_MEDIAN
  *
- * runs in the assert job of one leg (`.github/workflows/e2e-pipeline.yml`). Twice SHARD_BUDGET
- * bounds the main and post steps of every shard job of the leg, and FINISH_BUDGET its finish step.
- * With LEG_MEDIAN true, SHARD_BUDGET also bounds the median over the leg's own shard jobs. The
- * leg's jobs are the jobs of this run whose names start like the name of the job that runs this
+ * runs in the assert job of one leg (`.github/workflows/e2e-pipeline.yml`). Every shard job of the
+ * leg must log its main and post times, and FINISH_BUDGET bounds its finish step. With LEG_MEDIAN
+ * true, SHARD_BUDGET bounds the median of main and post over the leg's own shard jobs. The leg's
+ * jobs are the jobs of this run whose names start like the name of the job that runs this
  * check, which it finds by its runner (`pipelineJobs`).
  *
- *   node tests/e2e/timing.js run SHARD_BUDGET [EXCLUDED_LEG...]
+ *   node tests/e2e/timing.js run MEDIAN_BUDGET P90_BUDGET [EXCLUDED_LEG...]
  *
- * runs once after every leg (`.github/workflows/test.yml`): SHARD_BUDGET bounds the median over
- * every shard job of every leg, except the legs named, which hold their own median (`runJobs`).
- * A few shards of one leg vary too much for a tight median; the pool of every leg does not.
+ * runs once after every leg (`.github/workflows/test.yml`): over every shard job of every leg,
+ * except the legs named, which hold their own median (`runJobs`), MEDIAN_BUDGET bounds the median
+ * of main and post and P90_BUDGET its 90th percentile. A few shards of one leg vary too much for
+ * a tight median, and one slow upload too much for a maximum; the pool of every leg does not, and
+ * its 90th percentile still moves when contention slows the slowest shards of every leg.
  *
  * Both read GH_TOKEN, GITHUB_API_URL, GITHUB_REPOSITORY and GITHUB_RUN_ID, and the leg mode
  * RUNNER_NAME.
@@ -59,11 +61,6 @@ function judge({ shards, finish, shardBudget, finishBudget, holdMedian = true })
     const total = shard.main + shard.post;
     totals.push(total);
     lines.push(`${shard.name}: main ${shard.main.toFixed(2)}s, post ${shard.post.toFixed(2)}s`);
-    if (total > 2 * shardBudget) {
-      problems.push(
-        `${shard.name} spent ${total.toFixed(2)}s in the Action, over twice the budget of ${shardBudget}s`
-      );
-    }
   }
   if (!shards.length) problems.push('no shard job of this pipeline was found');
   if (totals.length) {
@@ -94,8 +91,17 @@ function judge({ shards, finish, shardBudget, finishBudget, holdMedian = true })
   return { problems, lines };
 }
 
-/** The verdict on the median over the shard jobs of every leg: `{ problems, lines }`. */
-function judgeRun({ shards, shardBudget }) {
+/** The nearest-rank percentile `p` (0 to 100) of `values`. */
+const percentile = (values, p) => {
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.max(0, Math.ceil((p / 100) * sorted.length) - 1)];
+};
+
+/**
+ * The verdict on the shard jobs of every leg: `{ problems, lines }`. The median of main and post
+ * is held to `medianBudget`, its 90th percentile to `p90Budget`.
+ */
+function judgeRun({ shards, medianBudget, p90Budget }) {
   const problems = [];
   const totals = [];
   for (const shard of shards) {
@@ -107,12 +113,18 @@ function judgeRun({ shards, shardBudget }) {
   const lines = [];
   if (totals.length) {
     const mid = median(totals);
+    const p90 = percentile(totals, 90);
     lines.push(
-      `median main and post over ${totals.length} shard jobs of every leg: ${mid.toFixed(2)}s, budget ${shardBudget}s`
+      `main and post over ${totals.length} shard jobs of every leg: median ${mid.toFixed(2)}s, budget ${medianBudget}s; p90 ${p90.toFixed(2)}s, budget ${p90Budget}s`
     );
-    if (mid > shardBudget) {
+    if (mid > medianBudget) {
       problems.push(
-        `the shard jobs of every leg spent a median ${mid.toFixed(2)}s in the Action, over the budget of ${shardBudget}s`
+        `the shard jobs of every leg spent a median ${mid.toFixed(2)}s in the Action, over the budget of ${medianBudget}s`
+      );
+    }
+    if (p90 > p90Budget) {
+      problems.push(
+        `the shard jobs of every leg spent a p90 of ${p90.toFixed(2)}s in the Action, over the budget of ${p90Budget}s`
       );
     }
   }
@@ -212,17 +224,24 @@ async function api(env, route, { text = false } = {}) {
 }
 
 const USAGE =
-  'usage: node tests/e2e/timing.js leg SHARD_BUDGET FINISH_BUDGET LEG_MEDIAN, or run SHARD_BUDGET [EXCLUDED_LEG...]';
+  'usage: node tests/e2e/timing.js leg SHARD_BUDGET FINISH_BUDGET LEG_MEDIAN, or run MEDIAN_BUDGET P90_BUDGET [EXCLUDED_LEG...]';
 
-/** The command line: `{ mode, shardBudget, finishBudget, holdMedian, excluded }`. */
+/**
+ * The command line: `{ mode: 'leg', shardBudget, finishBudget, holdMedian }` or
+ * `{ mode: 'run', medianBudget, p90Budget, excluded }`.
+ */
 function parseArgs(argv) {
   const [mode, ...rest] = argv;
+  if (mode === 'run') {
+    const [medianBudget, p90Budget] = rest.slice(0, 2).map(Number);
+    if (!(medianBudget > 0) || !(p90Budget > 0)) throw new Error(USAGE);
+    return { mode, medianBudget, p90Budget, excluded: rest.slice(2) };
+  }
   const shardBudget = Number(rest[0]);
-  if (!(shardBudget > 0)) throw new Error(USAGE);
-  if (mode === 'run') return { mode, shardBudget, excluded: rest.slice(1) };
   const finishBudget = Number(rest[1]);
   if (
     mode !== 'leg' ||
+    !(shardBudget > 0) ||
     !(finishBudget > 0) ||
     !['true', 'false'].includes(rest[2]) ||
     rest.length !== 3
@@ -266,9 +285,7 @@ async function main(env = process.env, argv = process.argv.slice(2)) {
   for (const j of picked.shards) shards.push(await logOf(j));
   const finish = picked.finish ? await logOf(picked.finish) : null;
   const { problems, lines } =
-    args.mode === 'run'
-      ? judgeRun({ shards, shardBudget: args.shardBudget })
-      : judge({ shards, finish, ...args });
+    args.mode === 'run' ? judgeRun({ shards, ...args }) : judge({ shards, finish, ...args });
   for (const line of lines) process.stdout.write(`${line}\n`);
   for (const problem of problems) process.stdout.write(`::error::${problem}\n`);
   if (problems.length) process.exitCode = 1;

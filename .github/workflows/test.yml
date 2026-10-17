@@ -177,9 +177,10 @@ jobs:
       - name: Hold the median of the Action's step times over every leg
         env:
           GH_TOKEN: ${{ github.token }}
-        # 4 s pools main plus post over every shard of every leg, since one leg's few shards vary
-        # too much; c439738 took a 4.8 s median, so a full regression still fails.
-        run: node tests/e2e/timing.js run 4 "e2e, eight shards publishing at once"
+        # Median 4 s and p90 8 s of main plus post, pooled over every shard of every leg: one slow
+        # upload moves neither, c439738's 4.8 s median fails, and contention on the slowest shards
+        # of every leg moves the p90.
+        run: node tests/e2e/timing.js run 4 8 "e2e, eight shards publishing at once"
 
   harness:
     name: qualification harness, ${{ matrix.name }}

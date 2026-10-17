@@ -14,9 +14,9 @@
 # publish accepts finding its samples already in the history on a later attempt.
 #
 # The assert job also holds the time the Action's steps take to a budget (tests/e2e/timing.js):
-# twice the shard budget for the main and post steps of any one shard job, and the finish step.
-# The median per shard job is held over every leg by test.yml, or by the leg itself with
-# leg-median.
+# every shard job must log its main and post times, and the finish step has a budget. The median
+# and p90 of main and post are held over every leg by test.yml, or the median by the leg itself
+# with leg-median.
 name: E2E pipeline
 
 on:
@@ -74,7 +74,7 @@ on:
         type: string
         required: true
       shard-budget:
-        description: Seconds for the median of the Action's main and post steps per shard job; twice it bounds every shard job.
+        description: Seconds for the median of the Action's main and post steps per shard job of this leg, held only with leg-median.
         type: number
         default: 4
       leg-median:

@@ -30,10 +30,10 @@ test('reads the time each step of the Action logged, under the timestamps of a j
   assert.deepStrictEqual(stepTimes('the main step took 1s'), {});
 });
 
-test('holds the median shard job to the budget and any one shard job to twice it', () => {
+test("holds a leg's own median to the budget, and no one shard job to anything", () => {
   const shard = (name, main, post) => ({ name, main, post });
   const ok = judge({
-    shards: [shard('a', 1, 1), shard('b', 1, 1.5), shard('c', 2, 4)],
+    shards: [shard('a', 1, 1), shard('b', 1, 1.5), shard('c', 2, 12)],
     finish: { name: 'f', finish: 2 },
     shardBudget: 3,
     finishBudget: 4,
@@ -48,16 +48,6 @@ test('holds the median shard job to the budget and any one shard job to twice it
     finishBudget: 4,
   });
   assert.match(slow.problems.join('\n'), /median 4\.00s in the Action, over the budget of 3s/);
-
-  const outlier = judge({
-    shards: [shard('a', 1, 1), shard('b', 1, 1), shard('c', 3, 4)],
-    finish: { name: 'f', finish: 1 },
-    shardBudget: 3,
-    finishBudget: 4,
-  });
-  assert.deepStrictEqual(outlier.problems, [
-    'c spent 7.00s in the Action, over twice the budget of 3s',
-  ]);
 });
 
 test('a missing time, no shard job or a slow finish fails the check', () => {
@@ -184,7 +174,7 @@ test('waits until the jobs API lists every pipeline job as completed, then fails
   assert.strictEqual(clock, 20_000);
 });
 
-test('a leg without its own median leaves it to the check over every leg, and keeps twice the budget per shard', () => {
+test('a leg without its own median leaves it to the check over every leg', () => {
   const shard = (name, main, post) => ({ name, main, post });
   const leg = judge({
     shards: [shard('a', 2, 3), shard('b', 2, 3), shard('c', 4, 5)],
@@ -193,26 +183,35 @@ test('a leg without its own median leaves it to the check over every leg, and ke
     finishBudget: 8,
     holdMedian: false,
   });
-  assert.deepStrictEqual(leg.problems, [
-    'c spent 9.00s in the Action, over twice the budget of 4s',
-  ]);
+  assert.deepStrictEqual(leg.problems, []);
   assert.ok(leg.lines.includes('median main and post per shard job: 5.00s, held over every leg'));
 });
 
-test('holds the median over every shard job of every leg to the budget', () => {
-  const shard = (name, main, post) => ({ name, main, post });
-  const shards = [shard('a', 1, 1), shard('b', 2, 2.64), shard('c', 1, 1.5), shard('d', 1, 2)];
-  const ok = judgeRun({ shards, shardBudget: 4 });
+test('holds the median and the 90th percentile over every shard job of every leg', () => {
+  const shards = (...totals) => totals.map((t, i) => ({ name: `s${i}`, main: 1, post: t - 1 }));
+  // Twenty shards, two slow uploads: the p90 is the third slowest, so they pass.
+  const pooled = shards(2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 8.86, 13.15);
+  const ok = judgeRun({ shards: pooled, medianBudget: 4, p90Budget: 8 });
   assert.deepStrictEqual(ok.problems, []);
   assert.deepStrictEqual(ok.lines, [
-    'median main and post over 4 shard jobs of every leg: 2.75s, budget 4s',
+    'main and post over 20 shard jobs of every leg: median 2.50s, budget 4s; p90 3.00s, budget 8s',
   ]);
-  const slow = judgeRun({ shards: [shard('a', 2, 3), shard('b', 2, 2.5)], shardBudget: 4 });
+  // Contention that slows the slowest shard of every leg moves the p90 past its budget.
+  const tail = judgeRun({
+    shards: shards(2, 2, 2, 2, 2, 2, 2, 9, 9, 9),
+    medianBudget: 4,
+    p90Budget: 8,
+  });
+  assert.deepStrictEqual(tail.problems, [
+    'the shard jobs of every leg spent a p90 of 9.00s in the Action, over the budget of 8s',
+  ]);
+  const slow = judgeRun({ shards: shards(5, 4.75, 4.5), medianBudget: 4, p90Budget: 8 });
   assert.match(slow.problems[0], /median 4\.75s in the Action, over the budget of 4s/);
-  assert.deepStrictEqual(judgeRun({ shards: [{ name: 'a' }], shardBudget: 4 }).problems, [
-    'a logged no time for its main and post steps',
-  ]);
-  assert.deepStrictEqual(judgeRun({ shards: [], shardBudget: 4 }).problems, [
+  assert.deepStrictEqual(
+    judgeRun({ shards: [{ name: 'a' }], medianBudget: 4, p90Budget: 8 }).problems,
+    ['a logged no time for its main and post steps']
+  );
+  assert.deepStrictEqual(judgeRun({ shards: [], medianBudget: 4, p90Budget: 8 }).problems, [
     'no shard job of any leg was found',
   ]);
 });
@@ -255,9 +254,10 @@ test('reads the leg and run command lines, and refuses anything else', () => {
     holdMedian: false,
   });
   assert.strictEqual(parseArgs(['leg', '8', '8', 'true']).holdMedian, true);
-  assert.deepStrictEqual(parseArgs(['run', '4', 'e2e, eight shards publishing at once']), {
+  assert.deepStrictEqual(parseArgs(['run', '4', '8', 'e2e, eight shards publishing at once']), {
     mode: 'run',
-    shardBudget: 4,
+    medianBudget: 4,
+    p90Budget: 8,
     excluded: ['e2e, eight shards publishing at once'],
   });
   for (const argv of [
@@ -265,7 +265,9 @@ test('reads the leg and run command lines, and refuses anything else', () => {
     ['4', '8'],
     ['leg', '4', '8'],
     ['leg', '4', '8', 'yes'],
-    ['run', '0'],
+    ['leg', '0', '8', 'true'],
+    ['run', '4'],
+    ['run', '0', '8'],
     ['other', '4'],
   ]) {
     assert.throws(() => parseArgs(argv), /^Error: usage: node tests\/e2e\/timing\.js leg/);
