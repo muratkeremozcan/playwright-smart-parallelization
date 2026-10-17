@@ -40,12 +40,12 @@ Facts about the Action that the README example does not need. Every input is in 
 - The history is keyed by working directory, the `workers` input, runner label and `history-key`; the shard count and the command's filters can change freely, since each test keeps its own samples.
 - Nothing else separates it: with `workers` unset, a config change of workers or a CPU-resolved count shares the history, and so do config path, browser options under one project name, environment and Playwright version. Give materially different setups their own `history-key` or `runner-label`, and set `workers` where the count differs.
 - Each shard publishes the samples of its passing tests, also when another test of the shard failed; a failed attempt adds no sample.
-- Every shard of a job and every re-run of one plans from one snapshot, pinned in a `psp-pin-*` artifact of the workflow run, never to the checked-out commit.
+- Every shard of a job and every re-run of one plans from one snapshot, pinned in a `psp-pin-v2-*` cache entry of the workflow run, never to the checked-out commit. Each shard's run record keeps a copy, so a re-run plans the same after the cache dropped the pin.
 - It lives in the Actions cache, which drops entries unused for 7 days, so a quiet repo starts cold again.
 
 ## Runner
 
 - The Action runs on the runner's Node 24, so a self-hosted runner needs Actions runner v2.327.1 or later; installing Node 24 in the job does not upgrade the runner. The reporter runs in your Node, which Playwright 1.63 and later needs at 20 or above.
 - Playwright below 1.63, an unknown Playwright version, or Yarn Plug'n'Play leave `$PSP_ARGS` empty: plain `--shard`.
-- Without an Actions cache, or with a cache mode that refuses reads, every shard runs native; a cache mode that refuses reads or writes publishes nothing.
-- The pin lives as long as the run's artifacts. With artifacts kept under 30 days, the time a run can be re-run, a re-run that finds no pin and is older than the retention stops before any test; start a new run. The Action reads the run's age with `github-token`, which needs `actions: read`.
+- Without an Actions cache, or with a cache mode that refuses reads or writes, no snapshot can be pinned, so every shard runs native and publishes nothing.
+- A shard whose pin the cache dropped plans from the copy in the run records of the shards that already ran. With artifacts kept under 30 days, the time a run can be re-run, a re-run that finds neither and is older than the retention stops before any test; start a new run. The Action reads the run's age with `github-token`, which needs `actions: read`.

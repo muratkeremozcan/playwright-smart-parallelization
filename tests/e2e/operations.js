@@ -10,7 +10,7 @@
  *
  * The budgets (`budgets`) come from the Action's own code paths and constants, so a step that
  * starts making an operation its path does not make fails, while the races the Action is built
- * for, a pin two shards upload at once and a compare-and-swap that loses, stay within them. A call
+ * for, a pin two shards save at once and a compare-and-swap that loses, stay within them. A call
  * that threw is a failure of the service: it is reported, and does not count against a budget. It
  * also fails when more than one shard of a job logged that it created the job's pin, since every
  * shard must plan from one. The time each step took (src/index.js: "the main step took 1.23s")
@@ -58,13 +58,14 @@ const none = () => Object.fromEntries(KINDS.map((kind) => [kind, 0]));
  * leg: `shards` its shard count, `enabled` false for a rollback, `artifacts` the run's record and
  * start marker artifacts when this check reads them, which is no fewer than the finish step found,
  * since it ran before, and `jobs` the jobs of the run, which the finish step reads. `step` is what
- * the step's own counts and job say about the path it took: `attempt` of its job, `failed` calls,
- * and the `lost` saves and `lookups` of a post step.
+ * the step's own counts and job say about the path it took: `attempt` of its job, and the `lost`
+ * saves and `lookups` of the step.
  *
- * - main (lib/setup.js, lib/pin.js): one restore of the newest history; the start marker and the
- *   pin uploaded; the pin looked up and downloaded once. Only a pin upload that threw, because
- *   another shard uploaded it first, looks the pin up again after each wait in WAITS; only a
- *   re-run lists earlier records, asks the run's age, and looks the pin up twice more.
+ * - main (lib/setup.js, lib/pin.js): the pin and the newest history restored and the run's
+ *   artifacts listed at once; the pin saved at most once; the start marker uploaded. Only a shard
+ *   that found no pin downloads the records of the shards that already ran, at most every record
+ *   of the run; only a pin save that lost, because another shard created the pin first, reads it
+ *   back after each wait in WAITS; only a re-run asks the run's age.
  * - post (lib/publish.js, lib/store.js): the run record uploaded; at most attemptsFor(shards)
  *   saves. Each lost save, which did not create its key, reads it back with one restore, and may
  *   read the newest entry again; the first read of the newest entry comes before any save. A read
@@ -78,17 +79,17 @@ const none = () => Object.fromEntries(KINDS.map((kind) => [kind, 0]));
  */
 function budgets(run, step = {}) {
   const { shards, enabled = true, artifacts = 0, jobs = 0 } = run;
-  const { attempt = 1, failed = 0, lost = 0, lookups = 0 } = step;
+  const { attempt = 1, lost = 0, lookups = 0 } = step;
   const rerun = attempt > 1;
   return {
     main: enabled
       ? {
           ...none(),
-          'cache-restore': 1,
-          'artifact-upload': 2,
-          'artifact-find': 1 + (rerun ? 2 : 0) + (failed ? 1 + WAITS.length : 0),
-          'artifact-download': 1,
-          'artifact-list': rerun ? 1 : 0,
+          'cache-restore': 2 + (lost ? 1 + WAITS.length : 0),
+          'cache-save': 1,
+          'artifact-upload': 1,
+          'artifact-list': 1,
+          'artifact-download': artifacts,
           'api-request': rerun ? 1 : 0,
         }
       : none(),
@@ -151,7 +152,6 @@ function judge({ shards, finish, run }) {
       }
       const budget = budgets(run, {
         attempt: shard.attempt,
-        failed: counts.failed,
         lost: counts.lost,
         lookups: counts['cache-lookup'],
       })[step];

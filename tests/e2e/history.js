@@ -5,8 +5,9 @@
  * Actions cache folder of the Action (`.psp/history`):
  *
  *   node tests/e2e/history.js key                 print the history key, its cache prefix and the
- *                                                 pin artifact of JOB, from the INPUT_* inputs the
- *                                                 Action reads, to seed or inspect a history
+ *                                                 pin cache key of JOB in GITHUB_RUN_ID, from the
+ *                                                 INPUT_* inputs the Action reads, to seed or
+ *                                                 inspect a history
  *   node tests/e2e/history.js seed KEY RUN_ID     write a valid history of one synthetic run and
  *                                                 print its sha
  *   node tests/e2e/history.js sha                 print the sha of the restored history
@@ -19,6 +20,10 @@
  *                                                 print how many shards of RUN_ID had a passing
  *                                                 test, so published an entry of their own
  *   node tests/e2e/history.js expect-runs ID...   fail unless the restored history holds these runs
+ *   node tests/e2e/history.js expect-pin RUN_ID RECORDS_DIR
+ *                                                 fail unless every record of job test in RUN_ID
+ *                                                 planned from the restored pin: balanced from its
+ *                                                 bytes, or native when it holds no usable history
  *   node tests/e2e/history.js wait-until AT MS    sleep until MS milliseconds after the Unix time
  *                                                 AT, to the millisecond; when it passed more than
  *                                                 two seconds ago, warn and print late=true
@@ -27,7 +32,15 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { applyRun, emptyHistory, parseHistory, serializeHistory } = require('../../lib/history');
-const { CACHE_PATH, HISTORY_FILE, cachePrefix, pinName } = require('../../lib/identity');
+const {
+  CACHE_PATH,
+  HISTORY_FILE,
+  PIN_FILE,
+  PIN_PATH,
+  cachePrefix,
+  pinKey,
+} = require('../../lib/identity');
+const { decide } = require('../../lib/setup');
 const { ACTION_INPUTS, actionInputs, readInputs } = require('../../lib/inputs');
 const { testKey } = require('../../lib/plan/estimate');
 const { sha256 } = require('../../lib/util');
@@ -91,6 +104,32 @@ function expectSamples(runId, dir, excluded) {
   process.stdout.write(`${passed.size} tests of run ${id}, one sample each\n`);
 }
 
+function expectPin(runId, dir) {
+  const id = Number(runId);
+  const pinned = JSON.parse(
+    fs.readFileSync(
+      path.join(process.env.GITHUB_WORKSPACE || process.cwd(), PIN_PATH, PIN_FILE),
+      'utf8'
+    )
+  );
+  const decided = decide(pinned, pinned.key);
+  const expected = decided.mode === 'balanced' ? `balanced from ${decided.sha}` : decided.mode;
+  const mine = records(dir).filter((r) => r.run.id === id && r.job === 'test');
+  if (!mine.length) fail(`no record of job test in run ${id}`);
+  for (const r of mine) {
+    const planned = r.mode === 'balanced' ? `balanced from ${r.snapshotSha}` : r.mode;
+    if (planned !== expected) {
+      fail(
+        `shard ${r.shard.current}/${r.shard.total} of attempt ${r.run.attempt} planned ${planned}; ` +
+          `the pin says ${expected}`
+      );
+    }
+  }
+  process.stdout.write(
+    `${mine.length} shard records planned from the pin of ${pinned.matchedKey || 'no history'}: ${expected}\n`
+  );
+}
+
 function expectRuns(ids) {
   const history = parseHistory(fs.readFileSync(file, 'utf8'));
   const missing = ids.map(Number).filter((id) => !history.runs.includes(id));
@@ -103,7 +142,7 @@ if (command === 'key') {
   const { key } = actionInputs(readInputs(ACTION_INPUTS), process.env);
   process.stdout.write(
     `key=${key}\nkey12=${key.slice(0, 12)}\nprefix=${cachePrefix(key)}\n` +
-      `pin=${pinName(key, process.env.JOB || 'test')}\n`
+      `pin=${pinKey(key, process.env.JOB || 'test', process.env.GITHUB_RUN_ID)}\n`
   );
 } else if (command === 'seed') seed(args[0], args[1]);
 else if (command === 'sha') process.stdout.write(`sha=${sha256(fs.readFileSync(file, 'utf8'))}\n`);
@@ -113,6 +152,7 @@ else if (command === 'publishers') {
   const n = records(args[1]).filter((r) => r.run.id === id && r.tests.some((t) => t.sample_ms));
   process.stdout.write(`${n.length}\n`);
 } else if (command === 'expect-runs') expectRuns(args);
+else if (command === 'expect-pin') expectPin(args[0], args[1]);
 else if (command === 'wait-until') {
   // Lines for the log go to stderr; stdout carries only the step output.
   const at = Number(args[0]) * 1000 + Number(args[1] || 0);

@@ -10,8 +10,12 @@
  *   later, so a save onto a reserved or finalized key changes nothing and an exact restore of a
  *   key still uploading misses; a restore by prefix returns the newest entry created (what GitHub
  *   documents), and a lookup the key that restore would match;
- * - the artifact store, one per run: a name is created once in a run, a second upload of it fails,
- *   and it becomes visible to `find`, `list` and `download` one tick after its upload starts.
+ * - the artifact store, one per run, as the service behaves (measured on GitHub): a name is unique
+ *   within one job only, so a second upload of it from the same job fails, while jobs that upload
+ *   one name at once each create an artifact of it; an artifact becomes visible to `find`, `list`
+ *   and `download` one tick after its upload starts; ids are not in the order of creation, and
+ *   `find` returns the highest id of a name, as the toolkit does; a re-run of the whole workflow
+ *   deletes every artifact of the run (`rerunAll`), a re-run of some jobs deletes none.
  *
  * `world.before(op, key)` runs before every cache operation, so a test can let another writer act
  * between two steps of a compare-and-swap.
@@ -118,33 +122,65 @@ function modelCache(world, workspace, { available = true, readable = true, writa
   };
 }
 
-function modelArtifacts(world, runId) {
+/** The artifact store of run `runId`: every artifact of it, in the order of creation. */
+function runStore(world, runId) {
   const id = String(runId);
   if (!world.runs) world.runs = new Map();
-  if (!world.runs.has(id)) world.runs.set(id, new Map());
-  const store = world.runs.get(id);
+  if (!world.runs.has(id)) world.runs.set(id, []);
+  return world.runs.get(id);
+}
+
+/**
+ * Ids out of the order of creation, like the service's: a later artifact may have a lower id. The
+ * multiplication permutes the counters below the prime, so no two artifacts share an id.
+ */
+const nextArtifactId = (world) => {
+  world.nextId += 1;
+  return (world.nextId * 7919) % 104729;
+};
+
+/** A re-run of the whole workflow: the service deletes every artifact of the run. */
+function rerunAll(world, runId) {
+  runStore(world, runId).length = 0;
+}
+
+/**
+ * The artifact client of one job of run `runId`. `job` names the job, so its own second upload of
+ * a name fails; each call without one is a job of its own.
+ */
+function modelArtifacts(world, runId, job = Symbol('job')) {
+  const store = runStore(world, runId);
+  const visible = () => store.filter((a) => a.final);
   return {
     // Like the service: a name is created at once and becomes visible a tick later.
     async upload(name, files, root) {
       if (world.before) await world.before('upload', name);
-      if (store.has(name)) throw new Error(`(409) Conflict: an artifact named ${name} exists`);
+      if (store.some((a) => a.name === name && a.job === job)) {
+        throw new Error(
+          `(409) Conflict: an artifact with this name already exists on the workflow run`
+        );
+      }
       const tree = {};
       for (const file of files) tree[path.relative(root, file)] = fs.readFileSync(file);
-      const artifact = { id: world.nextId++, files: tree, final: false };
-      store.set(name, artifact);
+      const artifact = { name, id: nextArtifactId(world), files: tree, final: false, job };
+      store.push(artifact);
       await tick();
       artifact.final = true;
+      return { id: artifact.id };
     },
     async find(name) {
       if (world.before) await world.before('find', name);
-      const found = store.get(name);
-      return found && found.final ? { name, id: found.id } : null;
+      const found = visible()
+        .filter((a) => a.name === name)
+        .sort((a, b) => b.id - a.id)[0];
+      return found ? { name, id: found.id } : null;
     },
     async list() {
-      return [...store].filter(([, a]) => a.final).map(([name, a]) => ({ name, id: a.id }));
+      return visible().map((a) => ({ name: a.name, id: a.id }));
     },
     async download(artifactId, target) {
-      const found = [...store.values()].find((a) => a.id === artifactId);
+      const found = store.find((a) => a.id === artifactId);
+      if (!found) throw new Error(`artifact ${artifactId} not found`);
       writeTree(target, found.files);
     },
   };
@@ -226,18 +262,20 @@ const noSleep = () => new Promise((resolve) => setImmediate(resolve));
 async function mainStep(ctx, options) {
   const env = jobEnv(ctx, options);
   const io = modelIo();
+  // The main and post steps of one shard job share its artifact uploads.
+  const jobId = Symbol('shard job');
   try {
     const state = await setup({
       env,
       io,
       cache: options.cache || modelCache(ctx.world, ctx.ws, options.cacheOptions),
-      artifacts: modelArtifacts(ctx.world, env.GITHUB_RUN_ID),
+      artifacts: modelArtifacts(ctx.world, env.GITHUB_RUN_ID, jobId),
       sleep: options.sleep || noSleep,
       reporter: options.reporter || REPORTER,
     });
-    return { env, io, state, error: null };
+    return { env, io, state, error: null, jobId };
   } catch (error) {
-    return { env, io, state: null, error };
+    return { env, io, state: null, error, jobId };
   }
 }
 
@@ -260,7 +298,7 @@ async function postStep(ctx, main, options = {}) {
     io,
     state: main.state,
     cache: options.cache || modelCache(ctx.world, ctx.ws),
-    artifacts: modelArtifacts(ctx.world, main.env.GITHUB_RUN_ID),
+    artifacts: modelArtifacts(ctx.world, main.env.GITHUB_RUN_ID, main.jobId),
     sleep: noSleep,
   });
   return io;
@@ -297,6 +335,8 @@ module.exports = {
   modelCache,
   modelIo,
   newWorld,
+  rerunAll,
+  runStore,
   postStep,
   shardJob,
   userStep,

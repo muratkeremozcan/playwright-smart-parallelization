@@ -16,7 +16,10 @@
 # entry lands among the shards' own publishes.
 #
 # A re-run reuses the history key, which is keyed on the run id only, so a leg that expects to
-# publish accepts finding its samples already in the history on a later attempt.
+# publish accepts finding its samples already in the history on a later attempt. Every shard of a
+# later attempt plans from the pin of the first, a cache entry that outlives the artifacts a
+# re-run of the whole workflow deletes, so it expects the mode of the first attempt, and the
+# assert job requires the pin to predate the attempt.
 #
 # The assert job also holds the network operations each step of the Action made to budgets from
 # its code paths (tests/e2e/operations.js), and reports the time each step took in the job summary
@@ -126,6 +129,7 @@ jobs:
           INPUT_WORKING-DIRECTORY: ${{ inputs.working-directory }}
           INPUT_HISTORY-KEY: ${{ inputs.history-key }}
           JOB: test
+          GITHUB_RUN_ID: ${{ github.run_id }}
         run: node tests/e2e/history.js key >> "$GITHUB_OUTPUT"
       - id: seed
         if: inputs.seed && github.run_attempt == 1
@@ -316,14 +320,22 @@ jobs:
           key: ${{ needs.setup.outputs.prefix }}
           restore-keys: ${{ needs.setup.outputs.prefix }}
       - id: pin
+        uses: actions/cache/restore@v6
+        with:
+          path: .psp/pin
+          key: ${{ needs.setup.outputs.pin }}
+      - name: Require a later attempt to plan from the pin of an earlier one
+        if: github.run_attempt > 1 && steps.pin.outputs.cache-hit == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           NAME: ${{ needs.setup.outputs.pin }}
           REPO: ${{ github.repository }}
           RUN_ID: ${{ github.run_id }}
         run: |
-          n=$(gh api "repos/$REPO/actions/runs/$RUN_ID/artifacts?name=$NAME" --jq '.total_count')
-          echo "pinned=$([ "$n" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          created=$(gh api "repos/$REPO/actions/caches?key=$NAME" --jq ".actions_caches[] | select(.key == \"$NAME\") | .created_at")
+          started=$(gh api "repos/$REPO/actions/runs/$RUN_ID" --jq .run_started_at)
+          echo "the pin was created $created, this attempt started $started"
+          [ "$(date -d "$created" +%s%N)" -lt "$(date -d "$started" +%s%N)" ] || { echo "::error::the pin was created in this attempt"; exit 1; }
       - uses: actions/download-artifact@v8
         with:
           pattern: psp-record-*-${{ needs.setup.outputs.key12 }}-*
@@ -332,7 +344,7 @@ jobs:
         env:
           BEFORE: ${{ needs.setup.outputs.before }}
           AFTER: ${{ steps.after.outputs.cache-matched-key }}
-          PINNED: ${{ steps.pin.outputs.pinned }}
+          PINNED: ${{ steps.pin.outputs.cache-hit }}
           EXPECTED: ${{ inputs.expect-history }}
           ENABLED: ${{ inputs.enabled }}
           FAIL_TEST: ${{ inputs.fail-test }}
@@ -349,6 +361,10 @@ jobs:
           fi
           if [ -n "$FAIL_TEST" ]; then
             grep -rqs '"status":"failed"' records || fail "no shard recorded the failing test"
+          fi
+          if [ "$ENABLED" != false ]; then
+            [ "$PINNED" = true ] || fail "no pin was saved"
+            node tests/e2e/history.js expect-pin "$RUN_ID" records
           fi
           case "$EXPECTED" in
             unchanged) [ "$AFTER" = "$BEFORE" ] || fail "the history changed" ;;

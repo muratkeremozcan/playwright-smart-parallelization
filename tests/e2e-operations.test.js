@@ -43,7 +43,7 @@ test('reads the times each step of the Action logged, under the timestamps of a 
   assert.deepStrictEqual(stepTimes('the main step took 1s'), {});
 });
 
-const MAIN = { 'cache-restore': 1, 'artifact-upload': 2, 'artifact-find': 1 };
+const MAIN = { 'cache-restore': 2, 'cache-save': 1, 'artifact-upload': 1, 'artifact-list': 1 };
 const POST = { 'artifact-upload': 1, 'cache-restore': 1, 'cache-save': 1 };
 const FINISH = { 'artifact-list': 1, 'artifact-download': 6, 'api-request': 1 };
 const RUN = { shards: 3, artifacts: 6, jobs: 40 };
@@ -66,7 +66,7 @@ test('a pipeline whose steps keep to their code paths passes, and the times are 
   assert.deepStrictEqual(problems, []);
   assert.ok(
     lines.includes(
-      '| leg / test (1, false) | main | 1.50 | cache-restore 1, artifact-find 1, artifact-upload 2 | 0 |'
+      '| leg / test (1, false) | main | 1.50 | cache-restore 2, cache-save 1, artifact-list 1, artifact-upload 1 | 0 |'
     )
   );
   assert.ok(
@@ -78,13 +78,13 @@ test('a pipeline whose steps keep to their code paths passes, and the times are 
 
 test('an operation a step does not make on its path fails, whatever the time', () => {
   const extra = judge({
-    ...pipeline({ ...MAIN, 'cache-restore': 2 }, { ...POST, 'artifact-download': 1 }),
+    ...pipeline({ ...MAIN, 'cache-restore': 3 }, { ...POST, 'artifact-download': 1 }),
     run: RUN,
   });
   assert.deepStrictEqual(extra.problems, [
-    'leg / test (1, false) made 2 cache-restore in its main step, over the budget of 1',
+    'leg / test (1, false) made 3 cache-restore in its main step, over the budget of 2',
     'leg / test (1, false) made 1 artifact-download in its post step, over the budget of 0',
-    'leg / test (2, false) made 2 cache-restore in its main step, over the budget of 1',
+    'leg / test (2, false) made 3 cache-restore in its main step, over the budget of 2',
     'leg / test (2, false) made 1 artifact-download in its post step, over the budget of 0',
   ]);
   const finish = judge({
@@ -97,11 +97,11 @@ test('an operation a step does not make on its path fails, whatever the time', (
 });
 
 test('the races the Action is built for stay within budget, and failed calls are only reported', () => {
-  // Lost the pin race: the pin upload threw, and the pin was read again after every wait.
+  // Lost the pin race: the pin save created nothing, and the pin was read again after every wait.
   const most = attemptsFor(3);
   const raced = judge({
     ...pipeline(
-      { ...MAIN, 'artifact-upload': 1, 'artifact-find': 2 + WAITS.length, failed: 1 },
+      { ...MAIN, 'cache-restore': 3 + WAITS.length, lost: 1 },
       // Two saves lost: each read its key back and the newest entry again.
       { ...POST, 'cache-save': 3, lost: 2, 'cache-restore': 1 + 2 * 2 }
     ),
@@ -149,17 +149,31 @@ test('on the uncontended path one more operation than the path makes fails', () 
     problems(MAIN, { ...POST, 'cache-lookup': 2 }),
     /made 2 cache-lookup in its post step, over the budget of 1$/
   );
-  // The pin read again although its upload never lost, and a listing on a first attempt.
+  // The pin read again although its save never lost, a second save, a second listing, and the
+  // run's age asked on a first attempt.
   assert.match(
-    problems({ ...MAIN, 'artifact-find': 2 }),
-    /made 2 artifact-find in its main step, over the budget of 1$/
+    problems({ ...MAIN, 'cache-restore': 3 }),
+    /made 3 cache-restore in its main step, over the budget of 2$/
   );
   assert.match(
-    problems({ ...MAIN, 'artifact-list': 1 }),
-    /made 1 artifact-list in its main step, over the budget of 0$/
+    problems({ ...MAIN, 'cache-save': 2 }),
+    /made 2 cache-save in its main step, over the budget of 1$/
   );
-  // A re-run may list earlier records, ask the run's age and look the pin up twice more.
-  const rerun = pipeline({ ...MAIN, 'artifact-find': 3, 'artifact-list': 1, 'api-request': 1 });
+  assert.match(
+    problems({ ...MAIN, 'artifact-find': 1 }),
+    /made 1 artifact-find in its main step, over the budget of 0$/
+  );
+  assert.match(
+    problems({ ...MAIN, 'artifact-list': 2 }),
+    /made 2 artifact-list in its main step, over the budget of 1$/
+  );
+  assert.match(
+    problems({ ...MAIN, 'api-request': 1 }),
+    /made 1 api-request in its main step, over the budget of 0$/
+  );
+  // A shard that found no pin downloads the records of the shards that already ran, and a
+  // re-run asks the run's age.
+  const rerun = pipeline({ ...MAIN, 'artifact-download': RUN.artifacts, 'api-request': 1 });
   for (const shard of rerun.shards) shard.attempt = 2;
   assert.deepStrictEqual(judge({ ...rerun, run: RUN }).problems, []);
 });
