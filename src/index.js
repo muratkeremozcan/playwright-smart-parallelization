@@ -4,7 +4,9 @@
  * The entry of the Action's bundle (`dist/index.js`, built by scripts/build.js): `run('main')`,
  * `run('post')` and `run('finish')` wire the steps of lib/ to the official `@actions/core`,
  * `@actions/cache` and `@actions/artifact` toolkit. Any error of the main or finish step fails it
- * with an error annotation; the post step only warns (lib/publish.js).
+ * with an error annotation; the post step only warns (lib/publish.js). Each step ends with a line
+ * of the time its process took, from the start of Node to the end of the step, which the
+ * repository's e2e workflow holds to a budget.
  */
 
 const path = require('node:path');
@@ -82,6 +84,7 @@ async function run(step) {
     if (step === 'post') core.warning(`the post step failed: ${error.message}`);
     else core.setFailed(error.message);
   }
+  io.info(`the ${step} step took ${process.uptime().toFixed(2)}s`);
 }
 
 module.exports = { run };

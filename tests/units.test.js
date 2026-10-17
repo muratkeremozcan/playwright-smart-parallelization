@@ -11,13 +11,14 @@ const path = require('node:path');
 const { actionInputs, readInputs, ACTION_INPUTS } = require('../lib/inputs');
 const { decide, preliminary, reporterPath, runAgeDays } = require('../lib/setup');
 const { pin } = require('../lib/pin');
-const { trust } = require('../lib/trust');
+const { onDefaultBranch, trust } = require('../lib/trust');
 const store = require('../lib/store');
+const { toolkitCache } = require('../lib/cache');
 const { fetchJobs, markdown, overheadFrom, simulate } = require('../lib/summary');
 const { applyRun, emptyHistory, serializeHistory } = require('../lib/history');
 const { cacheKey, cachePrefix, pinName } = require('../lib/identity');
 const { testKey } = require('../lib/plan/estimate');
-const { sha256 } = require('../lib/util');
+const { mapLimit, sha256 } = require('../lib/util');
 const { FIXTURE } = require('./support/fixture');
 const { modelArtifacts, modelCache, newWorld, cacheSave } = require('./support/model');
 
@@ -140,15 +141,25 @@ describe('the main step decides the mode of its shard', () => {
     assert.strictEqual(decide({ unpinned: true, reason: 'no cache' }, key).mode, 'native');
   });
 
-  test('a reporter path with whitespace is copied to one without', () => {
+  test('the reporter is copied into a node_modules folder of the job temp, so Playwright loads it uncompiled', () => {
+    const file = path.join(tmp('psp-'), 'reporter.js');
+    fs.writeFileSync(file, 'module.exports = {};');
+    const temp = tmp('psp-runner-temp-');
+    const copy = reporterPath(file, temp);
+    assert.ok(copy.startsWith(temp + path.sep), copy);
+    assert.match(copy, /[\\/]node_modules[\\/]playwright-smart-parallelization[\\/]reporter\.js$/);
+    assert.strictEqual(fs.readFileSync(copy, 'utf8'), 'module.exports = {};');
+  });
+
+  test('a job temp with whitespace in its path puts the copy under the system temp', () => {
     const dir = path.join(tmp('psp-'), 'with space');
     fs.mkdirSync(dir);
     const file = path.join(dir, 'reporter.js');
     fs.writeFileSync(file, 'module.exports = {};');
-    const copy = reporterPath(file);
+    const copy = reporterPath(file, dir);
     assert.doesNotMatch(copy, /\s/);
+    assert.ok(copy.startsWith(os.tmpdir()), copy);
     assert.strictEqual(fs.readFileSync(copy, 'utf8'), 'module.exports = {};');
-    assert.strictEqual(reporterPath(path.join(tmp('psp-'), 'r.js')).includes(' '), false);
   });
 });
 
@@ -193,6 +204,34 @@ describe('the pin', () => {
     assert.ok(pinArtifact(world, p));
     cacheSave(world, cacheKey(p.key, 1, 2), { 'history.json': Buffer.from('newer') });
     assert.deepStrictEqual(await run(), a);
+  });
+
+  test('the shard whose upload creates the pin plans from its own bytes, with no read of it', async () => {
+    const { p, world, run } = setupPin();
+    const first = serializeHistory(someHistory(p.key));
+    cacheSave(world, cacheKey(p.key, 1, 1), { 'history.json': Buffer.from(first) });
+    const artifacts = modelArtifacts(world, 7);
+    const finds = [];
+    const counted = { ...artifacts, find: (name) => (finds.push(name), artifacts.find(name)) };
+    const read = await run({ artifacts: counted });
+    assert.deepStrictEqual(read, { matchedKey: cacheKey(p.key, 1, 1), history: first, note: null });
+    assert.strictEqual(finds.length, 1, 'only the look before the upload');
+    assert.deepStrictEqual(await run(), read, 'a later shard downloads the same bytes');
+  });
+
+  test('the newest history restores while the shard looks for the pin', async () => {
+    const { p, world, run } = setupPin();
+    cacheSave(world, cacheKey(p.key, 1, 1), {
+      'history.json': Buffer.from(serializeHistory(someHistory(p.key))),
+    });
+    const order = [];
+    world.before = async (op) => {
+      order.push(`${op} starts`);
+      if (op === 'find') for (let i = 0; i < 5; i++) await new Promise((r) => setImmediate(r));
+      order.push(`${op} answers`);
+    };
+    await run();
+    assert.ok(order.indexOf('restore starts') < order.indexOf('find answers'), order.join(', '));
   });
 
   test('a re-run after the cache evicted every entry still reads the pin', async () => {
@@ -315,28 +354,47 @@ describe('the pin', () => {
     assert.deepStrictEqual(results[0], results[1]);
   });
 
-  test('a pin still uploading is waited for; one never readable fails the shard before any test', async () => {
+  test('a pin another shard is still uploading is waited for; one never readable fails the shard before any test', async () => {
+    // Another shard creates the pin between this shard's look and its upload, and finishes
+    // uploading it only once this shard has waited.
+    const racing = (p, world, done) => {
+      const name = pinName(p.key, 'test');
+      const theirs = {
+        id: 999,
+        final: false,
+        files: {
+          'pin.json': Buffer.from(
+            JSON.stringify({
+              schema: 'playwright-smart-parallelization/pin',
+              version: 1,
+              key: p.key,
+              runId: 7,
+              job: 'test',
+              matchedKey: '',
+              history: null,
+              note: 'theirs',
+            })
+          ),
+        },
+      };
+      world.before = async (op, n) => {
+        const store = world.runs.get('7');
+        if (op === 'upload' && n === name && !store.has(name)) store.set(name, theirs);
+        if (op === 'find') theirs.final = done();
+      };
+    };
     const { p, world, run } = setupPin();
     const waits = [];
-    let uploading = true;
-    world.before = async (op) => {
-      // The pin stays mid-upload until the shard has waited once.
-      const artifact = op === 'find' && world.runs.get('7').get(pinName(p.key, 'test'));
-      if (artifact) artifact.final = !uploading;
-    };
-    await run({
-      sleep: async (ms) => {
-        waits.push(ms);
-        uploading = false;
-      },
-    });
-    assert.deepStrictEqual(waits, [1000]);
+    racing(p, world, () => waits.length > 0);
+    const read = await run({ sleep: async (ms) => waits.push(ms) });
+    assert.deepStrictEqual(waits, [250]);
+    assert.deepStrictEqual(read, { matchedKey: '', history: null, note: 'theirs' });
     const stuck = setupPin();
-    stuck.world.before = async (op) => {
-      const artifact = op === 'find' && stuck.world.runs.get('7').get(pinName(stuck.p.key, 'test'));
-      if (artifact) artifact.final = false;
-    };
-    await assert.rejects(stuck.run(), /was not found after 30s.*stops before any test/);
+    racing(stuck.p, stuck.world, () => false);
+    await assert.rejects(
+      stuck.run(),
+      /was not found after 30s, and this shard could not upload it: .*Conflict.*stops before any test/
+    );
   });
 
   test('a server with no artifact service leaves every shard unpinned', async () => {
@@ -374,6 +432,32 @@ describe('the pin', () => {
     );
     await assert.rejects(run(), /not a pin of this job and run/);
   });
+});
+
+test('a run is on the default branch only for a push or schedule of that branch', () => {
+  const event = (payload) => {
+    const file = path.join(tmp('psp-event-'), 'event.json');
+    fs.writeFileSync(file, JSON.stringify(payload));
+    return file;
+  };
+  const repo = { repository: { default_branch: 'main' } };
+  const on = (env) => onDefaultBranch({ GITHUB_EVENT_NAME: 'push', ...env });
+  assert.strictEqual(on({ GITHUB_REF: 'refs/heads/main', GITHUB_EVENT_PATH: event(repo) }), true);
+  assert.strictEqual(on({ GITHUB_REF: 'refs/heads/dev', GITHUB_EVENT_PATH: event(repo) }), false);
+  assert.strictEqual(
+    on({
+      GITHUB_EVENT_NAME: 'pull_request',
+      GITHUB_REF: 'refs/heads/main',
+      GITHUB_EVENT_PATH: event({ ...repo, pull_request: {} }),
+    }),
+    false
+  );
+  assert.strictEqual(on({ GITHUB_REF: 'refs/heads/main' }), false, 'no payload');
+  assert.strictEqual(
+    on({ GITHUB_EVENT_NAME: 'schedule', GITHUB_REF: 'refs/heads/main' }),
+    true,
+    'a schedule runs on the default branch'
+  );
 });
 
 describe('publish-history', () => {
@@ -689,57 +773,285 @@ describe('summary', () => {
   });
 });
 
-describe('the publish loop', () => {
-  test('eight shards publishing at once: every sample lands once, in eight entries', async () => {
-    const key = 'k8';
-    const world = newWorld();
-    // Each writer yields at every cache call in a seeded order, so the attempts interleave.
-    let seed = 7;
-    world.before = async () => {
-      seed = (seed * 1103515245 + 12345) % 2147483648;
-      for (let i = seed % 4; i > 0; i--) await new Promise((r) => setImmediate(r));
-    };
-    const shards = Array.from({ length: 8 }, (_, i) => i + 1);
-    const states = await Promise.all(
-      shards.map((shard) => {
-        const ws = tmp('psp-writer-');
-        const state = store.newState({
-          key,
-          attempts: store.attemptsFor(8),
-          run: {
-            id: 500,
-            attempt: 1,
-            commit: 'c',
-            fingerprint: 'f',
-            date: '2026-10-16',
-            samples: [[testKey('p', `s${shard}.spec.js`, ['t']), 100 * shard]],
-          },
-        });
-        return store.publish(state, {
-          cache: modelCache(world, ws),
-          workspace: ws,
-          sleep: async () => {},
-          pause: () => 0,
-        });
-      })
-    );
-    assert.deepStrictEqual(
-      states.map((s) => s.status),
-      shards.map(() => 'published')
-    );
-    const newest = [...world.cache]
-      .filter(([k]) => k.startsWith(cachePrefix(key)))
-      .sort((a, b) => b[1].created - a[1].created)[0];
-    assert.strictEqual(newest[0], cacheKey(key, 20261016, 8));
-    const history = JSON.parse(newest[1].files['history.json'].toString());
-    assert.deepStrictEqual(history.runs, [500]);
-    assert.deepStrictEqual(
-      Object.values(history.tests).map((t) => t.samples),
-      shards.map((s) => [[500, 100 * s]])
-    );
-    assert.ok(
-      states.some((s) => s.attempted.length > 1),
-      'the writers raced'
+test('mapLimit keeps the order of the items and never runs more than the limit at once', async () => {
+  let running = 0;
+  let most = 0;
+  const results = await mapLimit([5, 1, 4, 2, 3], 2, async (n) => {
+    most = Math.max(most, ++running);
+    await new Promise((resolve) => setTimeout(resolve, n));
+    running--;
+    return n * 10;
+  });
+  assert.deepStrictEqual(results, [50, 10, 40, 20, 30]);
+  assert.strictEqual(most, 2);
+  await assert.rejects(
+    mapLimit([1, 2], 4, async (n) => {
+      if (n === 2) throw new Error('two');
+    }),
+    /two/
+  );
+  assert.deepStrictEqual(await mapLimit([], 4, async () => 1), []);
+});
+
+describe('the toolkit cache adapter', () => {
+  /** Runs `fn` with stdout captured: `{ value, out }`. */
+  async function captured(fn) {
+    const write = process.stdout.write;
+    let out = '';
+    process.stdout.write = (chunk) => ((out += String(chunk)), true);
+    try {
+      return { value: await fn(), out };
+    } finally {
+      process.stdout.write = write;
+    }
+  }
+  const saving = (id, lines) =>
+    toolkitCache({
+      saveCache: async () => {
+        for (const line of lines) process.stdout.write(`${line}\n`);
+        return id;
+      },
+    });
+
+  test('a save that created the entry returns true', async () => {
+    assert.strictEqual((await captured(() => saving(7, []).save('d', 'k'))).value, true);
+  });
+
+  test('a lost reservation returns false and logs plain lines, no warning annotation', async () => {
+    const lines = [
+      '::warning::Cache reservation failed: already exists',
+      '::warning::Failed to save: Unable to reserve cache with key k, another job may be creating this cache.',
+    ];
+    const { value, out } = await captured(() => saving(-1, lines).save('d', 'k'));
+    assert.strictEqual(value, false);
+    assert.doesNotMatch(out, /::warning::/);
+    assert.match(out, /^Failed to save: Unable to reserve cache with key k/m);
+  });
+
+  test('an id with a logged failure, as the legacy service returns after a failed upload, did not create the entry', async () => {
+    const adapter = saving(42, ['::warning::Failed to save: Cache upload failed']);
+    const { value, out } = await captured(() => adapter.save('d', 'k'));
+    assert.strictEqual(value, false);
+    assert.match(
+      out,
+      /::warning::Failed to save: Cache upload failed/,
+      'a real failure stays a warning'
     );
   });
+
+  test('a write denied by policy is remembered', async () => {
+    const adapter = saving(-1, ['::warning::Failed to save: cache write denied: read-only token']);
+    await captured(() => adapter.save('d', 'k'));
+    assert.strictEqual(adapter.writeDenied, true);
+  });
+
+  test('a lookup asks the toolkit for the key without its bytes', async () => {
+    const calls = [];
+    const adapter = toolkitCache({
+      restoreCache: async (...args) => (calls.push(args), 'k-2'),
+    });
+    assert.strictEqual(await adapter.lookup('d', 'k-', ['k-']), 'k-2');
+    assert.deepStrictEqual(calls, [[['d'], 'k-', ['k-'], { lookupOnly: true }]]);
+  });
+});
+
+describe('the publish loop', () => {
+  const key = 'kp';
+  const runOf = (id) => ({
+    id,
+    attempt: 1,
+    commit: 'c',
+    fingerprint: 'f',
+    date: '2026-10-16',
+    samples: [[testKey('p', `s${id}.spec.js`, ['t']), id]],
+  });
+  const entry = (id) =>
+    serializeHistory(
+      applyRun(emptyHistory(key), { ...runOf(id), samples: new Map(runOf(id).samples) }).history
+    );
+  const seeded = () => {
+    const world = newWorld();
+    cacheSave(world, cacheKey(key, 20261016, 1), { 'history.json': Buffer.from(entry(1)) });
+    return world;
+  };
+  const traced = (world) => {
+    const ops = [];
+    world.before = async (op, k) => ops.push(`${op} ${k.replace(cachePrefix(key), '')}`);
+    return ops;
+  };
+  const publishOne = (world, id, options = {}) => {
+    const ws = tmp('psp-writer-');
+    const state = store.newState({ key, run: runOf(id), pinned: { epoch: 20261016, seq: 1 } });
+    let pauses = 0;
+    return store
+      .publish(state, {
+        cache: modelCache(world, ws),
+        workspace: ws,
+        sleep: async () => {},
+        pause: () => (pauses++, 0),
+        ...options,
+      })
+      .then((done) => ({ state: done, pauses }));
+  };
+
+  test('a writer that holds the newest entry reads only its key, and a save that creates the next key is not read back', async () => {
+    const world = seeded();
+    const ops = traced(world);
+    const held = new Map([[cacheKey(key, 20261016, 1), entry(1)]]);
+    const { state } = await publishOne(world, 2, { held });
+    assert.strictEqual(state.status, 'published');
+    assert.deepStrictEqual(ops, ['lookup ', 'save 20261016-2']);
+    assert.deepStrictEqual(
+      JSON.parse(world.cache.get(cacheKey(key, 20261016, 2)).files['history.json']).runs,
+      [1, 2]
+    );
+  });
+
+  test('off the default branch a writer holds no bytes, so it downloads the newest entry', async () => {
+    // Another ref also reads the default branch's scope, where the same key can hold other bytes.
+    const world = seeded();
+    const ops = traced(world);
+    const { state } = await publishOne(world, 2, { held: null });
+    assert.strictEqual(state.status, 'published');
+    assert.deepStrictEqual(ops, ['restore ', 'save 20261016-2']);
+  });
+
+  test('a writer that holds an older entry downloads the newest one', async () => {
+    const world = seeded();
+    cacheSave(world, cacheKey(key, 20261016, 2), { 'history.json': Buffer.from(entry(2)) });
+    const ops = traced(world);
+    const held = new Map([[cacheKey(key, 20261016, 1), entry(1)]]);
+    const { state } = await publishOne(world, 3, { held });
+    assert.strictEqual(state.status, 'published');
+    assert.deepStrictEqual(ops, ['lookup ', 'restore 20261016-2', 'save 20261016-3']);
+  });
+
+  test('a lost key is read back, and the key after it is tried at once with no other read', async () => {
+    const world = seeded();
+    const ops = traced(world);
+    const trace = world.before;
+    world.before = async (op, k) => {
+      await trace(op, k);
+      // Another writer creates the key this one is about to save.
+      if (op === 'save' && k === cacheKey(key, 20261016, 2)) {
+        cacheSave(world, k, { 'history.json': Buffer.from(entry(9)) });
+      }
+    };
+    const { state, pauses } = await publishOne(world, 2);
+    assert.strictEqual(state.status, 'published');
+    assert.strictEqual(pauses, 0);
+    assert.deepStrictEqual(ops, [
+      'restore ',
+      'save 20261016-2',
+      'restore 20261016-2',
+      'save 20261016-3',
+    ]);
+    assert.deepStrictEqual(
+      JSON.parse(world.cache.get(cacheKey(key, 20261016, 3)).files['history.json']).runs,
+      [1, 2, 9]
+    );
+  });
+
+  test('a key another writer is still uploading is paused for, then the newest is read again', async () => {
+    const world = seeded();
+    const ops = traced(world);
+    const trace = world.before;
+    let uploading = null;
+    world.before = async (op, k) => {
+      await trace(op, k);
+      if (op === 'save' && k === cacheKey(key, 20261016, 2) && !uploading) {
+        uploading = { files: { 'history.json': Buffer.from(entry(9)) }, created: ++world.created };
+        world.cache.set(k, uploading);
+      }
+    };
+    let paused = 0;
+    const { state } = await publishOne(world, 2, {
+      // The other writer finishes while this one pauses.
+      pause: () => {
+        paused++;
+        uploading.final = true;
+        return 0;
+      },
+    });
+    assert.strictEqual(state.status, 'published');
+    assert.strictEqual(paused, 1);
+    assert.deepStrictEqual(ops, [
+      'restore ',
+      'save 20261016-2',
+      'restore 20261016-2',
+      'restore ',
+      'save 20261016-3',
+    ]);
+    assert.deepStrictEqual(
+      JSON.parse(world.cache.get(cacheKey(key, 20261016, 3)).files['history.json']).runs,
+      [1, 2, 9]
+    );
+  });
+
+  for (const warm of [false, true]) {
+    const title = warm
+      ? 'eight shards publishing at once onto the entry the pin holds: every sample lands once'
+      : 'eight shards publishing at once: every sample lands once, in eight entries';
+    test(title, async () => {
+      const k8 = 'k8';
+      const world = newWorld();
+      // A warm run: the pin holds entry 1 of a run 499, and every writer holds its bytes.
+      const pinned = warm ? cacheKey(k8, 20261016, 1) : null;
+      const base = serializeHistory(
+        applyRun(emptyHistory(k8), {
+          ...runOf(499),
+          samples: new Map([[testKey('p', 'base.spec.js', ['t']), 50]]),
+        }).history
+      );
+      if (warm) cacheSave(world, pinned, { 'history.json': Buffer.from(base) });
+      // Each writer yields at every cache call in a seeded order, so the attempts interleave.
+      let seed = 7;
+      world.before = async () => {
+        seed = (seed * 1103515245 + 12345) % 2147483648;
+        for (let i = seed % 4; i > 0; i--) await new Promise((r) => setImmediate(r));
+      };
+      const shards = Array.from({ length: 8 }, (_, i) => i + 1);
+      const states = await Promise.all(
+        shards.map((shard) => {
+          const ws = tmp('psp-writer-');
+          const state = store.newState({
+            key: k8,
+            attempts: store.attemptsFor(8),
+            pinned: warm ? { epoch: 20261016, seq: 1 } : null,
+            run: {
+              ...runOf(500),
+              samples: [[testKey('p', `s${shard}.spec.js`, ['t']), 100 * shard]],
+            },
+          });
+          return store.publish(state, {
+            cache: modelCache(world, ws),
+            workspace: ws,
+            sleep: async () => {},
+            pause: () => 0,
+            held: warm ? new Map([[pinned, base]]) : new Map(),
+          });
+        })
+      );
+      assert.deepStrictEqual(
+        states.map((s) => s.status),
+        shards.map(() => 'published')
+      );
+      const newest = [...world.cache]
+        .filter(([k]) => k.startsWith(cachePrefix(k8)))
+        .sort((a, b) => b[1].created - a[1].created)[0];
+      assert.strictEqual(newest[0], cacheKey(k8, 20261016, warm ? 9 : 8));
+      const history = JSON.parse(newest[1].files['history.json'].toString());
+      assert.deepStrictEqual(history.runs, warm ? [499, 500] : [500]);
+      assert.deepStrictEqual(
+        Object.values(history.tests)
+          .map((t) => t.samples)
+          .filter(([[id]]) => id === 500),
+        shards.map((s) => [[500, 100 * s]])
+      );
+      assert.ok(
+        states.some((s) => s.attempted.length > 1),
+        'the writers raced'
+      );
+    });
+  }
 });

@@ -74,6 +74,8 @@ jobs:
       history-key: e2e-eight-${{ github.run_id }}
       shards: 8
       barrier: true
+      # Every post step publishes at the same moment, so most lose the compare-and-swap at least once.
+      shard-budget: 8
       expect-mode: native
       expect-history: published
 
