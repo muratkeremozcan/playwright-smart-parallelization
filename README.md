@@ -68,6 +68,7 @@ jobs:
 ```
 
 Your own `playwright test` command works as it is: an npm script as `npm run test:e2e -- --shard=1/4 $PSP_ARGS`, shell variables, filters and a project in a subdirectory.
+A command with `--last-failed` needs `enabled: false`; see [`docs/reference.md`](docs/reference.md).
 Each shard publishes its own test times from the default branch, so the next run balances with no extra job.
 
 For a cross-shard check that every test ran exactly once, and the shard times in the job summary, add the finish action to the job that merges your reports:
