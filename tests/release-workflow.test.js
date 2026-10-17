@@ -273,12 +273,13 @@ if (args[0] !== 'api') fail('unexpected command ' + args.join(' '));
 let method = 'GET';
 let jq = null;
 let endpoint = null;
+let paginate = false;
 const fields = {};
 for (let i = 1; i < args.length; i++) {
   const arg = args[i];
   if (arg === '--method') method = args[++i];
   else if (arg === '--jq') jq = args[++i];
-  else if (arg === '--paginate') continue;
+  else if (arg === '--paginate') paginate = true;
   else if (arg === '-f' || arg === '-F') {
     const [name, ...value] = args[++i].split('=');
     fields[name] = value.join('=');
@@ -287,13 +288,23 @@ for (let i = 1; i < args.length; i++) {
 const repo = 'repos/' + process.env.GITHUB_REPOSITORY + '/';
 if (!endpoint || !endpoint.startsWith(repo)) fail('unexpected endpoint ' + endpoint);
 const route = endpoint.slice(repo.length);
+const print = (body) => {
+  if (jq === null) return process.stdout.write(JSON.stringify(body) + '\\n');
+  const out = spawnSync('jq', ['-r', jq], { input: JSON.stringify(body), encoding: 'utf8' });
+  if (out.status !== 0) fail('jq failed: ' + out.stderr);
+  process.stdout.write(out.stdout);
+};
 let body;
 let match;
 if (method === 'GET' && route === 'releases?per_page=100') {
   if (state.releasesDown) fail('Server Error (HTTP 502)');
-  body = state.releases;
-}
-else if (method === 'GET' && (match = /^git\\/ref\\/tags\\/(.+)$/.exec(route))) {
+  // Like gh, --paginate applies --jq to every page; without it only the first page arrives.
+  const size = state.pageSize || 100;
+  const pages = [];
+  for (let i = 0; i < state.releases.length; i += size) pages.push(state.releases.slice(i, i + size));
+  for (const page of paginate ? pages : pages.slice(0, 1)) print(page);
+  process.exit(0);
+} else if (method === 'GET' && (match = /^git\\/ref\\/tags\\/(.+)$/.exec(route))) {
   const ref = state.refs[match[1]];
   if (!ref) fail('Not Found (HTTP 404)');
   body = { ref: 'refs/tags/' + match[1], object: ref };
@@ -313,12 +324,7 @@ else if (method === 'GET' && (match = /^git\\/ref\\/tags\\/(.+)$/.exec(route))) 
   save();
   body = {};
 } else fail('unexpected call ' + method + ' ' + route);
-if (jq === null) process.stdout.write(JSON.stringify(body) + '\\n');
-else {
-  const out = spawnSync('jq', ['-r', jq], { input: JSON.stringify(body), encoding: 'utf8' });
-  if (out.status !== 0) fail('jq failed: ' + out.stderr);
-  process.stdout.write(out.stdout);
-}
+print(body);
 `;
 
 const SHA = {
@@ -448,6 +454,44 @@ describe('promoting the floating major against the published releases', () => {
     assert.strictEqual(older.state.refs.v1.sha, SHA.v101);
   });
 
+  test('the highest release is chosen by number, among the releases of its own major only', () => {
+    const state = {
+      // Lexically v1.0.9 sorts after v1.0.10, and v10.2.0 starts with v1.
+      releases: published('v10.2.0', 'v1.0.9', 'v1.0.10'),
+      refs: {
+        'v1.0.9': { type: 'commit', sha: SHA.v100 },
+        'v1.0.10': { type: 'commit', sha: SHA.v101 },
+        v1: { type: 'commit', sha: SHA.v100 },
+      },
+      tags: {},
+    };
+    const newer = promote(state, { tag: 'v1.0.10', sha: SHA.v101 });
+    assert.strictEqual(newer.status, 0, newer.stderr);
+    assert.strictEqual(newer.state.refs.v1.sha, SHA.v101);
+
+    const older = promote(newer.state, { tag: 'v1.0.9', sha: SHA.v100 });
+    assert.notStrictEqual(older.status, 0);
+    assert.match(older.stderr, /v1\.0\.9 is older than v1\.0\.10/);
+    assert.deepStrictEqual(older.mutations, []);
+  });
+
+  test('a newer release on a later page of the releases still keeps the major', () => {
+    const state = {
+      releases: published('v1.0.0', 'v1.0.1'),
+      pageSize: 1,
+      refs: {
+        'v1.0.0': { type: 'commit', sha: SHA.v100 },
+        'v1.0.1': { type: 'commit', sha: SHA.v101 },
+        v1: { type: 'commit', sha: SHA.v101 },
+      },
+      tags: {},
+    };
+    const run = promote(state, { tag: 'v1.0.0', sha: SHA.v100 });
+    assert.notStrictEqual(run.status, 0);
+    assert.match(run.stderr, /v1\.0\.0 is older than v1\.0\.1/);
+    assert.deepStrictEqual(run.mutations, []);
+  });
+
   test('a major with no tag yet is created at the release', () => {
     const state = {
       releases: published('v1.0.0'),
@@ -516,6 +560,11 @@ describe('promoting the floating major against the published releases', () => {
     const current = runStep(step, state, values('v1.0.1'));
     assert.strictEqual(current.status, 0, current.stderr);
     assert.strictEqual(current.output, 'current=true\n');
+
+    const paged = { ...state, releases: published('v1.0.0', 'v1.0.1'), pageSize: 1 };
+    const later = runStep(step, paged, values('v1.0.0'));
+    assert.notStrictEqual(later.status, 0, 'the newer release is on the second page');
+    assert.match(later.stderr, /v1\.0\.0 was superseded by v1\.0\.1/);
   });
 
   test('a releases API that fails stops the promotion before any tag moves', () => {
