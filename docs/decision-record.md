@@ -36,9 +36,9 @@ Shape A (per-shard `--test-list` files) is rejected: `--test-list` is a lossy se
 
 - Lowest Playwright is 1.63: 1.62 has the preprocess hook but no `--add-reporter`. Older or unknown versions run plain `--shard`.
 - Yarn Plug'n'Play runs plain `--shard`: the reporter has no `node_modules` to load Playwright from.
-- Every shard adds the `blob` reporter into a folder the Action owns (`PLAYWRIGHT_BLOB_OUTPUT_DIR`), unless the command names one, so finish always has reports to merge.
-- Finish merges with the Playwright installed in `working-directory`, else `npx playwright@<plan version>` from npm.
-- The Action code needs Node 18, the first with a global `fetch`; `main.js` checks it before any module loads.
+- Every balanced and native shard adds the `blob` reporter, unless the command names one, and points every blob reporter at one file in a folder the Action owns (`PLAYWRIGHT_BLOB_OUTPUT_FILE`). A blob reporter in the user's config writes the same file; Playwright runs `onEnd` one reporter after another, so the second write replaces the first. Rollback adds no reporter.
+- Finish merges with the Playwright installed in `working-directory`, else `npx playwright@<plan version>` from npm. Under `pull_request_target` it uses npm only and ignores `merge-config`.
+- The Action needs Node 20: finish runs Playwright's CLI to merge the reports, and Playwright 1.64 needs Node 20. `main.js` checks it before any module loads.
 - A unit is one spec file of one project at one repeat. Whole files keep serial groups whole without private fields.
 - Intentional skips are allowed and not flagged; a run where every test skipped fails finish.
 - One unnamed project (a config without `projects`) has the identity `''`; two or more unnamed or duplicate names are refused before any test.
@@ -67,7 +67,7 @@ Shape A (per-shard `--test-list` files) is rejected: `--test-list` is a lossy se
 4. Failed, cancelled and incomplete runs write nothing; keys separate runner, workers and command: `tests/history.test.js`, `tests/action-flow.test.js`, `tests/phases.test.js`.
 5. Order, replay and permutation give one byte form: `tests/history.test.js`. The plan and the history read no clock; dates only expire entries.
 6. Window behavior and the passing-attempt sample: `tests/history.test.js`, `tests/lifecycle.test.js`. Its bias shows in the predicted and measured columns of every summary.
-7. Untrusted runs read and never write; forged plans are refused: `tests/phases.test.js`, `tests/action-flow.test.js`. A fork's finish may run code from its checkout (an installed Playwright, a `merge-config`) to merge the reports, and it never writes the history.
+7. Untrusted runs read and never write; forged plans are refused: `tests/phases.test.js`, `tests/action-flow.test.js`. A fork's finish may run code from its checkout (an installed Playwright, a `merge-config`) to merge the reports, and it never writes the history. Under `pull_request_target`, finish runs no code from the pull request.
 
 ## Harvest acceptance rows
 
