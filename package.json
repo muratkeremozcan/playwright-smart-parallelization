@@ -13,27 +13,16 @@
     "node": ">=22"
   },
   "scripts": {
-    "setup": "npm ci && npm ci --prefix fixtures/consumer && npm ci --prefix qualification/flakiness",
+    "setup": "npm ci && npm ci --prefix fixtures/consumer",
     "build": "node scripts/build.js",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "node --require ./tests/support/temp.js --test tests/*.test.js qualification/lib/tests/*.test.js qualification/nsxbet/tests/unit/*.test.js qualification/flakiness/tests/unit/*.test.js measurements/tests/*.test.js research/shard-balancer/tests/unit/*.test.js",
+    "test": "node --require ./tests/support/temp.js --test tests/*.test.js",
     "check:public": "node scripts/check-public.js",
     "harness": "node harness/cli.js --cwd fixtures/consumer",
     "harness:negative": "node harness/cli.js --cwd fixtures/consumer --negative-control",
-    "validate": "npm run lint && npm run format:check && npm run test && npm run check:public",
-    "measurements:collect": "node measurements/collect.js --config measurements/couture-cast.json --out docs/measurements/raw",
-    "measurements:report": "node measurements/render.js --raw docs/measurements/raw --out docs/measurements/baseline.md",
-    "qualify:install": "npm ci --prefix fixtures/consumer && npm ci --prefix qualification/nsxbet && npm ci --prefix qualification/flakiness",
-    "qualify:nsxbet": "node qualification/nsxbet/run.js",
-    "qualify:nsxbet:test": "node --test --test-concurrency=1 qualification/nsxbet/tests/*.test.js",
-    "qualify:flakiness": "node qualification/flakiness/run.js",
-    "qualify:flakiness:test": "node --test --test-concurrency=1 qualification/flakiness/tests/*.test.js",
-    "research:install": "npm ci --prefix fixtures/consumer && npm ci --prefix qualification/flakiness --ignore-scripts && npm ci --prefix research/shard-balancer --ignore-scripts",
-    "research:shard-balancer": "node research/shard-balancer/run.js",
-    "research:shard-balancer:test": "node --test --test-concurrency=1 research/shard-balancer/tests/*.test.js",
-    "research:shard-balancer:report": "node research/shard-balancer/report.js --write"
+    "validate": "npm run lint && npm run format:check && npm run test && npm run check:public"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

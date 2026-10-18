@@ -13,7 +13,7 @@ review_source: 'pinned'
 lenses_ran: ['quick']
 review_loop_iteration: 1
 context:
-  - '{project-root}/docs/research/shard-balancer-harvest.md'
+  - 'https://github.com/muratkeremozcan/playwright-smart-parallelization/blob/6164df685c3f13c5c6936d0473acfec10212e91f/docs/research/shard-balancer-harvest.md'
   - '{project-root}/_bmad-output/initiative-pw-smart-sharding/spec-pw-smart-sharding/spec-pw-smart-sharding.md'
 ---
 
@@ -52,8 +52,8 @@ context:
 - `.github/workflows/test.yml` -- `stub` job to replace with the e2e jobs.
 - `harness/` -- `nativePartition` shape `{ args, env }`; partitions with `--add-reporter` plug in unchanged for exactly-once proofs.
 - `fixtures/consumer` -- Playwright 1.64.1, setup/teardown projects, two browser projects, serial suites, retries.
-- `research/shard-balancer/node_modules/playwright-shard-balancer/dist/{partition,plan,estimate,timings,run,report}.js` -- algorithms to port with attribution (partition search, setup-aware balance, estimator, check).
-- `docs/research/shard-balancer-harvest.md` "Inputs to S7 and S8" -- every acceptance row is covered by a test or answered in the decision record.
+- `node_modules/playwright-shard-balancer/dist/{partition,plan,estimate,timings,run,report}.js` under [`research/shard-balancer`](https://github.com/muratkeremozcan/playwright-smart-parallelization/tree/6164df685c3f13c5c6936d0473acfec10212e91f/research/shard-balancer) -- algorithms to port with attribution (partition search, setup-aware balance, estimator, check).
+- [`docs/research/shard-balancer-harvest.md`](https://github.com/muratkeremozcan/playwright-smart-parallelization/blob/6164df685c3f13c5c6936d0473acfec10212e91f/docs/research/shard-balancer-harvest.md) "Inputs to S7 and S8" -- every acceptance row is covered by a test or answered in the decision record.
 - `actions/cache/restore`, `actions/cache/save` -- official steps; a key is immutable, so a save onto an existing key is the conflict signal, detected by restoring the exact key and comparing its sha.
 
 ## Tasks & Acceptance

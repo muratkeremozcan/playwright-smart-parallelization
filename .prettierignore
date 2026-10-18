@@ -4,6 +4,4 @@ _bmad
 _bmad-output
 .claude
 .agents
-docs/measurements/raw
-docs/measurements/baseline.md
 dist
