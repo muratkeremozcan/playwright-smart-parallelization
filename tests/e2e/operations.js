@@ -213,11 +213,26 @@ function pipelineJobs(jobs, runner) {
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
- * The picked jobs once every one of them reports completed. The jobs API can list a job as in
- * progress for tens of seconds after its last step ended, and such a job has no conclusion and so
- * no log to read. Polls `fetchJobs` every `intervalMs` and picks from it with `pick`, which returns
- * `{ shards, finish }`, until every picked job is completed, and fails only after `boundMs`,
- * naming the jobs still not completed. Returns the pick and the jobs it was made from.
+ * Whether a job has ended. The jobs API can list a job as in progress for minutes after its last
+ * step, `Complete job`, ended, while its log is already readable (run 39123176372). It lists every
+ * step of a job from its start, so a job whose steps all completed has ended.
+ */
+const ended = (j) =>
+  j.status === 'completed' ||
+  (Array.isArray(j.steps) && j.steps.length > 0 && j.steps.every((s) => s.status === 'completed'));
+
+/** An ended job with its conclusion: the API's, or from its steps while it lags behind them. */
+const concluded = (j) =>
+  j.status === 'completed'
+    ? j
+    : { ...j, conclusion: j.steps.some((s) => s.conclusion === 'failure') ? 'failure' : 'success' };
+
+/**
+ * The picked jobs once every one of them has ended (`ended`): a job that has not has no
+ * conclusion and so no log to read. Polls `fetchJobs` every `intervalMs` and picks from it with
+ * `pick`, which returns `{ shards, finish }`, until every picked job has ended, and fails only
+ * after `boundMs`, naming the jobs still running. Returns the pick, each job with its conclusion,
+ * and the jobs it was made from.
  */
 async function settledJobs({
   fetchJobs,
@@ -232,8 +247,14 @@ async function settledJobs({
     const jobs = await fetchJobs();
     const picked = pick(jobs);
     const all = [...picked.shards, ...(picked.finish ? [picked.finish] : [])];
-    const open = all.filter((j) => j.status !== 'completed');
-    if (!open.length) return { ...picked, jobs };
+    const open = all.filter((j) => !ended(j));
+    if (!open.length) {
+      return {
+        shards: picked.shards.map(concluded),
+        finish: picked.finish && concluded(picked.finish),
+        jobs,
+      };
+    }
     if (now() >= deadline) {
       throw new Error(
         `the jobs API still lists ${open.map((j) => `${j.name} as ${j.status}`).join(', ')} ` +
