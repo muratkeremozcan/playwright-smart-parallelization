@@ -967,7 +967,23 @@ describe('the toolkit cache adapter', () => {
       restoreCache: async (...args) => (calls.push(args), 'k-2'),
     });
     assert.strictEqual(await adapter.lookup('d', 'k-', ['k-']), 'k-2');
-    assert.deepStrictEqual(calls, [[['d'], 'k-', ['k-'], { lookupOnly: true }]]);
+    assert.deepStrictEqual(calls, [[['d'], 'k-', ['k-'], { lookupOnly: true }, true]]);
+  });
+
+  test('every restore and save allows cross-OS archives, so a Windows shard shares the version', async () => {
+    const calls = [];
+    const adapter = toolkitCache({
+      restoreCache: async (...args) => (calls.push(['restore', args.at(-1)]), ''),
+      saveCache: async (...args) => (calls.push(['save', args.at(-1)]), 1),
+    });
+    await adapter.restore('d', 'k', ['k']);
+    await adapter.lookup('d', 'k', ['k']);
+    await captured(() => adapter.save('d', 'k'));
+    assert.deepStrictEqual(calls, [
+      ['restore', true],
+      ['restore', true],
+      ['save', true],
+    ]);
   });
 });
 
