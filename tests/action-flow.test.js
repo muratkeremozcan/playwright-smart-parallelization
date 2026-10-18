@@ -388,6 +388,34 @@ describe('the Action step skipped with an if:', () => {
     const finish = await finishOf(world, 602);
     assert.ok(finish.io.failed);
     assert.strictEqual(finish.io.outputs['exactly-once'], 'failed');
+    // A re-run whose inputs pass answers that marker once every shard has a later record.
+    const rerun = [];
+    for (const shard of [1, 2]) {
+      rerun.push(
+        await shardJob(
+          { ws: workspace(), world },
+          { runId: 602, attempt: 2, cwd: 'app', command: command(shard, 2) }
+        )
+      );
+    }
+    assert.ok(rerun.every((j) => j.main.error === null && j.user.status === 0));
+    const recovered = await finishOf(world, 602, { env: { GITHUB_RUN_ATTEMPT: '2' } });
+    assert.strictEqual(recovered.io.failed, null, recovered.io.summaryText);
+    assert.strictEqual(recovered.io.outputs['exactly-once'], 'ok');
+    // Re-running only the shard that refused its inputs answers its marker too, while the shard
+    // that passed keeps its first record; without that re-run the run stays failed.
+    const partial = newWorld();
+    const shardOf = (shard, attempt, options = {}) =>
+      shardJob(
+        { ws: workspace(), world: partial },
+        { runId: 604, attempt, cwd: 'app', command: command(shard, 2), ...options }
+      );
+    await shardOf(1, 1);
+    await shardOf(2, 1, { inputs: { 'publish-history': 'never' } });
+    assert.ok((await finishOf(partial, 604)).io.failed);
+    await shardOf(2, 2);
+    const healed = await finishOf(partial, 604, { env: { GITHUB_RUN_ATTEMPT: '2' } });
+    assert.strictEqual(healed.io.failed, null, healed.io.summaryText);
   });
 
   test('a later attempt with no artifacts passes only while they cannot have expired', async () => {
