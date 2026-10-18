@@ -57,19 +57,20 @@ const someHistory = (key) =>
   }).history;
 
 describe('inputs', () => {
-  test('the history key changes with the working directory, runner OS and arch, and history-key', () => {
+  test('the history key changes with the working directory and history-key only', () => {
     const j = job();
     fs.mkdirSync(path.join(j.ws, 'other'));
     const base = prepared(j).key;
     assert.notStrictEqual(prepared(j, { 'history-key': 'staging' }).key, base);
     assert.notStrictEqual(prepared(j, { 'working-directory': 'other' }).key, base);
-    const arm = { ...j, env: { ...j.env, RUNNER_ARCH: 'ARM64' } };
-    assert.notStrictEqual(prepared(arm).key, base);
-    const mac = { ...j, env: { ...j.env, RUNNER_OS: 'macOS' } };
-    assert.notStrictEqual(prepared(mac).key, base);
+    // The shards of one job on an X64 and an ARM64 or macOS runner share one key, so one pin.
+    for (const env of [{ RUNNER_ARCH: 'ARM64' }, { RUNNER_OS: 'macOS' }, { RUNNER_NAME: 'b' }]) {
+      const other = prepared({ ...j, env: { ...j.env, ...env } }).key;
+      assert.strictEqual(other, base, JSON.stringify(env));
+      assert.strictEqual(pinKey(other, 'test', 7), pinKey(base, 'test', 7));
+    }
     // The workers stay Playwright's, so an input of them no longer exists or keys anything.
     assert.strictEqual(prepared(j, { workers: '2' }).key, base);
-    assert.strictEqual(prepared({ ...j, env: { ...j.env, RUNNER_NAME: 'other' } }).key, base);
   });
 
   test('refuses a bad publish-history and a directory outside the workspace', () => {

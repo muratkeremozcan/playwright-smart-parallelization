@@ -1128,13 +1128,8 @@ var require_identity = __commonJS({
     var HISTORY_FILE = "history.json";
     var PIN_PATH = ".psp/pin";
     var PIN_FILE = "pin.json";
-    function historyKey({ workingDirectory, runner, historyKey: extra }) {
-      const identity = JSON.stringify({
-        v: 3,
-        workingDirectory,
-        runner,
-        historyKey: extra || ""
-      });
+    function historyKey({ workingDirectory, historyKey: extra }) {
+      const identity = JSON.stringify({ v: 3, workingDirectory, historyKey: extra || "" });
       return sha2562(identity).slice(0, 24);
     }
     var fingerprint2 = (key, playwright) => sha2562(JSON.stringify({ key, playwright })).slice(0, 24);

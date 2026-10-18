@@ -7,6 +7,8 @@
 
 const { test, describe, before } = require('node:test');
 const assert = require('node:assert');
+const fs = require('node:fs');
+const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const {
   actionPartition,
@@ -241,7 +243,7 @@ describe('balanced mode under other selections', () => {
 });
 
 describe('every shard plans for the worker count of the pinned snapshot', () => {
-  const listPlan = (snapshot, workers) => {
+  const listPlan = (snapshot, workers, record = null) => {
     const cli = require.resolve('@playwright/test/cli', { paths: [FIXTURE] });
     const result = spawnSync(
       process.execPath,
@@ -263,11 +265,18 @@ describe('every shard plans for the worker count of the pinned snapshot', () => 
           PSP_KEY: 'fixture-history-key',
           PSP_SNAPSHOT: snapshot.file,
           PSP_SNAPSHOT_SHA: snapshot.sha,
+          ...(record ? { PSP_RECORD: record } : {}),
         },
       }
     );
     assert.strictEqual(result.status, 0, result.stderr);
     return result.stdout.split('\n');
+  };
+  const predicted = (snapshotWorkers) => {
+    const at = { ...history, source: { ...history.source, workers: snapshotWorkers } };
+    const record = path.join(tempDir('psp-records-'), 'record.json');
+    listPlan(writeSnapshot(at), '1', record);
+    return JSON.parse(fs.readFileSync(record, 'utf8')).predictedMs;
   };
 
   test('one plan sha under --workers=1 and --workers=4, and the other count is named', () => {
@@ -291,6 +300,11 @@ describe('every shard plans for the worker count of the pinned snapshot', () => 
     const lines = listPlan(writeSnapshot(two), '2');
     assert.ok(lines.some((l) => l.includes('planned for 2 worker(s)')));
     assert.ok(!lines.some((l) => l.includes('Playwright resolved')));
+    // Under one --workers, the predicted shard walls follow the snapshot's count alone: packing
+    // the same units onto more workers shortens the slowest shard.
+    const one = predicted(1);
+    assert.ok(Math.max(...predicted(2)) < Math.max(...one), JSON.stringify(one));
+    assert.deepStrictEqual(predicted(1), one);
   });
 
   test('shards that resolve different counts keep one plan and run every test once', () => {

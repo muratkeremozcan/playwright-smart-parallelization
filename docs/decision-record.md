@@ -38,7 +38,7 @@ The three-phase interface (a prepare job, a run step that owned the Playwright c
 
 ### Inputs derived, workers from Playwright (2026-10-18)
 
-The `workers`, `runner-label` and `enabled` inputs are removed before v1, as is `publish-history: false`: each repeated configuration the user already has. Playwright resolves the workers from the config, the command and the CPUs, the runner context names the OS and architecture, and an `if:` on the step skips it. The main step runs before Playwright resolves the workers, so the count rides in the history: each shard publishes the count it resolved, and every shard plans for the count of its pinned snapshot, so shards that resolve different counts still plan one split. The inputs kept are the ones no context gives: `working-directory` for a workspace with several Playwright versions, `history-key` for suites the job id cannot tell apart, `publish-history: true` for a repository that runs its suite only on pull requests, and `github-token`, the one way an action receives the job token.
+The `workers`, `runner-label` and `enabled` inputs are removed before v1, as is `publish-history: false`: each repeated configuration the user already has. Playwright resolves the workers from the config, the command and the CPUs, the runner is left out of the history key, and an `if:` on the step skips it. The main step runs before Playwright resolves the workers, so the count rides in the history: each shard publishes the count it resolved, and every shard plans for the count of its pinned snapshot, so shards that resolve different counts still plan one split. The inputs kept are the ones no context gives: `working-directory` for a workspace with several Playwright versions, `history-key` for suites the job id cannot tell apart, `publish-history: true` for a repository that runs its suite only on pull requests, and `github-token`, the one way an action receives the job token.
 
 ## Rules
 
@@ -54,7 +54,7 @@ The `workers`, `runner-label` and `enabled` inputs are removed before v1, as is 
 - `--last-failed` is refused before any test: Playwright filters after the split, where no reporter sees it, so a shard cannot prove the selection. The workaround is an `if:` that skips the Action's step for that command.
 - Intentional skips are allowed and not flagged; a run where every test skipped fails finish.
 - One unnamed project (a config without `projects`) has the identity `''`; two or more unnamed or duplicate names are refused before any test.
-- The history key is working directory, runner OS and architecture, and `history-key`. The command is the user's and runs after the Action, so a filter shares the history; each test keeps its own samples. The worker count, config path, environment and Playwright version share it too, so callers separate materially different setups with `history-key`.
+- The history key is working directory and `history-key`. Every shard of a job computes it alike, so shards on runners of other operating systems or architectures share one pin and one plan; the runner OS and architecture were part of it until 2026-10-18, which split such shards over two plans. The command is the user's and runs after the Action, so a filter shares the history; each test keeps its own samples. The runner, worker count, config path, environment and Playwright version share it too, so callers separate materially different setups with `history-key`.
 - The Action runs on node24, so a self-hosted runner needs Actions runner v2.327.1 or later.
 - The pin is a cache entry keyed by history key, job id and run id, never by the commit, so a workflow that checks out another commit plans the same on every shard and re-run. The cache is the one service of a run with a create-only write: of the saves of one key, exactly one creates it. The shard whose save created the pin plans from its own bytes, and every other shard reads the winner's bytes back, also the shards whose own saves lost.
 - The pin was an artifact of the run until v1, on the assumption that an artifact name is unique in a run. Measured on GitHub, it is unique within one job only: eight shard jobs that upload one name at once create eight artifacts, `getArtifact` returns the highest id, and ids are not in the order of creation, so shards planned from different snapshots (run 39055263301). A re-run of the whole workflow also deletes every artifact of the run, the pin with it, so its shards failed before any test.
@@ -114,7 +114,7 @@ The `workers`, `runner-label` and `enabled` inputs are removed before v1, as is 
 - Trusted writer, provenance, fingerprint: `action-flow` (cold), `check` (fingerprint), `units` (publish rule).
 - Filtered run: its tests keep their own samples in the shared history (`action-flow`, shell variables); expiry: `history`.
 - Zero samples: `history`.
-- Runner key: `units` (history key).
+- One key across runners: `units` (history key).
 - No network: `reporter-safety` (guard).
 - Plan line and summary row: `reporter-balance`, `units`.
 - Strict shards: `reporter-safety`.

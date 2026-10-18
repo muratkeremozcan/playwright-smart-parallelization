@@ -38,8 +38,8 @@ Facts about the Action that the README example does not need. Every input is in 
 
 ## History
 
-- The history is keyed by working directory, the runner's OS and architecture, and `history-key`; the shard count, the workers and the command's filters can change freely, since each test keeps its own samples.
-- Nothing else separates it: config path, browser options under one project name, runner size, environment and Playwright version share the history. Give materially different setups their own `history-key`.
+- The history is keyed by working directory and `history-key`; the shard count, the workers and the command's filters can change freely, since each test keeps its own samples.
+- Nothing else separates it: the runner, config path, browser options under one project name, environment and Playwright version share the history, so the shards of one job plan from one pin even on runners of other operating systems or architectures. Give materially different setups their own `history-key`, such as `history-key: ${{ matrix.os }}` for a matrix of operating systems.
 - Each shard publishes the samples of its passing tests, also when another test of the shard failed; a failed attempt adds no sample.
 - Every shard of a job and every re-run of one plans from one snapshot, pinned in a `psp-pin-v2-*` cache entry of the workflow run, never to the checked-out commit. Each shard's run record keeps a copy, so a re-run plans the same after the cache dropped the pin.
 - It lives in the Actions cache, which drops entries unused for 7 days, so a quiet repo starts cold again.
