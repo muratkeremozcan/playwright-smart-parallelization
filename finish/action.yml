@@ -19,7 +19,7 @@ outputs:
   mode:
     description: 'balanced, native, disabled, or mixed when the checked jobs differ.'
   exactly-once:
-    description: 'ok (every test ran exactly once), failed, or not checked (disabled).'
+    description: 'ok (every test ran exactly once), failed, or not checked (the Action was disabled, or no shard ran its step).'
   overhead-ms:
     description: 'The per-shard overhead outside Playwright; empty when the jobs API is unreadable or no shard job matches.'
 

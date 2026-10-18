@@ -45,8 +45,8 @@ The first run has no history, so it runs native sharding and records the duratio
 Each shard on the default branch then publishes its passing tests' times, and pull requests read that history without writing it.
 A cache entry unused for 7 days expires, so a quiet repository starts cold again; see [history](docs/reference.md#history) to keep suites or environments apart.
 
-To return to plain Playwright, skip the Action step with an `if:` condition, which leaves `$PSP_ARGS` empty.
-`--last-failed` needs the step skipped.
+To return to plain Playwright, skip the Action step with an `if:` condition, which leaves `$PSP_ARGS` empty; finish then reports `exactly-once: not checked` and passes.
+`--last-failed` needs the step skipped too.
 Playwright resolves the workers from your config and command, and every shard plans for the count the history recorded.
 
 ### Optional: check that every test ran once

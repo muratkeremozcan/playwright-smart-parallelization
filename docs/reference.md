@@ -10,7 +10,7 @@ Facts about the Action that the README example does not need. Every input is in 
 - Playwright keeps only the last `--add-reporter`, so add your own reporters in the config, not on the command line.
 - The Action exports the reporter's options as `PSP_*` variables to the later steps of the job.
 - Under `--no-deps`, setup and teardown projects are ordinary projects, so the split shares their tests out like any other.
-- `--last-failed` stops every shard before any test: Playwright applies it after the split, so no shard can prove what the run selected. Skip the Action's step for that command with an `if:`, which leaves `$PSP_ARGS` empty.
+- `--last-failed` stops every shard before any test: Playwright applies it after the split, so no shard can prove what the run selected. Skip the Action's step for that command with an `if:`, which leaves `$PSP_ARGS` empty; a `finish` after it reports `exactly-once: not checked` and passes, since no shard of the run ran the step.
 
 ## The plan
 
@@ -34,6 +34,7 @@ Facts about the Action that the README example does not need. Every input is in 
 - `finish` reads the run records the shards upload as `psp-record-*` artifacts, so it needs no blob reports and merges none; your own merge step stays yours.
 - It checks every sharded job of the run; with several sharded jobs and a finish for each, give each job its own `history-key` and pass the same one to its finish.
 - A matrix with another dimension next to `shard` that runs the same tests, such as `node: [20, 22]`, needs its own `history-key` per leg, such as `history-key: node-${{ matrix.node }}`, so each leg keeps its own records and history.
+- A run in which no shard ran the Action's step, because an `if:` skipped it, leaves `finish` nothing to check: it reports `mode: disabled` and `exactly-once: not checked` and passes. A shard job that ran the step and left no record still fails it.
 - It reads the jobs API for the per-shard overhead, so its job needs `permissions: actions: read`.
 
 ## History

@@ -70,6 +70,7 @@ The `workers`, `runner-label` and `enabled` inputs are removed before v1, as is 
 - The post step uploads the run record while it publishes the samples; finish downloads the records and markers 16 at a time, while it reads the jobs API.
 - `$PSP_ARGS` names a copy of the reporter in a `node_modules` folder of the job's temp folder: Playwright compiles a reporter outside `node_modules` with Babel first, which cost each shard about half a second on a hosted runner.
 - A disabled shard leaves `$PSP_ARGS` empty and uploads a status record, so finish tells it from shards that never ran.
+- A run with no start marker at all had its Action step skipped by an `if:` on every shard, since the main step uploads its marker first or fails its job; finish reports `not checked` and passes, so turning balancing off needs no change to the finish job. A start marker with no record still fails it.
 - The plan packs for the worker count of the pinned snapshot, the count the shard that published it resolved, so every shard plans the same on any runner. A shard whose Playwright resolved another count says so in one line and keeps the plan; Playwright runs it with its own count.
 
 ## History publish

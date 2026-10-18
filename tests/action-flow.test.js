@@ -10,6 +10,7 @@
 
 const { test, describe, before } = require('node:test');
 const assert = require('node:assert');
+const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -340,6 +341,43 @@ describe('the command shapes a user writes', () => {
     assert.strictEqual(scoped.io.failed, null, scoped.io.summaryText);
     const all = await finishOf(world, 305);
     assert.match(all.io.summaryText, /no record for shard 2/);
+  });
+});
+
+describe('the Action step skipped with an if:', () => {
+  test('no main and no post step: plain Playwright, and finish passes with nothing to check', async () => {
+    requireFixture();
+    const world = newWorld();
+    // The user's command alone, as a job whose Action step an if: skipped runs it: $PSP_ARGS is
+    // unset, and no start marker, record or status reaches the run.
+    const env = Object.fromEntries(
+      Object.entries(process.env).filter(([name]) => !/^(PSP_|INPUT_|GITHUB_|RUNNER_)/.test(name))
+    );
+    for (const shard of [1, 2]) {
+      const ws = workspace();
+      const user = spawnSync('bash', ['-c', command(shard, 2)], {
+        cwd: path.join(ws, 'app'),
+        encoding: 'utf8',
+        env,
+      });
+      assert.strictEqual(user.status, 0, user.stderr);
+      assert.doesNotMatch(user.stdout, /playwright-smart-parallelization/);
+    }
+    assert.deepStrictEqual([...world.cache.keys()], []);
+    const finish = await finishOf(world, 601);
+    assert.strictEqual(finish.io.failed, null, finish.io.summaryText);
+    assert.deepStrictEqual(
+      [finish.io.outputs.mode, finish.io.outputs['exactly-once']],
+      ['disabled', 'not checked']
+    );
+    assert.match(finish.io.summaryText, /not run/);
+    assert.match(finish.io.summaryText, /No shard of this run ran the Action's step/);
+
+    // A shard job of the same run that ran the Action and left no record still fails finish.
+    await run(world, 601, 1, { command: () => `npx playwright test ${SELECT} --shard=1/2` });
+    const after = await finishOf(world, 601);
+    assert.ok(after.io.failed);
+    assert.strictEqual(after.io.outputs['exactly-once'], 'failed');
   });
 });
 
