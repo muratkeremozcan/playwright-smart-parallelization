@@ -416,6 +416,20 @@ describe('the Action step skipped with an if:', () => {
     await shardOf(2, 2);
     const healed = await finishOf(partial, 604, { env: { GITHUB_RUN_ATTEMPT: '2' } });
     assert.strictEqual(healed.io.failed, null, healed.io.summaryText);
+    // A re-run of the whole workflow deletes that marker, and the listing still returns it.
+    const whole = newWorld();
+    const wholeJob = (shard, attempt, options = {}) =>
+      shardJob(
+        { ws: workspace(), world: whole },
+        { runId: 605, attempt, cwd: 'app', command: command(shard, 2), ...options }
+      );
+    await wholeJob(1, 1);
+    await wholeJob(2, 1, { inputs: { 'publish-history': 'never' } });
+    rerunAll(whole, 605);
+    for (const shard of [1, 2]) await wholeJob(shard, 2);
+    const fresh = await finishOf(whole, 605, { env: { GITHUB_RUN_ATTEMPT: '2' } });
+    assert.strictEqual(fresh.io.failed, null, fresh.io.summaryText);
+    assert.strictEqual(fresh.io.outputs['exactly-once'], 'ok');
   });
 
   test('a later attempt with no artifacts passes only while they cannot have expired', async () => {

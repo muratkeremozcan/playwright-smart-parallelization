@@ -8,7 +8,7 @@ const assert = require('node:assert');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { actionInputs, readInputs, ACTION_INPUTS } = require('../lib/inputs');
+const { actionInputs, inputsKey, readInputs, ACTION_INPUTS } = require('../lib/inputs');
 const { decide, preliminary, reporterPath, runAgeDays } = require('../lib/setup');
 const { pin, pinText } = require('../lib/pin');
 const { onDefaultBranch, trust } = require('../lib/trust');
@@ -71,6 +71,16 @@ describe('inputs', () => {
     }
     // The workers stay Playwright's, so an input of them no longer exists or keys anything.
     assert.strictEqual(prepared(j, { workers: '2' }).key, base);
+  });
+
+  test('the key of refused inputs is the key the same inputs get once they pass', () => {
+    const j = job();
+    const inputs = { 'working-directory': 'later', 'history-key': 'e2e' };
+    const before = inputsKey(inputs, j.env);
+    assert.throws(() => prepared(j, inputs), /does not exist/);
+    fs.mkdirSync(path.join(j.ws, 'later'));
+    assert.strictEqual(prepared(j, inputs).key, before);
+    assert.strictEqual(inputsKey({ ...inputs, 'publish-history': 'never' }, j.env), before);
   });
 
   test('refuses a bad publish-history and a directory outside the workspace', () => {
