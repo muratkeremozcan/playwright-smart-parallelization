@@ -380,6 +380,20 @@ describe('the Action step skipped with an if:', () => {
     assert.strictEqual(after.io.outputs['exactly-once'], 'failed');
   });
 
+  test('with history-key, finish passes a suite whose step was skipped beside one that ran', async () => {
+    requireFixture();
+    const world = newWorld();
+    await run(world, 606, 2, { job: 'e2e', inputs: { 'history-key': 'e2e' } });
+    const smoke = await finishOf(world, 606, { inputs: { 'history-key': 'smoke' } });
+    assert.strictEqual(smoke.io.failed, null, smoke.io.summaryText);
+    assert.strictEqual(smoke.io.outputs['exactly-once'], 'not checked');
+    assert.match(smoke.io.summaryText, /ran the Action's step with history key `smoke`/);
+    const e2e = await finishOf(world, 606, { inputs: { 'history-key': 'e2e' } });
+    assert.strictEqual(e2e.io.outputs['exactly-once'], 'ok');
+    const all = await finishOf(world, 606);
+    assert.strictEqual(all.io.outputs['exactly-once'], 'ok');
+  });
+
   test('a main step that refuses its inputs still leaves a start marker, so finish fails', async () => {
     requireFixture();
     const world = newWorld();
