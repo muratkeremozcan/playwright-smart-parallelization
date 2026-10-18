@@ -4,7 +4,7 @@
  * model of support/model.js, with real Playwright on a copy of the consumer fixture in a
  * subdirectory and a modeled Actions cache and artifact store. These are the rows of the plan:
  * cold start, a warm run from the history the shards published with no finish, a re-run shard,
- * a failed test, rollback, eight shards publishing at once, the command shapes a user writes, a
+ * a failed test, a disabled run, eight shards publishing at once, the command shapes a user writes, a
  * damaged history, a fork pull request and a run without a cache.
  */
 
@@ -49,11 +49,15 @@ function workspace() {
   return ws;
 }
 
-/** Every shard job of one run, each in its own checkout, one after another. */
+/**
+ * Every shard job of one run, each in its own checkout, one after another. `pnp` adds a Yarn
+ * Plug'n'Play loader to each checkout, which disables the Action.
+ */
 async function run(world, runId, total, options = {}) {
   const jobs = [];
   for (let shard = 1; shard <= total; shard++) {
     const ctx = { ws: workspace(), world };
+    if (options.pnp) fs.writeFileSync(path.join(ctx.ws, '.pnp.cjs'), '');
     jobs.push(
       await shardJob(ctx, {
         runId,
@@ -83,7 +87,7 @@ const planSha = (job) => /plan ([0-9a-f]{12})/.exec(planLines(job.user.output)[0
 const samplesOf = (history, runId) =>
   Object.entries(history.tests).filter(([, t]) => t.samples.some(([id]) => id === runId));
 
-describe('cold start, a warm run without finish, a re-run shard, a failed test and rollback', () => {
+describe('cold start, a warm run without finish, a re-run shard, a failed test and a disabled run', () => {
   const world = newWorld();
   let cold;
   let warm;
@@ -148,7 +152,7 @@ describe('cold start, a warm run without finish, a re-run shard, a failed test a
     assert.match(again.post.lines.join('\n'), /already holds these samples|published/);
     const finish = await finishOf(world, 102);
     assert.strictEqual(finish.io.failed, null, finish.io.summaryText);
-    assert.strictEqual(finish.io.outputs.coverage, 'ok');
+    assert.strictEqual(finish.io.outputs['exactly-once'], 'ok');
     assert.strictEqual(finish.io.outputs.mode, 'balanced');
     assert.match(finish.io.summaryText, /\| 2 \| 2 \| /, 'the latest attempt of shard 2');
   });
@@ -173,13 +177,16 @@ describe('cold start, a warm run without finish, a re-run shard, a failed test a
     assert.ok(world.cache.has(key));
     const finish = await finishOf(world, 102);
     assert.strictEqual(finish.io.failed, null, finish.io.summaryText);
-    assert.strictEqual(finish.io.outputs.coverage, 'ok');
+    assert.strictEqual(finish.io.outputs['exactly-once'], 'ok');
   });
 
   test('finish over the cold run: every test ran exactly once', async () => {
     const finish = await finishOf(world, 101);
     assert.strictEqual(finish.io.failed, null, finish.io.summaryText);
-    assert.deepStrictEqual([finish.io.outputs.mode, finish.io.outputs.coverage], ['native', 'ok']);
+    assert.deepStrictEqual(
+      [finish.io.outputs.mode, finish.io.outputs['exactly-once']],
+      ['native', 'ok']
+    );
     assert.match(finish.io.summaryText, /Playwright Smart Parallelization, job `test`: ok/);
   });
 
@@ -195,9 +202,9 @@ describe('cold start, a warm run without finish, a re-run shard, a failed test a
     assert.match(finish.io.summaryText, /ended with status failed/);
   });
 
-  test('rollback: PSP_ARGS is empty, the run is plain Playwright, nothing pinned or published', async () => {
+  test('disabled: PSP_ARGS is empty, the run is plain Playwright, nothing pinned or published', async () => {
     const before = newest(world, keyOf(cold));
-    const off = await run(world, 104, 2, { inputs: { enabled: 'false' } });
+    const off = await run(world, 104, 2, { pnp: true });
     for (const job of off) {
       assert.strictEqual(job.main.io.exported.PSP_ARGS, '');
       assert.strictEqual(job.main.io.outputs.mode, 'disabled');
@@ -222,7 +229,7 @@ describe('cold start, a warm run without finish, a re-run shard, a failed test a
     assert.strictEqual(pages.length, 2, 'every page was read before finish returned');
     assert.strictEqual(finish.io.failed, null);
     assert.deepStrictEqual(
-      [finish.io.outputs.mode, finish.io.outputs.coverage],
+      [finish.io.outputs.mode, finish.io.outputs['exactly-once']],
       ['disabled', 'not checked']
     );
   });
@@ -313,7 +320,7 @@ describe('the command shapes a user writes', () => {
     assert.ok(![...world.cache.keys()].some((k) => k.startsWith('psp-history-')));
     const finish = await finishOf(world, 304);
     assert.match(finish.io.summaryText, /no shard of its job left a record.*\$PSP_ARGS is missing/);
-    assert.strictEqual(finish.io.outputs.coverage, 'failed');
+    assert.strictEqual(finish.io.outputs['exactly-once'], 'failed');
     assert.ok(finish.io.failed);
   });
 
@@ -327,6 +334,7 @@ describe('the command shapes a user writes', () => {
       inputs: { 'history-key': 'smoke' },
       command: (k) => command(k, 2),
     });
+    assert.strictEqual(other.main.error, null);
     assert.strictEqual(other.user.status, 0);
     const scoped = await finishOf(world, 305, { inputs: { 'history-key': 'e2e' } });
     assert.strictEqual(scoped.io.failed, null, scoped.io.summaryText);
@@ -339,7 +347,7 @@ describe('history edge cases', () => {
   test('a damaged newest entry: native with a warning, and the shards publish over it', async () => {
     requireFixture();
     const world = newWorld();
-    const [probe] = await run(world, 401, 1, { inputs: { enabled: 'false' } });
+    const [probe] = await run(world, 401, 1, { pnp: true });
     const key = probe.main.state.key;
     cacheSave(world, cacheKey(key, 1, 1), { 'history.json': Buffer.from('{"schema":') });
     const jobs = await run(world, 402, 2);
@@ -361,10 +369,7 @@ describe('history edge cases', () => {
       event,
       JSON.stringify({ pull_request: { head: { repo: { full_name: 'someone/fork' } } } })
     );
-    const before = newest(
-      world,
-      (await run(world, 502, 1, { inputs: { enabled: 'false' } }))[0].main.state.key
-    );
+    const before = newest(world, (await run(world, 502, 1, { pnp: true }))[0].main.state.key);
     const fork = await run(world, 503, 2, {
       env: {
         GITHUB_EVENT_NAME: 'pull_request',
@@ -489,7 +494,7 @@ describe('a re-run of the whole workflow, which deletes the artifacts of the run
     }
     const finish = await finishOf(world, 902, { env: { GITHUB_RUN_ATTEMPT: '2' } });
     assert.strictEqual(finish.io.failed, null, finish.io.summaryText);
-    assert.strictEqual(finish.io.outputs.coverage, 'ok');
+    assert.strictEqual(finish.io.outputs['exactly-once'], 'ok');
   });
 
   test('with the pin evicted too, the shards of the re-run pin afresh, one snapshot for all', async () => {

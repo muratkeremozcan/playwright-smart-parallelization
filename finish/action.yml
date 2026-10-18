@@ -18,7 +18,7 @@ inputs:
 outputs:
   mode:
     description: 'balanced, native, disabled, or mixed when the checked jobs differ.'
-  coverage:
+  exactly-once:
     description: 'ok (every test ran exactly once), failed, or not checked (disabled).'
   overhead-ms:
     description: 'The per-shard overhead outside Playwright; empty when the jobs API is unreadable or no shard job matches.'

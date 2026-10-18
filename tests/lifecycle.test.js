@@ -28,12 +28,10 @@ const OPTIONS = { config: 'lifecycle.config.js', repeatEach: 2, workers: 2 };
 function lifecycleRun(mode, snapshot = null) {
   const recordDir = tempDir('psp-records-');
   const log = path.join(tempDir('psp-lifecycle-'), 'events.jsonl');
-  const partition = actionPartition({ total: 2, mode, snapshot, recordDir, workers: 2 }).map(
-    (shard, i) => ({
-      ...shard,
-      env: { ...shard.env, PSP_LIFECYCLE_LOG: log, PSP_LIFECYCLE_SHARD: String(i + 1) },
-    })
-  );
+  const partition = actionPartition({ total: 2, mode, snapshot, recordDir }).map((shard, i) => ({
+    ...shard,
+    env: { ...shard.env, PSP_LIFECYCLE_LOG: log, PSP_LIFECYCLE_SHARD: String(i + 1) },
+  }));
   const run = runQualified(OPTIONS, partition);
   const events = fs
     .readFileSync(log, 'utf8')

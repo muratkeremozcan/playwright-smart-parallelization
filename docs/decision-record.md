@@ -28,13 +28,17 @@ We build our own engine (CAP-7).
 
 ## Shape
 
-One JavaScript action that drops into the user's own job: a main step before the user's Playwright command, which adds `$PSP_ARGS`, and a post step after it. The main step pins one history snapshot to the workflow run and decides the mode from its bytes. `$PSP_ARGS` adds a bundled preprocess reporter with `--add-reporter` and leaves the user's config and command alone. The post step uploads the shard's run record and publishes its samples. An optional `finish` action proves exactly-once coverage and writes the summary.
+One JavaScript action that drops into the user's own job: a main step before the user's Playwright command, which adds `$PSP_ARGS`, and a post step after it. The main step pins one history snapshot to the workflow run and decides the mode from its bytes. `$PSP_ARGS` adds a bundled preprocess reporter with `--add-reporter` and leaves the user's config and command alone. The post step uploads the shard's run record and publishes its samples. An optional `finish` action proves that every test ran exactly once and writes the summary.
 
 Shape A (per-shard `--test-list` files) is rejected: `--test-list` is a lossy selector that cannot pick out titles with `›`, title prefixes or helper-defined tests exactly ([limits](https://github.com/muratkeremozcan/playwright-smart-parallelization/blob/6164df685c3f13c5c6936d0473acfec10212e91f/docs/playwright-test-list-selection-limits.md)).
 
 ### Prepare dropped, finish optional (2026-10-17)
 
-The three-phase interface (a prepare job, a run step that owned the Playwright command, a finish job) is replaced before v1. A prepare job and a plan output cost every user two extra jobs of wiring, and owning the command broke npm scripts, shell variables and checkouts of another commit. Each shard now pins the snapshot itself, as playwright-shard-balancer's restore action does but in a run artifact, and publishes its own samples by compare-and-swap, so the next run balances with no finish job. Finish stays as an optional check, because coverage across shards can only be proven after all of them, and a run without it still balances.
+The three-phase interface (a prepare job, a run step that owned the Playwright command, a finish job) is replaced before v1. A prepare job and a plan output cost every user two extra jobs of wiring, and owning the command broke npm scripts, shell variables and checkouts of another commit. Each shard now pins the snapshot itself, as playwright-shard-balancer's restore action does but in a run artifact, and publishes its own samples by compare-and-swap, so the next run balances with no finish job. Finish stays as an optional check, because a test running exactly once across shards can only be proven after all of them, and a run without it still balances.
+
+### Inputs derived, workers from Playwright (2026-10-18)
+
+The `workers`, `runner-label` and `enabled` inputs are removed before v1, as is `publish-history: false`: each repeated configuration the user already has. Playwright resolves the workers from the config, the command and the CPUs, the runner context names the OS and architecture, and an `if:` on the step skips it. The main step runs before Playwright resolves the workers, so the count rides in the history: each shard publishes the count it resolved, and every shard plans for the count of its pinned snapshot, so shards that resolve different counts still plan one split. The inputs kept are the ones no context gives: `working-directory` for a workspace with several Playwright versions, `history-key` for suites the job id cannot tell apart, `publish-history: true` for a repository that runs its suite only on pull requests, and `github-token`, the one way an action receives the job token.
 
 ## Rules
 
@@ -47,10 +51,10 @@ The three-phase interface (a prepare job, a run step that owned the Playwright c
 - Per-test units were investigated for fully parallel projects (2026-10-17) and rejected: the public API exposes `FullProject.fullyParallel`, but no field, annotation or `--list` output shows a `describe.configure({ mode: 'serial' | 'default' })` group or a `beforeAll` hook that keeps tests together.
   Playwright groups by the private `_parallelMode` and hooks, so only whole files keep every serial group whole without private fields.
 - `--no-deps` is read from the user's command line, since the public `FullProject.dependencies` keeps its configured value; under it every project is ordinary and shares out in the split.
-- `--last-failed` is refused before any test: Playwright filters after the split, where no reporter sees it, so a shard cannot prove the selection. The workaround is `enabled: false` for that command.
+- `--last-failed` is refused before any test: Playwright filters after the split, where no reporter sees it, so a shard cannot prove the selection. The workaround is an `if:` that skips the Action's step for that command.
 - Intentional skips are allowed and not flagged; a run where every test skipped fails finish.
 - One unnamed project (a config without `projects`) has the identity `''`; two or more unnamed or duplicate names are refused before any test.
-- The history key is working directory, the `workers` input, runner label and `history-key`. The command is the user's and runs after the Action, so a filter shares the history; each test keeps its own samples. Workers from the config or the CPUs, config path, environment and Playwright version share it too, so callers separate materially different setups with `history-key`, `runner-label` or an explicit `workers`.
+- The history key is working directory, runner OS and architecture, and `history-key`. The command is the user's and runs after the Action, so a filter shares the history; each test keeps its own samples. The worker count, config path, environment and Playwright version share it too, so callers separate materially different setups with `history-key`.
 - The Action runs on node24, so a self-hosted runner needs Actions runner v2.327.1 or later.
 - The pin is a cache entry keyed by history key, job id and run id, never by the commit, so a workflow that checks out another commit plans the same on every shard and re-run. The cache is the one service of a run with a create-only write: of the saves of one key, exactly one creates it. The shard whose save created the pin plans from its own bytes, and every other shard reads the winner's bytes back, also the shards whose own saves lost.
 - The pin was an artifact of the run until v1, on the assumption that an artifact name is unique in a run. Measured on GitHub, it is unique within one job only: eight shard jobs that upload one name at once create eight artifacts, `getArtifact` returns the highest id, and ids are not in the order of creation, so shards planned from different snapshots (run 39055263301). A re-run of the whole workflow also deletes every artifact of the run, the pin with it, so its shards failed before any test.
@@ -64,13 +68,13 @@ The three-phase interface (a prepare job, a run step that owned the Playwright c
 - The start marker uploads while the shard reads its pin, and the main step waits for both, so a shard that fails on its pin still leaves its marker. The newest history restores while the shard looks for the pin, so a shard that pins waits for the slower of the two only.
 - The post step uploads the run record while it publishes the samples; finish downloads the records and markers 16 at a time, while it reads the jobs API.
 - `$PSP_ARGS` names a copy of the reporter in a `node_modules` folder of the job's temp folder: Playwright compiles a reporter outside `node_modules` with Babel first, which cost each shard about half a second on a hosted runner.
-- Rollback (`enabled: false`) leaves `$PSP_ARGS` empty and uploads a status record, so finish tells a rollback from shards that never ran.
-- The plan packs for the `workers` input, or for 1 worker when it is unset, so every shard plans the same on any runner.
+- A disabled shard leaves `$PSP_ARGS` empty and uploads a status record, so finish tells it from shards that never ran.
+- The plan packs for the worker count of the pinned snapshot, the count the shard that published it resolved, so every shard plans the same on any runner. A shard whose Playwright resolved another count says so in one line and keeps the plan; Playwright runs it with its own count.
 
 ## History publish
 
 - `publish-history: auto` publishes from the default branch only. A cache entry saved on another ref is visible to that ref alone, so a branch would read its own stale entries.
-- `true` also publishes from same-repository branches and pull requests, into their own cache scope. `false` never publishes.
+- `true` also publishes from same-repository branches and pull requests, into their own cache scope.
 - Fork pull requests and `pull_request_target` never publish; they read the base history like any run.
 - Every shard publishes the samples of its passing tests under the run's id, also when another test failed; a failed attempt adds no sample. A test has one sample per run whichever shard ran it; a setup test several shards ran keeps the smallest. This replaces the one trusted writer of the original contract, so the next run balances with no finish job.
 - A cache key is immutable, so a save onto an existing key changes nothing, and a save creates its key only when no other writer reserved it. A save that created the key is published with no read-back. A shard whose save did not create the key reads it back: other bytes mean another writer won, that entry joins the merge, and the shard tries the next key at once, since every entry holds the one before it.
@@ -82,9 +86,9 @@ The three-phase interface (a prepare job, a run step that owned the Playwright c
 ## Review cases (G2)
 
 1. One snapshot per run and job, never per commit: `tests/units.test.js` (pin), `tests/action-flow.test.js` (head commit). The corpus is checked in finish: `tests/check.test.js`.
-2. One decision from the pinned bytes, strict shards, rollback: `tests/units.test.js`, `tests/reporter-safety.test.js`, `tests/action-flow.test.js`.
+2. One decision from the pinned bytes, strict shards, a disabled run: `tests/units.test.js`, `tests/reporter-safety.test.js`, `tests/action-flow.test.js`.
 3. Expected shards and attempts: `tests/check.test.js`, `tests/action-flow.test.js`.
-4. A failed test writes only the samples of the tests that passed; keys separate runner, workers and history key: `tests/history.test.js`, `tests/action-flow.test.js`, `tests/units.test.js`.
+4. A failed test writes only the samples of the tests that passed; keys separate runner and history key: `tests/history.test.js`, `tests/action-flow.test.js`, `tests/units.test.js`.
 5. Order, replay and permutation give one byte form: `tests/history.test.js`. The plan and the history read no clock; dates only expire entries.
 6. Window behavior and the passing-attempt sample: `tests/history.test.js`, `tests/lifecycle.test.js`. Its bias shows in the predicted and measured columns of every summary.
 7. Untrusted runs read and never write; a pin of another job or run is refused: `tests/units.test.js`, `tests/action-flow.test.js`.
@@ -102,15 +106,15 @@ The three-phase interface (a prepare job, a run step that owned the Playwright c
 - NSX P8 damaged, failed, cancelled: `action-flow` (damaged entry, failed test), `check` (not run).
 - X1 damaged snapshot: `reporter-safety`.
 - X2 delayed older run: `history` (delayed older run).
-- Workers input: `reporter-balance` (plan sha under workers), `units` (history key).
+- Workers from Playwright: `reporter-balance` (one plan under different resolved counts), `history` (the count of the newest run), e2e workers legs.
 - Pinned snapshot and re-run: `units` (the pin), `action-flow` (re-run shard), e2e re-run.
 - Max failures and latest attempt: `reporter-safety` (max failures), `check` (latest attempt).
 - Summary and aggregate failures: `units` (markdown), `check`.
-- Rollback: `reporter-balance` (native leaves equal plain), `action-flow` (rollback).
+- Disabled: `reporter-balance` (native leaves equal plain), `action-flow` (disabled run).
 - Trusted writer, provenance, fingerprint: `action-flow` (cold), `check` (fingerprint), `units` (publish rule).
 - Filtered run: its tests keep their own samples in the shared history (`action-flow`, shell variables); expiry: `history`.
 - Zero samples: `history`.
-- Runner and workers keys: `units` (history key).
+- Runner key: `units` (history key).
 - No network: `reporter-safety` (guard).
 - Plan line and summary row: `reporter-balance`, `units`.
 - Strict shards: `reporter-safety`.

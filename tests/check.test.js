@@ -58,7 +58,7 @@ const problems = (records, p = plan) => checkRun(p, records).problems.join('\n')
 test('a complete run passes', () => {
   const result = checkRun(plan, complete());
   assert.deepStrictEqual(result.problems, []);
-  assert.ok(result.ok && result.coverageOk && result.passed);
+  assert.ok(result.ok && result.exactlyOnceOk && result.passed);
 });
 
 describe('fails', () => {
@@ -133,9 +133,9 @@ describe('fails', () => {
     records[1].tests[0].ran = false;
     assert.match(problems(records), /1 test\(s\) did not run/);
   });
-  test('with a failed shard, which leaves the coverage proven', () => {
+  test('with a failed shard, which leaves the exactly-once check proven', () => {
     const result = checkRun(plan, [record(1, ['a', 'b']), record(2, ['c'], { status: 'failed' })]);
-    assert.ok(result.coverageOk);
+    assert.ok(result.exactlyOnceOk);
     assert.strictEqual(result.ok, false);
     assert.match(result.problems.join('\n'), /shard 2 ended with status failed/);
   });

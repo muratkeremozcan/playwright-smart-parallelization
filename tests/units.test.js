@@ -52,26 +52,30 @@ const someHistory = (key) =>
     commit: 'c',
     fingerprint: 'f',
     date: '2026-10-16',
+    workers: 1,
     samples: new Map([[testKey('chromium', 'a.spec.js', ['x']), 100]]),
   }).history;
 
 describe('inputs', () => {
-  test('the history key changes with the working directory, workers, runner label and history-key', () => {
+  test('the history key changes with the working directory, runner OS and arch, and history-key', () => {
     const j = job();
     fs.mkdirSync(path.join(j.ws, 'other'));
     const base = prepared(j).key;
-    assert.notStrictEqual(prepared(j, { workers: '2' }).key, base);
-    assert.notStrictEqual(prepared(j, { 'runner-label': 'big' }).key, base);
     assert.notStrictEqual(prepared(j, { 'history-key': 'staging' }).key, base);
     assert.notStrictEqual(prepared(j, { 'working-directory': 'other' }).key, base);
-    assert.strictEqual(prepared(j, { enabled: 'false' }).key, base);
+    const arm = { ...j, env: { ...j.env, RUNNER_ARCH: 'ARM64' } };
+    assert.notStrictEqual(prepared(arm).key, base);
+    const mac = { ...j, env: { ...j.env, RUNNER_OS: 'macOS' } };
+    assert.notStrictEqual(prepared(mac).key, base);
+    // The workers stay Playwright's, so an input of them no longer exists or keys anything.
+    assert.strictEqual(prepared(j, { workers: '2' }).key, base);
+    assert.strictEqual(prepared({ ...j, env: { ...j.env, RUNNER_NAME: 'other' } }).key, base);
   });
 
-  test('refuses bad workers, enabled, publish-history and a directory outside the workspace', () => {
+  test('refuses a bad publish-history and a directory outside the workspace', () => {
     const j = job();
-    assert.throws(() => prepared(j, { workers: '0' }), /workers input must be a whole number/);
-    assert.throws(() => prepared(j, { enabled: 'yes' }), /enabled input must be true or false/);
     assert.throws(() => prepared(j, { 'publish-history': 'x' }), /publish-history input/);
+    assert.throws(() => prepared(j, { 'publish-history': 'false' }), /must be auto or true/);
     assert.throws(() => prepared(j, { 'working-directory': '..' }), /outside the workspace/);
     assert.throws(() => prepared(j, { 'working-directory': 'nope' }), /does not exist/);
   });
@@ -84,11 +88,7 @@ describe('inputs', () => {
 });
 
 describe('the main step decides the mode of its shard', () => {
-  test('enabled false, Playwright 1.62, no Playwright and Plug and Play: disabled', () => {
-    assert.match(
-      preliminary(prepared(job(), { enabled: 'false' })).reason,
-      /enabled input is false/
-    );
+  test('Playwright 1.62, no Playwright and Plug and Play: disabled', () => {
     assert.match(
       preliminary(prepared(job({ version: '1.62.0' }))).reason,
       /1\.62\.0 in app is below 1\.63\.0/
@@ -140,6 +140,11 @@ describe('the main step decides the mode of its shard', () => {
       /not a history entry of this key/
     );
     assert.strictEqual(decide({ unpinned: true, reason: 'no cache' }, key).mode, 'native');
+    const sourceless = serializeHistory({ ...someHistory(key), source: null });
+    assert.match(
+      decide({ matchedKey: matched, history: sourceless }, key).reason,
+      /names no run to take workers from/
+    );
   });
 
   test('the reporter is copied into a node_modules folder of the job temp, so Playwright loads it uncompiled', () => {
@@ -538,7 +543,6 @@ describe('publish-history', () => {
     assert.strictEqual(trusted(pr('o/r'), 'auto'), false);
     assert.ok(trusted(push('refs/heads/feature'), 'true'));
     assert.ok(trusted(pr('o/r'), 'true'));
-    assert.strictEqual(trusted(push('refs/heads/main'), 'false'), false);
     const schedule = {
       GITHUB_REPOSITORY: 'o/r',
       GITHUB_EVENT_NAME: 'schedule',
@@ -546,7 +550,6 @@ describe('publish-history', () => {
       GITHUB_EVENT_PATH: event({ schedule: '0 0 * * *' }),
     };
     assert.ok(trusted(schedule, 'auto'));
-    assert.strictEqual(trusted(schedule, 'false'), false);
     for (const mode of ['auto', 'true']) {
       assert.strictEqual(trusted(pr('fork/r'), mode), false);
       assert.strictEqual(trusted(pr(null), mode), false);
@@ -577,6 +580,7 @@ describe('the compare-and-swap steps', () => {
     commit: 'c',
     fingerprint: 'f',
     date: '2026-10-16',
+    workers: 1,
     samples: [[testKey('p', 'f', ['t']), 100 + id]],
   });
   const entry = (id) =>
@@ -974,6 +978,7 @@ describe('the publish loop', () => {
     commit: 'c',
     fingerprint: 'f',
     date: '2026-10-16',
+    workers: 1,
     samples: [[testKey('p', `s${id}.spec.js`, ['t']), id]],
   });
   const entry = (id) =>

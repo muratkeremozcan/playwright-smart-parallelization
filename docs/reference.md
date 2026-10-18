@@ -4,13 +4,13 @@ Facts about the Action that the README example does not need. Every input is in 
 
 ## The command
 
-- `$PSP_ARGS` holds `--add-reporter=<the Action's reporter>`, plus `--workers=<n>` when the `workers` input is set. Put it last and unquoted.
+- `$PSP_ARGS` holds `--add-reporter=<the Action's reporter>`. Put it last and unquoted.
 - An npm script passes it through after `--`: `npm run test:e2e -- --shard=1/4 $PSP_ARGS`.
 - The shard comes from your own `--shard` (or `shard` in the config). A run without one is not balanced; it is recorded as one shard.
 - Playwright keeps only the last `--add-reporter`, so add your own reporters in the config, not on the command line.
 - The Action exports the reporter's options as `PSP_*` variables to the later steps of the job.
 - Under `--no-deps`, setup and teardown projects are ordinary projects, so the split shares their tests out like any other.
-- `--last-failed` stops every shard before any test: Playwright applies it after the split, so no shard can prove what the run selected. Run that command with `enabled: false`.
+- `--last-failed` stops every shard before any test: Playwright applies it after the split, so no shard can prove what the run selected. Skip the Action's step for that command with an `if:`, which leaves `$PSP_ARGS` empty.
 
 ## The plan
 
@@ -18,13 +18,14 @@ Facts about the Action that the README example does not need. Every input is in 
 
 ## Workers
 
-- With `workers` set, `$PSP_ARGS` passes it to Playwright and the plan packs every shard for that many workers.
-- With `workers` unset, Playwright resolves the workers from the runner's CPUs and the plan packs for 1 worker per shard, so every shard plans the same on any runner.
+- The workers are Playwright's: your config, `--workers` on your command and the runner's CPUs decide them, and the Action changes nothing.
+- Each shard publishes the count it resolved with its samples, and every shard plans for the count of the pinned snapshot, so all shards plan one split even when a percentage resolves differently on runners with other CPUs.
+- A shard whose Playwright resolved another count logs one line naming both and keeps the plan; Playwright runs it with its own count. After a change of workers, the first run plans for the old count and the next for the new one.
 
 ## Outputs
 
 - The Action outputs `mode` (`balanced`, `native` or `disabled`), `reason` and `args` (the value of `$PSP_ARGS`).
-- `finish` outputs `mode`, `coverage` (`ok`, `failed` or `not checked`) and `overhead-ms`.
+- `finish` outputs `mode`, `exactly-once` (`ok`, `failed` or `not checked`) and `overhead-ms`.
 
 ## Finish
 
@@ -37,8 +38,8 @@ Facts about the Action that the README example does not need. Every input is in 
 
 ## History
 
-- The history is keyed by working directory, the `workers` input, runner label and `history-key`; the shard count and the command's filters can change freely, since each test keeps its own samples.
-- Nothing else separates it: with `workers` unset, a config change of workers or a CPU-resolved count shares the history, and so do config path, browser options under one project name, environment and Playwright version. Give materially different setups their own `history-key` or `runner-label`, and set `workers` where the count differs.
+- The history is keyed by working directory, the runner's OS and architecture, and `history-key`; the shard count, the workers and the command's filters can change freely, since each test keeps its own samples.
+- Nothing else separates it: config path, browser options under one project name, runner size, environment and Playwright version share the history. Give materially different setups their own `history-key`.
 - Each shard publishes the samples of its passing tests, also when another test of the shard failed; a failed attempt adds no sample.
 - Every shard of a job and every re-run of one plans from one snapshot, pinned in a `psp-pin-v2-*` cache entry of the workflow run, never to the checked-out commit. Each shard's run record keeps a copy, so a re-run plans the same after the cache dropped the pin.
 - It lives in the Actions cache, which drops entries unused for 7 days, so a quiet repo starts cold again.
@@ -46,6 +47,6 @@ Facts about the Action that the README example does not need. Every input is in 
 ## Runner
 
 - The Action runs on the runner's Node 24, so a self-hosted runner needs Actions runner v2.327.1 or later; installing Node 24 in the job does not upgrade the runner. The reporter runs in your Node, which Playwright 1.63 and later needs at 20 or above.
-- Playwright below 1.63, an unknown Playwright version, or Yarn Plug'n'Play leave `$PSP_ARGS` empty: plain `--shard`.
+- Playwright below 1.63, an unknown Playwright version, or Yarn Plug'n'Play leave `$PSP_ARGS` empty: plain `--shard`. The version is read from `working-directory` up, else the lowest of the projects under the workspace, so set `working-directory` only when the workspace holds several Playwright versions.
 - Without an Actions cache, or with a cache mode that refuses reads or writes, no snapshot can be pinned, so every shard runs native and publishes nothing.
 - A shard whose pin the cache dropped plans from the copy in the run records of the shards that already ran. With artifacts kept under 30 days, the time a run can be re-run, a re-run that finds neither and is older than the retention stops before any test; start a new run. The Action reads the run's age with `github-token`, which needs `actions: read`.

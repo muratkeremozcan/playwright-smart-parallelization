@@ -46,8 +46,12 @@ let runs = 900;
 function newRun() {
   const world = newWorld();
   const runId = ++runs;
-  const job = (shard, attempt, command = good, options = {}) =>
-    shardJob({ ws: workspace(), world }, { runId, attempt, command: command(shard), ...options });
+  const job = (shard, attempt, command = good, options = {}) => {
+    const ws = workspace();
+    // A Yarn Plug'n'Play loader disables the Action for that job.
+    if (options.pnp) fs.writeFileSync(path.join(ws, '.pnp.cjs'), '');
+    return shardJob({ ws, world }, { runId, attempt, command: command(shard), ...options });
+  };
   const finish = (attempt) =>
     finishJob({ ws: workspace(), world }, { runId, env: { GITHUB_RUN_ATTEMPT: String(attempt) } });
   return { world, runId, job, finish };
@@ -70,7 +74,7 @@ describe('a shard job that started and left no record', () => {
     }
     const finished = await run.finish(2);
     assert.strictEqual(finished.result.ok, false);
-    assert.strictEqual(finished.result.coverage, 'failed');
+    assert.strictEqual(finished.result.exactlyOnce, 'failed');
     assert.ok(
       problemsOf(finished).some((p) =>
         /2 shard job\(s\) of attempt 2 left no record.*shard 1, 2 cannot stand/.test(p)
@@ -164,23 +168,23 @@ describe('the start marker', () => {
     assert.strictEqual(job.user.status, 0);
   });
 
-  test('a disabled job beside a job that left no record still fails coverage', async () => {
+  test('a disabled job beside a job that left no record still fails the exactly-once check', async () => {
     const run = newRun();
-    await run.job(1, 1, good, { inputs: { enabled: 'false' } });
+    await run.job(1, 1, good, { pnp: true });
     await run.job(1, 1, broken, { job: 'other' });
     const finished = await run.finish(1);
     assert.strictEqual(finished.result.ok, false);
-    assert.strictEqual(finished.io.outputs.coverage, 'failed');
+    assert.strictEqual(finished.io.outputs['exactly-once'], 'failed');
   });
 
-  test('a second job that started and left no record fails coverage too', async () => {
+  test('a second job that started and left no record fails the exactly-once check too', async () => {
     const run = newRun();
     for (const shard of [1, 2]) await run.job(shard, 1);
     await run.job(1, 1, broken, { job: 'other' });
     const finished = await run.finish(1);
     assert.strictEqual(finished.result.ok, false);
-    assert.strictEqual(finished.result.coverage, 'failed');
-    assert.strictEqual(finished.io.outputs.coverage, 'failed');
+    assert.strictEqual(finished.result.exactlyOnce, 'failed');
+    assert.strictEqual(finished.io.outputs['exactly-once'], 'failed');
     assert.match(finished.io.summaryText, /job other started in attempt 1/);
   });
 });
@@ -204,7 +208,7 @@ describe('records of earlier attempts that may stand', () => {
     await run.job(2, 2);
     const finished = await run.finish(2);
     assert.strictEqual(finished.result.ok, true, problemsOf(finished).join('\n'));
-    assert.strictEqual(finished.result.coverage, 'ok');
+    assert.strictEqual(finished.result.exactlyOnce, 'ok');
     assert.deepStrictEqual(attemptsOf(finished), [1, 2]);
   });
 

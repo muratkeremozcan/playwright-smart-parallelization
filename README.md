@@ -1,18 +1,25 @@
 # playwright-smart-parallelization
 
-Balances Playwright shards by test duration, so all shards finish at about the same time.
+Balances Playwright shards by past test durations, so the run stops waiting on one slow shard.
 
-Native `--shard` splits by test count, and keeps each file whole without `fullyParallel`.
-With 2 shards, one can take 10 minutes and the other 15, and the run waits for the 15.
-This Action splits by past durations, kept in your repo's own Actions storage.
+With two shards that take 10 and 15 minutes, the workflow waits for the 15.
+This Action moves spec files between shards by how long they took before.
+It runs in your existing jobs and keeps the timing history in your repository's GitHub Actions cache, with no other service or account.
 
 ## Usage
 
-Pin a commit sha until v1 is released.
-
-Add one step before your Playwright command, and `$PSP_ARGS` at the end of it:
+Needs Playwright 1.63 or later.
 
 ```yaml
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+  actions: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -23,29 +30,45 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
-      - run: npm ci && npx playwright install --with-deps chromium
-      - uses: muratkeremozcan/playwright-smart-parallelization@<sha>
+        with:
+          node-version: latest
+      - run: npm ci
+      - run: npx playwright install --with-deps
+      - uses: muratkeremozcan/playwright-smart-parallelization@v1 # or a full commit sha
       - run: npx playwright test --shard=${{ matrix.shard }}/${{ strategy.job-total }} $PSP_ARGS
 ```
 
-Your own `playwright test` command works as it is: an npm script as `npm run test:e2e -- --shard=1/4 $PSP_ARGS`, shell variables, filters and a project in a subdirectory.
-A command with `--last-failed` needs `enabled: false`; see [`docs/reference.md`](docs/reference.md).
-Each shard publishes its own test times from the default branch, so the next run balances with no extra job.
+Add the Action before your test command and append `$PSP_ARGS`, unquoted, to that command.
+Your filters and shard arguments stay as they are, and an npm script works too: `npm run test:e2e -- --shard=1/4 $PSP_ARGS`.
 
-For a cross-shard check that every test ran exactly once, and the shard times in the job summary, add the finish action to the job that merges your reports:
+The first run has no history, so it runs native sharding and records the durations.
+Each shard on the default branch then publishes its passing tests' times, and pull requests read that history without writing it.
+A cache entry unused for 7 days expires, so a quiet repository starts cold again; see [history](docs/reference.md#history) to keep suites or environments apart.
+
+To return to plain Playwright, skip the Action step with an `if:` condition, which leaves `$PSP_ARGS` empty.
+`--last-failed` needs the step skipped.
+Playwright resolves the workers from your config and command, and every shard plans for the count the history recorded.
+
+### Optional: check that every test ran once
+
+For a check that every selected test ran exactly once across shards, and a shard timing summary, add a job under `jobs:`:
 
 ```yaml
-- uses: muratkeremozcan/playwright-smart-parallelization/finish@<sha>
+finish:
+  needs: test
+  if: ${{ always() }}
+  runs-on: ubuntu-latest
+  steps:
+    - uses: muratkeremozcan/playwright-smart-parallelization/finish@v1 # same ref as the Action step
 ```
 
-To turn balancing off, set `enabled: false`: `$PSP_ARGS` is empty and the run is plain Playwright.
-
-All inputs are in [`action.yml`](action.yml); whole-file units, keeping histories apart, outputs and the runner needs are in [`docs/reference.md`](docs/reference.md).
+Finish reads the Action's own run records and does not merge Playwright reports, so your report upload and merge steps stay as they are.
+See [finish](docs/reference.md#finish) for multiple suites or matrix dimensions.
 
 ## Results
 
-On [pw-parallel-test](https://github.com/muratkeremozcan/pw-parallel-test): 605 sleep-only tests in 67 spec files, Playwright 1.64.1, `fullyParallel` on, 2 or 4 workers per shard as each row shows, the Action at `d3633df`.
-Each number is a median of 3 to 6 runs and links to its median run.
+On [pw-parallel-test](https://github.com/muratkeremozcan/pw-parallel-test): 605 sleep-only tests in 67 spec files, Playwright 1.64.1, `fullyParallel` on, the Action at `d3633df`.
+Each number is a median of 3 to 6 warm runs and links to its median run.
 
 ### Slowest shard, 4 shards
 
@@ -70,7 +93,26 @@ Each number is a median of 3 to 6 runs and links to its median run.
 | 8 × 2            |  [94.0 s](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39076564278) |  [92.0 s](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39076694533) |    -2% |
 | 8 × 4            |  [68.0 s](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39079112300) |  [74.0 s](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39077800664) |    +9% |
 
-All runs and other layouts: [RESULTS.md](https://github.com/muratkeremozcan/pw-parallel-test/blob/625502a1962b3e1ddc6fb324e242586c6e003a77/RESULTS.md).
+Slowest shard is Playwright's test time; completion runs from the first job start to the last job end, finish included.
+Shard-job machine time was higher with the Action in every layout.
+All runs, cold starts and machine time are in [RESULTS.md](https://github.com/muratkeremozcan/pw-parallel-test/blob/625502a1962b3e1ddc6fb324e242586c6e003a77/RESULTS.md).
+
+## How it works
+
+1. Playwright loads the suite with your config and filters, and `$PSP_ARGS` adds a reporter whose `Reporter.preprocess` hook runs before any test.
+2. Every shard reads the same timing snapshot, pinned for that workflow run, and runs the same deterministic planner, so all shards agree on the split.
+   A unit is one spec file in one project at one repeat, kept whole even with `fullyParallel`, and Playwright still owns setup and teardown dependencies.
+3. The reporter calls `TestRun.exclude()` for tests that belong to other shards and `TestRun.skipSharding()` so Playwright does not split them a second time.
+4. Playwright runs the rest with its normal workers, fixtures, retries and your reporters.
+5. After the job, each shard uploads its run record and, on the default branch, merges its passing samples into the history in the cache.
+
+Large spec files limit how even the shards can get, and install, app start and runner queues still take their time, so balancing helps most when uneven test time is what holds up the run.
+
+## Reference
+
+- [Reference](docs/reference.md): the command, workers, outputs, finish, history and runner needs.
+- [Action inputs](action.yml) and [finish inputs](finish/action.yml).
+- [Design decisions](docs/decision-record.md).
 
 ## Maintaining this repo
 
@@ -91,6 +133,7 @@ The harness and the release workflow are in [docs/development.md](docs/developme
 3. Tick **Publish this Action to the GitHub Marketplace**. On the first release, accept the agreement and pick a primary category.
 4. Click **Publish release**. The workflow then verifies the release and moves the major tag (`v1`) to it.
 
-## License
+## License and attribution
 
-[MIT](LICENSE)
+[MIT](LICENSE).
+Includes MIT-licensed code adapted from Gary Parker's [playwright-shard-balancer](https://github.com/qa-gary-parker/playwright-shard-balancer).

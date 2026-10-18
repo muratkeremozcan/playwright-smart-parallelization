@@ -9,15 +9,18 @@
  * no network call.
  *
  * Balanced mode: `preprocess` reads the pinned snapshot, checks its sha, prices every unit (one
- * spec file of one project at one repeat), plans the run, excludes the units of the other shards,
- * turns Playwright's own split off and logs one plan line. Any problem with the snapshot throws,
- * so the shard fails before any test runs. Native mode, and any run without `--shard`, leaves the
+ * spec file of one project at one repeat), plans the run for the worker count the snapshot
+ * carries, excludes the units of the other shards, turns Playwright's own split off and logs one
+ * plan line. Every shard reads one snapshot, so every shard packs for one count; a shard whose
+ * Playwright resolved another count, such as a percentage on a runner with other CPUs, says so in
+ * one line and keeps the plan, so the split stays exactly once. Playwright runs it with its own
+ * count. Any problem with the snapshot throws, so the shard fails before any test runs. Native mode, and any run without `--shard`, leaves the
  * split to Playwright and only records. In every mode `onEnd` writes the run record that the
  * Action's post step publishes from and the finish action checks.
  *
  *   PSP_MODE           balanced | native
  *   PSP_SNAPSHOT       the snapshot file (balanced), PSP_SNAPSHOT_SHA its sha
- *   PSP_KEY            the history key, PSP_WORKERS the workers the plan packs for
+ *   PSP_KEY            the history key
  *   PSP_RECORD         where onEnd writes the record
  *   PSP_PINNED         whether the mode came from a pinned snapshot
  *   PSP_START          the token of the start marker the main step uploaded
@@ -56,7 +59,6 @@ function optionsFromEnv(env = process.env) {
   };
   return {
     mode,
-    workers: int('PSP_WORKERS', 1),
     snapshot: env.PSP_SNAPSHOT || null,
     snapshotSha: env.PSP_SNAPSHOT_SHA || null,
     key: env.PSP_KEY || '',
@@ -154,6 +156,7 @@ function readSnapshot(options) {
   }
   const history = parseHistory(text, { key: options.key, source: 'the snapshot' });
   if (Object.keys(history.tests).length === 0) throw new Error('the snapshot has no entries');
+  if (!history.source) throw new Error('the snapshot names no run, so no worker count to plan for');
   return { history, sha };
 }
 
@@ -182,7 +185,7 @@ class SmartParallelizationReporter {
       key: this.options.key,
       fingerprint: null,
       playwright: null,
-      workers: this.options.workers,
+      workers: null,
       planSha: null,
       snapshotSha: null,
       predictedMs: null,
@@ -207,6 +210,7 @@ class SmartParallelizationReporter {
     this.record.shard = shard;
     this.record.playwright = config.version;
     this.record.fingerprint = fingerprint(options.key, config.version);
+    this.record.workers = config.workers;
     let invocation;
     try {
       invocation = parseInvocation(options.argv);
@@ -216,8 +220,8 @@ class SmartParallelizationReporter {
     if (invocation.lastFailed) {
       throw new Error(
         `${PREFIX} ${label}: --last-failed is not supported. Playwright applies it after the ` +
-          'split, so no shard can prove which tests the run selected; run that command with the ' +
-          "Action's enabled: false, which leaves PSP_ARGS empty and the run plain Playwright"
+          "split, so no shard can prove which tests the run selected; skip the Action's step for " +
+          'that command with an if: condition, which leaves $PSP_ARGS empty and the run plain Playwright'
       );
     }
     const projects = projectsOf(config, invocation);
@@ -280,13 +284,14 @@ class SmartParallelizationReporter {
       estimator,
       (project) => projectDeps.get(project) || []
     );
-    const plan = balance(
-      units,
-      shard.total,
-      options.workers,
-      setupCosts(setupTests, estimator),
-      phases
-    );
+    const workers = snapshot.history.source.workers;
+    if (workers !== config.workers) {
+      log(
+        `${label}: Playwright resolved ${config.workers} worker(s), the pinned snapshot ` +
+          `${workers}; every shard plans for ${workers}, so the split stays exactly once`
+      );
+    }
+    const plan = balance(units, shard.total, workers, setupCosts(setupTests, estimator), phases);
     const mine = plan.shards[shard.current - 1];
     const keep = new Set();
     for (const unit of mine.units) for (const index of members.get(unit.id)) keep.add(index);
@@ -307,13 +312,14 @@ class SmartParallelizationReporter {
     log(
       `${label}: balanced, ${mine.files} files, ${mine.tests} tests, ~${formatMs(mine.wallMs)} ` +
         `(all shards ${formatMs(Math.min(...walls))}-${formatMs(Math.max(...walls))}), ` +
-        `${known}/${tests.length} tests known, ${options.workers} worker(s), ` +
+        `${known}/${tests.length} tests known, planned for ${workers} worker(s), ` +
         `snapshot ${short(snapshot.sha)}, plan ${short(plan.sha)}`
     );
   }
 
   onBegin(config, suite) {
     this.config = this.config || config;
+    this.record.workers = this.record.workers || config.workers;
     this.record.playwright = this.record.playwright || config.version;
     this.record.fingerprint =
       this.record.fingerprint || fingerprint(this.options.key, config.version);

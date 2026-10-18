@@ -6,7 +6,7 @@
  * projects, so every selected test is in the corpus and runs once, in native and balanced mode,
  * with no `--project` and with several; with dependencies on, setup runs on every shard that needs
  * it; and `--last-failed`, which Playwright applies after the split, stops every shard before any
- * test, while the same command with the Action disabled runs as plain Playwright.
+ * test, while the same command without the Action runs as plain Playwright.
  */
 
 const { test, describe, before } = require('node:test');
@@ -108,6 +108,15 @@ before(() => {
   requireFixture();
   dir = writeProject();
   const history = emptyHistory(KEY);
+  history.runs = [1];
+  history.source = {
+    run: 1,
+    attempt: 1,
+    commit: 'c',
+    fingerprint: 'f',
+    date: '2026-10-16',
+    workers: 1,
+  };
   for (const [file, title, ms] of [
     ['leaf-a.spec.js', 'a-one', 4000],
     ['leaf-b.spec.js', 'b-one', 1000],
@@ -213,7 +222,7 @@ describe('--last-failed stops every shard before any test', () => {
       for (const shard of run) {
         assert.strictEqual(shard.status, 1);
         assert.match(shard.output, /--last-failed is not supported/);
-        assert.match(shard.output, /enabled: false/);
+        assert.match(shard.output, /skip the Action's step for that command with an if: condition/);
         assert.deepStrictEqual(shard.record.tests, []);
         assert.strictEqual(shard.record.corpus, null);
       }

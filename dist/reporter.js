@@ -765,7 +765,7 @@ var require_history = __commonJS({
     var { canonicalJson, sha256: sha2562 } = require_util();
     var { median } = require_estimate();
     var SCHEMA = "playwright-smart-parallelization/history";
-    var VERSION = 1;
+    var VERSION = 2;
     var MAX_SAMPLES = 5;
     var MAX_RUNS = 200;
     var EXPIRE_DAYS = 30;
@@ -792,7 +792,7 @@ var require_history = __commonJS({
       if (extra.length) fail(source, `has unknown fields: ${extra.join(", ")}`);
       if (data.source !== null) {
         const s = data.source;
-        const valid = s && typeof s === "object" && isRunId(s.run) && Number.isSafeInteger(s.attempt) && s.attempt > 0 && typeof s.commit === "string" && typeof s.fingerprint === "string" && typeof s.date === "string" && DATE.test(s.date) && Object.keys(s).length === 5;
+        const valid = s && typeof s === "object" && isRunId(s.run) && Number.isSafeInteger(s.attempt) && s.attempt > 0 && typeof s.commit === "string" && typeof s.fingerprint === "string" && typeof s.date === "string" && DATE.test(s.date) && Number.isSafeInteger(s.workers) && s.workers > 0 && Object.keys(s).length === 6;
         if (!valid) fail(source, "has an invalid source");
       }
       if (!Array.isArray(data.runs) || data.runs.length > MAX_RUNS || !data.runs.every((run, i) => isRunId(run) && (i === 0 || data.runs[i - 1] < run))) {
@@ -906,7 +906,8 @@ var require_history = __commonJS({
         attempt: run.attempt,
         commit: run.commit,
         fingerprint: run.fingerprint,
-        date: run.date
+        date: run.date,
+        workers: run.workers
       };
       const next = {
         schema: SCHEMA,
@@ -1095,11 +1096,11 @@ var require_check = __commonJS({
       if (executed.length && executed.every((t) => t.outcome === "skipped")) {
         problems.push(`every one of the ${executed.length} tests skipped, so the run proves nothing`);
       }
-      const coverageOk = problems.length === 0;
+      const exactlyOnceOk = problems.length === 0;
       const failed = latest.filter((r) => r.status !== "passed");
       for (const r of failed) problems.push(`shard ${r.shard.current} ended with status ${r.status}`);
       const passed = failed.length === 0 && missing.length === 0 && latest.length > 0;
-      return { ok: coverageOk && passed, coverageOk, passed, problems, records: latest };
+      return { ok: exactlyOnceOk && passed, exactlyOnceOk, passed, problems, records: latest };
     }
     module2.exports = {
       RECORD_SCHEMA: RECORD_SCHEMA2,
@@ -1127,12 +1128,11 @@ var require_identity = __commonJS({
     var HISTORY_FILE = "history.json";
     var PIN_PATH = ".psp/pin";
     var PIN_FILE = "pin.json";
-    function historyKey({ workingDirectory, workers, runnerLabel, historyKey: extra }) {
+    function historyKey({ workingDirectory, runner, historyKey: extra }) {
       const identity = JSON.stringify({
-        v: 2,
+        v: 3,
         workingDirectory,
-        workers: workers || null,
-        runnerLabel,
+        runner,
         historyKey: extra || ""
       });
       return sha2562(identity).slice(0, 24);
@@ -1281,7 +1281,6 @@ function optionsFromEnv(env = process.env) {
   };
   return {
     mode,
-    workers: int("PSP_WORKERS", 1),
     snapshot: env.PSP_SNAPSHOT || null,
     snapshotSha: env.PSP_SNAPSHOT_SHA || null,
     key: env.PSP_KEY || "",
@@ -1363,6 +1362,7 @@ function readSnapshot(options) {
   }
   const history = parseHistory(text, { key: options.key, source: "the snapshot" });
   if (Object.keys(history.tests).length === 0) throw new Error("the snapshot has no entries");
+  if (!history.source) throw new Error("the snapshot names no run, so no worker count to plan for");
   return { history, sha };
 }
 var SmartParallelizationReporter = class {
@@ -1390,7 +1390,7 @@ var SmartParallelizationReporter = class {
       key: this.options.key,
       fingerprint: null,
       playwright: null,
-      workers: this.options.workers,
+      workers: null,
       planSha: null,
       snapshotSha: null,
       predictedMs: null,
@@ -1411,6 +1411,7 @@ var SmartParallelizationReporter = class {
     this.record.shard = shard;
     this.record.playwright = config.version;
     this.record.fingerprint = fingerprint(options.key, config.version);
+    this.record.workers = config.workers;
     let invocation;
     try {
       invocation = parseInvocation(options.argv);
@@ -1419,7 +1420,7 @@ var SmartParallelizationReporter = class {
     }
     if (invocation.lastFailed) {
       throw new Error(
-        `${PREFIX} ${label}: --last-failed is not supported. Playwright applies it after the split, so no shard can prove which tests the run selected; run that command with the Action's enabled: false, which leaves PSP_ARGS empty and the run plain Playwright`
+        `${PREFIX} ${label}: --last-failed is not supported. Playwright applies it after the split, so no shard can prove which tests the run selected; skip the Action's step for that command with an if: condition, which leaves $PSP_ARGS empty and the run plain Playwright`
       );
     }
     const projects = projectsOf(config, invocation);
@@ -1476,13 +1477,13 @@ var SmartParallelizationReporter = class {
       estimator,
       (project) => projectDeps.get(project) || []
     );
-    const plan = balance(
-      units,
-      shard.total,
-      options.workers,
-      setupCosts(setupTests, estimator),
-      phases
-    );
+    const workers = snapshot.history.source.workers;
+    if (workers !== config.workers) {
+      log(
+        `${label}: Playwright resolved ${config.workers} worker(s), the pinned snapshot ${workers}; every shard plans for ${workers}, so the split stays exactly once`
+      );
+    }
+    const plan = balance(units, shard.total, workers, setupCosts(setupTests, estimator), phases);
     const mine = plan.shards[shard.current - 1];
     const keep = /* @__PURE__ */ new Set();
     for (const unit of mine.units) for (const index of members.get(unit.id)) keep.add(index);
@@ -1501,11 +1502,12 @@ var SmartParallelizationReporter = class {
     const walls = plan.shards.map((s) => s.wallMs);
     const known = tests.length - plan.unknownTests;
     log(
-      `${label}: balanced, ${mine.files} files, ${mine.tests} tests, ~${formatMs(mine.wallMs)} (all shards ${formatMs(Math.min(...walls))}-${formatMs(Math.max(...walls))}), ${known}/${tests.length} tests known, ${options.workers} worker(s), snapshot ${short(snapshot.sha)}, plan ${short(plan.sha)}`
+      `${label}: balanced, ${mine.files} files, ${mine.tests} tests, ~${formatMs(mine.wallMs)} (all shards ${formatMs(Math.min(...walls))}-${formatMs(Math.max(...walls))}), ${known}/${tests.length} tests known, planned for ${workers} worker(s), snapshot ${short(snapshot.sha)}, plan ${short(plan.sha)}`
     );
   }
   onBegin(config, suite) {
     this.config = this.config || config;
+    this.record.workers = this.record.workers || config.workers;
     this.record.playwright = this.record.playwright || config.version;
     this.record.fingerprint = this.record.fingerprint || fingerprint(this.options.key, config.version);
     if (!this.preprocessed) {

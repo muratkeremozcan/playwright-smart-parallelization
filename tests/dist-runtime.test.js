@@ -188,9 +188,9 @@ function stepEnv(step) {
     RUNNER_ARCH: 'X64',
     RUNNER_NAME: 'local',
     RUNNER_TEMP: dir,
-    INPUT_ENABLED: 'true',
     'INPUT_WORKING-DIRECTORY': '.',
-    'INPUT_PUBLISH-HISTORY': 'false',
+    // No event payload names the default branch, so auto publishes nothing.
+    'INPUT_PUBLISH-HISTORY': 'auto',
     'INPUT_GITHUB-TOKEN': 'token',
   };
 }

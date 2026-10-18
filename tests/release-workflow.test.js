@@ -129,10 +129,9 @@ describe('gates', () => {
 
       const step = steps[smoke];
       assert.strictEqual(step.uses, './');
-      assert.strictEqual(step.with['publish-history'], 'false', 'the smoke writes no history');
+      assert.strictEqual(step.with['publish-history'], undefined, 'the smoke keeps the default');
       assert.strictEqual(step.with['working-directory'], 'fixtures/consumer');
       assert.match(step.with['history-key'], /github\.run_id.*github\.run_attempt/);
-      assert.strictEqual(step.with.enabled, undefined, 'the smoke plans for real');
       assert.strictEqual(step.with.phase, undefined);
 
       assert.strictEqual(steps[playwright]['working-directory'], 'fixtures/consumer');

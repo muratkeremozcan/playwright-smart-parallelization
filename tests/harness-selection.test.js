@@ -1,7 +1,7 @@
 /**
  * Table-driven tests of the one classification rule, against the real fixture and real Playwright
  * (setup with a teardown project, and chromium and firefox projects that depend on setup). Each row
- * is a forwarded selection. A leaf is a dependency, exempt from exactly-once coverage, only when
+ * is a forwarded selection. A leaf is a dependency, exempt from the exactly-once check, only when
  * another listed project needs its project; every other leaf is primary. `roles` maps
  * each project the selection lists to its role. A project that repeats under --repeat-each is a
  * top-level one, so the rows pin the repeat count with the role. For each row the clean partition

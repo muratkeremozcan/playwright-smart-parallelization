@@ -51,7 +51,12 @@ test('a shard runs the Action, then its own Playwright command with $PSP_ARGS in
   for (const id of ['plain', 'shell', 'npm']) {
     const step = steps.find((s) => s.id === id);
     assert.ok(steps.indexOf(step) > action, id);
-    assert.match(step.run, /--shard=.+ \$PSP_ARGS$/m, id);
+    // $PSP_ARGS ends the Playwright command; the log goes to the workers check.
+    assert.match(
+      step.run,
+      /--shard=.+ \$PSP_ARGS 2>&1 \| tee "\$RUNNER_TEMP\/playwright\.log"$/m,
+      id
+    );
     assert.strictEqual(step['working-directory'], 'fixtures/consumer');
     assert.strictEqual(step['continue-on-error'], true, 'the assert job judges a failing test');
   }
@@ -60,7 +65,7 @@ test('a shard runs the Action, then its own Playwright command with $PSP_ARGS in
   assert.strictEqual(steps[action].with.phase, undefined);
 });
 
-test('the legs cover cold and warm, eight shards, a re-run, a failure, rollback and the command shapes', () => {
+test('the legs cover cold and warm, eight shards, a re-run, a failure, a disabled run, workers and the command shapes', () => {
   const legs = Object.fromEntries(
     Object.entries(callers)
       .filter(([, job]) => job.uses === './.github/workflows/e2e-pipeline.yml')
@@ -72,7 +77,14 @@ test('the legs cover cold and warm, eight shards, a re-run, a failure, rollback 
   assert.strictEqual(legs['e2e-rerun'].rerun, true);
   assert.ok(legs['e2e-failed']['fail-test']);
   assert.strictEqual(legs['e2e-failed']['expect-history'], 'published');
-  assert.strictEqual(legs['e2e-rollback'].enabled, 'false');
+  assert.strictEqual(legs['e2e-disabled'].pnp, true);
+  assert.strictEqual(legs['e2e-disabled']['expect-exactly-once'], 'not checked');
+  assert.strictEqual(legs['e2e-workers-config']['playwright-args'], '--config=workers.config.js');
+  assert.strictEqual(legs['e2e-workers-cli']['playwright-args'], '--workers=3');
+  for (const leg of ['e2e-workers-config', 'e2e-workers-cli']) {
+    assert.strictEqual(legs[leg]['expect-workers'], '3');
+    assert.strictEqual(legs[leg].warm, true, 'the warm job plans for the published count');
+  }
   assert.strictEqual(legs['e2e-shell'].shape, 'shell');
   assert.strictEqual(legs['e2e-shell']['working-directory'], '');
   assert.strictEqual(legs['e2e-npm'].shape, 'npm');
@@ -84,7 +96,7 @@ test("the assert job holds the Action's network operations to budgets after the 
   const step = jobs.assert.steps.at(-1);
   assert.match(step.run, /^node tests\/e2e\/operations\.js "\$SHARDS" "\$ENABLED"$/);
   assert.strictEqual(step.env.SHARDS, '${{ inputs.shards }}');
-  assert.strictEqual(step.env.ENABLED, '${{ inputs.enabled }}');
+  assert.strictEqual(step.env.ENABLED, '${{ !inputs.pnp }}');
   assert.ok(jobs.assert.needs.includes('finish'), 'the finish job has ended');
   const { inputs } = read('.github/workflows/e2e-pipeline.yml').on.workflow_call;
   assert.strictEqual(inputs['shard-budget'], undefined, 'no wall-clock budget gates a run');

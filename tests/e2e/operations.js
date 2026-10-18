@@ -55,7 +55,7 @@ const none = () => Object.fromEntries(KINDS.map((kind) => [kind, 0]));
 
 /**
  * The most operations of each kind a step may make, from the Action's code paths. `run` is the
- * leg: `shards` its shard count, `enabled` false for a rollback, `artifacts` the run's record and
+ * leg: `shards` its shard count, `enabled` false for a disabled run, `artifacts` the run's record and
  * start marker artifacts when this check reads them, which is no fewer than the finish step found,
  * since it ran before, and `jobs` the jobs of the run, which the finish step reads. `step` is what
  * the step's own counts and job say about the path it took: `attempt` of its job, and the `lost`
@@ -75,7 +75,7 @@ const none = () => Object.fromEntries(KINDS.map((kind) => [kind, 0]));
  * - finish (lib/finish.js, lib/summary.js): one listing; each record and start marker of the run
  *   downloaded once, those of every leg, since it lists them all; one jobs API request per page of
  *   100 jobs.
- * - A rollback makes none, except the status record its post step uploads, and the finish step.
+ * - A disabled run makes none, except the status record its post step uploads, and the finish step.
  */
 function budgets(run, step = {}) {
   const { shards, enabled = true, artifacts = 0, jobs = 0 } = run;

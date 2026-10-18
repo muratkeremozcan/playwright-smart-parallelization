@@ -178,12 +178,12 @@ test('on the uncontended path one more operation than the path makes fails', () 
   assert.deepStrictEqual(judge({ ...rerun, run: RUN }).problems, []);
 });
 
-test('a rollback makes no network operations but the status record of its post step', () => {
-  const rollback = { ...RUN, enabled: false };
+test('a disabled run makes no network operations but the status record of its post step', () => {
+  const off = { ...RUN, enabled: false };
   const disabled = pipeline({}, { 'artifact-upload': 1 });
-  assert.deepStrictEqual(judge({ ...disabled, run: rollback }).problems, []);
+  assert.deepStrictEqual(judge({ ...disabled, run: off }).problems, []);
   const leaked = pipeline({ 'cache-restore': 1 }, { 'artifact-upload': 1, 'cache-save': 1 });
-  assert.deepStrictEqual(judge({ ...leaked, run: rollback }).problems.slice(0, 2), [
+  assert.deepStrictEqual(judge({ ...leaked, run: off }).problems.slice(0, 2), [
     'leg / test (1, false) made 1 cache-restore in its main step, over the budget of 0',
     'leg / test (1, false) made 1 cache-save in its post step, over the budget of 0',
   ]);

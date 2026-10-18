@@ -28,8 +28,12 @@ describe('action.yml', () => {
       assert.strictEqual(input.required, false, name);
       assert.strictEqual(typeof input.default, 'string', name);
     }
-    assert.strictEqual(action.inputs.enabled.default, 'true');
     assert.strictEqual(action.inputs['publish-history'].default, 'auto');
+    // Playwright owns the workers, the runner context names the runner, and an if: on the step
+    // skips it, so none of them is an input.
+    for (const derived of ['workers', 'runner-label', 'enabled']) {
+      assert.strictEqual(action.inputs[derived], undefined, derived);
+    }
   });
 
   test('outputs the mode, its reason and the arguments', () => {
@@ -53,7 +57,11 @@ describe('finish/action.yml', () => {
   test('takes the history key to scope to and the token, and runs the same bundle', () => {
     assert.deepStrictEqual(Object.keys(finish.inputs).sort(), [...FINISH_INPUTS].sort());
     assert.strictEqual(finish.inputs['github-token'].default, '${{ github.token }}');
-    assert.deepStrictEqual(Object.keys(finish.outputs).sort(), ['coverage', 'mode', 'overhead-ms']);
+    assert.deepStrictEqual(Object.keys(finish.outputs).sort(), [
+      'exactly-once',
+      'mode',
+      'overhead-ms',
+    ]);
     assert.deepStrictEqual(finish.runs, { using: 'node24', main: 'main.js' });
     assert.match(
       fs.readFileSync(path.join(ROOT, 'finish', 'main.js'), 'utf8'),

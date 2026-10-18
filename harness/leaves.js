@@ -133,7 +133,7 @@ function dependencyProjects(dependencies) {
  * Returns leaves with `dependency` set. This is the one classification rule. `topLevel` holds the
  * projects whose own tests the selection keeps, as Playwright reports them: it applies
  * `--repeat-each` to those projects only and runs every other listed project unchanged, as a
- * dependency of a top-level one. A leaf is a dependency, exempt from exactly-once coverage, when its project is
+ * dependency of a top-level one. A leaf is a dependency, exempt from the exactly-once check, when its project is
  * not top-level. Every other leaf is primary, which includes a setup or teardown project the
  * filters or `--project` left standing on its own, and every project under `--no-deps`.
  */

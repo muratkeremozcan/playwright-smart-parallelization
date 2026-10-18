@@ -42,7 +42,6 @@ function actionPartition({
   total,
   mode,
   snapshot = null,
-  workers = 1,
   recordDir,
   runId = 101,
   attempt = 1,
@@ -59,7 +58,6 @@ function actionPartition({
       ],
       env: {
         PSP_MODE: mode,
-        PSP_WORKERS: String(workers),
         PSP_KEY: KEY,
         PSP_RECORD: path.join(recordDir, `record-${i + 1}.json`),
         PSP_RUN_ID: String(runId),
@@ -86,14 +84,26 @@ function planOf({ mode, total, sha = null, runId = 101 }) {
   return { mode, total, sha, runId, fingerprint: fingerprint(KEY, PLAYWRIGHT) };
 }
 
-/** The history a passing run publishes into `base`. */
-function publish(records, { base = emptyHistory(KEY), runId = 101, date = '2026-10-16' } = {}) {
+/**
+ * The history a passing run publishes into `base`, with the worker count its first shard resolved,
+ * as that shard's post step publishes it.
+ */
+function publish(
+  records,
+  {
+    base = emptyHistory(KEY),
+    runId = 101,
+    date = '2026-10-16',
+    workers = (records[0] && records[0].workers) || 1,
+  } = {}
+) {
   return applyRun(base, {
     id: runId,
     attempt: 1,
     commit: 'c0ffee',
     fingerprint: fingerprint(KEY, PLAYWRIGHT),
     date,
+    workers,
     samples: runSamples(records),
   }).history;
 }
