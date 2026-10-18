@@ -83,12 +83,6 @@ To turn balancing off, set `enabled: false`: `$PSP_ARGS` is empty and the run is
 
 All inputs are in [`action.yml`](action.yml); whole-file units, keeping histories apart, outputs and the runner needs are in [`docs/reference.md`](docs/reference.md).
 
-## What we know so far
-
-- NSXBet failed the core sharding checks; Flakiness passed them but reads a private Playwright field, so we build our own on public APIs. See the [comparison](docs/qualification/comparison.md).
-- On couture-cast, about 86% of a 10 minute run is outside the test span, so perfectly balancing its 2 shards would save at most about 22 seconds. See the [baseline](docs/measurements/baseline.md).
-- Mechanisms we take from playwright-shard-balancer are in the [harvest](docs/research/shard-balancer-harvest.md).
-
 ## Maintaining this repo
 
 Needs Node 22 or later, plus `zip` and `unzip`.
@@ -101,8 +95,12 @@ npm run validate
 `validate` runs lint, format check, unit tests, and a check that nothing private lands in this public repo.
 The harness, qualification, measurement and research commands are in [docs/development.md](docs/development.md).
 
-To release, run **Actions → Release → Run workflow** on `main` with a bump; the first release picks `major`, which takes the `v0.0.0` baseline to `v1.0.0`.
-Publish the draft it creates with **Publish this Action to the GitHub Marketplace** ticked, and the workflow moves `v1` to that release.
+### Releasing
+
+1. Run **Actions → Release → Run workflow** on `main` with a bump (`patch`, `minor` or `major`; the first release uses `major`). It runs the checks and creates a draft release, or moves an existing draft to the latest `main`.
+2. Open the draft link in the run summary and click **Edit**.
+3. Tick **Publish this Action to the GitHub Marketplace**. On the first release, accept the agreement and pick a primary category.
+4. Click **Publish release**. The workflow then verifies the release and moves the major tag (`v1`) to it.
 
 ## License
 
