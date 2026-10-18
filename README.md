@@ -83,12 +83,6 @@ To turn balancing off, set `enabled: false`: `$PSP_ARGS` is empty and the run is
 
 All inputs are in [`action.yml`](action.yml); whole-file units, keeping histories apart, outputs and the runner needs are in [`docs/reference.md`](docs/reference.md).
 
-## What we know so far
-
-- NSXBet failed the core sharding checks; Flakiness passed them but reads a private Playwright field, so we build our own on public APIs. See the [comparison](docs/qualification/comparison.md).
-- On couture-cast, about 86% of a 10 minute run is outside the test span, so perfectly balancing its 2 shards would save at most about 22 seconds. See the [baseline](docs/measurements/baseline.md).
-- Mechanisms we take from playwright-shard-balancer are in the [harvest](docs/research/shard-balancer-harvest.md).
-
 ## Maintaining this repo
 
 Needs Node 22 or later, plus `zip` and `unzip`.
