@@ -6,47 +6,6 @@ Native `--shard` splits by test count, and keeps each file whole without `fullyP
 With 2 shards, one can take 10 minutes and the other 15, and the run waits for the 15.
 This Action splits by past durations, kept in your repo's own Actions storage.
 
-## Results
-
-On [pw-parallel-test](https://github.com/muratkeremozcan/pw-parallel-test): 605 sleep-only tests in 67 spec files, Playwright 1.64.1, `fullyParallel` on, 2 or 4 workers per shard as each row shows, the Action at `d3633df`.
-Each number is a median of 3 to 6 runs from [RESULTS.md](https://github.com/muratkeremozcan/pw-parallel-test/blob/625502a1962b3e1ddc6fb324e242586c6e003a77/RESULTS.md).
-
-### Slowest shard, 4 shards
-
-| Workers |                                                                                 Native |                                                                                 Action | Change |
-| ------: | -------------------------------------------------------------------------------------: | -------------------------------------------------------------------------------------: | -----: |
-|       2 | [94.4 s](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39039050334) | [72.3 s](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39074851613) |   -23% |
-|       4 | [49.9 s](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39040054874) | [39.4 s](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39076034202) |   -21% |
-
-[All runs](https://github.com/muratkeremozcan/pw-parallel-test/blob/625502a1962b3e1ddc6fb324e242586c6e003a77/RESULTS.md#run-links)
-
-### Slowest shard, 8 shards
-
-| Workers |                                                                                 Native |                                                                                 Action | Change |
-| ------: | -------------------------------------------------------------------------------------: | -------------------------------------------------------------------------------------: | -----: |
-|       2 | [55.6 s](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39076564278) | [39.1 s](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39077014625) |   -30% |
-|       4 | [31.0 s](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39078207777) | [26.9 s](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39078074920) |   -13% |
-
-[All runs](https://github.com/muratkeremozcan/pw-parallel-test/blob/625502a1962b3e1ddc6fb324e242586c6e003a77/RESULTS.md#run-links)
-
-### Whole-run completion
-
-| Shards × workers |                                                                                  Native |                                                                                  Action | Change |
-| ---------------- | --------------------------------------------------------------------------------------: | --------------------------------------------------------------------------------------: | -----: |
-| 4 × 2            | [134.5 s](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39074651900) | [122.0 s](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39074851613) |    -9% |
-| 4 × 4            |  [95.5 s](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39039679822) |  [86.0 s](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39076034202) |   -10% |
-| 8 × 2            |  [94.0 s](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39076564278) |  [92.0 s](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39076694533) |    -2% |
-| 8 × 4            |  [68.0 s](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39079112300) |  [74.0 s](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39077800664) |    +9% |
-
-[All runs](https://github.com/muratkeremozcan/pw-parallel-test/blob/625502a1962b3e1ddc6fb324e242586c6e003a77/RESULTS.md#run-links)
-
-Completion runs from the first job start to the last job end of the same runs, with the Action's finish step and without two steps that only record its outputs for the benchmark.
-At 8 × 4 the suite is short: the Action keeps whole spec files as units under `fullyParallel` while native splits by test, and its steps add about 2 to 4 s per shard, so completion is 9% slower.
-
-The first experiment ran with `fullyParallel` off, where whole files are the unit for both native and the Action, which made it simpler to read.
-There the Action at `410e55d` cut the slowest shard by 24% to 36% and completion by 3% to 13% at the same four layouts ([RESULTS.md](https://github.com/muratkeremozcan/pw-parallel-test/blob/625502a1962b3e1ddc6fb324e242586c6e003a77/RESULTS.md)).
-The 1-worker runs on an earlier 222-test suite are under History in [RESULTS.md](https://github.com/muratkeremozcan/pw-parallel-test/blob/625502a1962b3e1ddc6fb324e242586c6e003a77/RESULTS.md).
-
 ## Usage
 
 Pin a commit sha until v1 is released.
@@ -82,6 +41,36 @@ For a cross-shard check that every test ran exactly once, and the shard times in
 To turn balancing off, set `enabled: false`: `$PSP_ARGS` is empty and the run is plain Playwright.
 
 All inputs are in [`action.yml`](action.yml); whole-file units, keeping histories apart, outputs and the runner needs are in [`docs/reference.md`](docs/reference.md).
+
+## Results
+
+On [pw-parallel-test](https://github.com/muratkeremozcan/pw-parallel-test): 605 sleep-only tests in 67 spec files, Playwright 1.64.1, `fullyParallel` on, 2 or 4 workers per shard as each row shows, the Action at `d3633df`.
+Each number is a median of 3 to 6 runs and links to its median run.
+
+### Slowest shard, 4 shards
+
+| Workers |                                                                                 Native |                                                                                 Action | Change |
+| ------: | -------------------------------------------------------------------------------------: | -------------------------------------------------------------------------------------: | -----: |
+|       2 | [94.4 s](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39039050334) | [72.3 s](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39074851613) |   -23% |
+|       4 | [49.9 s](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39040054874) | [39.4 s](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39076034202) |   -21% |
+
+### Slowest shard, 8 shards
+
+| Workers |                                                                                 Native |                                                                                 Action | Change |
+| ------: | -------------------------------------------------------------------------------------: | -------------------------------------------------------------------------------------: | -----: |
+|       2 | [55.6 s](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39076564278) | [39.1 s](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39077014625) |   -30% |
+|       4 | [31.0 s](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39078207777) | [26.9 s](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39078074920) |   -13% |
+
+### Whole-run completion
+
+| Shards × workers |                                                                                  Native |                                                                                  Action | Change |
+| ---------------- | --------------------------------------------------------------------------------------: | --------------------------------------------------------------------------------------: | -----: |
+| 4 × 2            | [134.5 s](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39074651900) | [122.0 s](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39074851613) |    -9% |
+| 4 × 4            |  [95.5 s](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39039679822) |  [86.0 s](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39076034202) |   -10% |
+| 8 × 2            |  [94.0 s](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39076564278) |  [92.0 s](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39076694533) |    -2% |
+| 8 × 4            |  [68.0 s](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39079112300) |  [74.0 s](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39077800664) |    +9% |
+
+All runs and other layouts: [RESULTS.md](https://github.com/muratkeremozcan/pw-parallel-test/blob/625502a1962b3e1ddc6fb324e242586c6e003a77/RESULTS.md).
 
 ## Maintaining this repo
 
