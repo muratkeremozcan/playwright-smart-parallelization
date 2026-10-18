@@ -8,21 +8,44 @@ This Action splits by past durations, kept in your repo's own Actions storage.
 
 ## Results
 
-On [pw-parallel-test](https://github.com/muratkeremozcan/pw-parallel-test): 605 sleep-only tests in 67 spec files, Playwright 1.64.1, `fullyParallel` off, medians of the Action at `410e55d` from [RESULTS.md](https://github.com/muratkeremozcan/pw-parallel-test/blob/a0c5d7c3af83bf2a8c16120f9069b14cb136815f/RESULTS.md).
+On [pw-parallel-test](https://github.com/muratkeremozcan/pw-parallel-test): 605 sleep-only tests in 67 spec files, Playwright 1.64.1, `fullyParallel` on, 2 or 4 workers per shard as each row shows, the Action at `d3633df`.
+Each number is a median of 3 to 6 runs from [RESULTS.md](https://github.com/muratkeremozcan/pw-parallel-test/blob/625502a1962b3e1ddc6fb324e242586c6e003a77/RESULTS.md).
 
-| Shards × workers | Slowest shard |     Completion | Shard-job machine time | Ideal slowest shard | Runs                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| ---------------- | ------------: | -------------: | ---------------------: | ------------------: | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 4 × 2, native    |        95.2 s |        134.0 s |                347.5 s |              69.5 s | [1](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39033285485) [2](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39033653569) [3](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39034054221) [4](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39043679173) [5](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39044142851) [6](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39044617236) |
-| 4 × 2, Action    | 72.2 s (-24%) | 116.0 s (-13%) |                365.0 s |              69.5 s | [1](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39043929767) [2](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39044396758) [3](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39044876948)                                                                                                                                                                                                                                                       |
-| 4 × 4, native    |        54.5 s |         89.0 s |                222.0 s |              36.2 s | [1](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39034593825) [2](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39034906293) [3](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39035255615) [4](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39045281253) [5](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39045661226) [6](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39046035284) |
-| 4 × 4, Action    | 39.3 s (-28%) |   86.0 s (-3%) |                225.0 s |              36.2 s | [1](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39045476432) [2](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39045847674) [3](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39046226794)                                                                                                                                                                                                                                                       |
-| 8 × 2, native    |        56.6 s |         96.0 s |                428.5 s |              36.2 s | [1](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39035788712) [2](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39036151943) [3](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39036517724) [4](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39046639694) [5](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39047058947) [6](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39047434132) |
-| 8 × 2, Action    | 39.0 s (-31%) |  86.0 s (-10%) |                448.0 s |              36.2 s | [1](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39046872550) [2](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39047248457) [3](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39047634398)                                                                                                                                                                                                                                                       |
-| 8 × 4, native    |        36.0 s |         76.0 s |                305.0 s |              19.6 s | [1](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39036982159) [2](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39037284603) [3](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39037599876) [4](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39048025460) [5](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39048416368) [6](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39048814522) |
-| 8 × 4, Action    | 22.9 s (-36%) |   74.0 s (-3%) |                309.0 s |              19.6 s | [1](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39048219057) [2](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39048616493) [3](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39049015500)                                                                                                                                                                                                                                                       |
+### Slowest shard, 4 shards
 
-With `fullyParallel` on at 4 shards, the Action at `c439738` kept whole spec files and gave a slowest shard of 72.3 s against native's 94.5 s at 2 workers, and 40.2 s against 50.3 s at 4, with completion -4% and +1%.
-Each arm's cold run, and the 1-worker runs on the earlier 222-test suite, are in [RESULTS.md](https://github.com/muratkeremozcan/pw-parallel-test/blob/a0c5d7c3af83bf2a8c16120f9069b14cb136815f/RESULTS.md).
+| Workers |                                                                                 Native |                                                                                 Action | Change |
+| ------: | -------------------------------------------------------------------------------------: | -------------------------------------------------------------------------------------: | -----: |
+|       2 | [94.4 s](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39039050334) | [72.3 s](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39074851613) |   -23% |
+|       4 | [49.9 s](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39040054874) | [39.4 s](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39076034202) |   -21% |
+
+[All runs](https://github.com/muratkeremozcan/pw-parallel-test/blob/625502a1962b3e1ddc6fb324e242586c6e003a77/RESULTS.md#run-links)
+
+### Slowest shard, 8 shards
+
+| Workers |                                                                                 Native |                                                                                 Action | Change |
+| ------: | -------------------------------------------------------------------------------------: | -------------------------------------------------------------------------------------: | -----: |
+|       2 | [55.6 s](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39076564278) | [39.1 s](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39077014625) |   -30% |
+|       4 | [31.0 s](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39078207777) | [26.9 s](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39078074920) |   -13% |
+
+[All runs](https://github.com/muratkeremozcan/pw-parallel-test/blob/625502a1962b3e1ddc6fb324e242586c6e003a77/RESULTS.md#run-links)
+
+### Whole-run completion
+
+| Shards × workers |                                                                                  Native |                                                                                  Action | Change |
+| ---------------- | --------------------------------------------------------------------------------------: | --------------------------------------------------------------------------------------: | -----: |
+| 4 × 2            | [134.5 s](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39074651900) | [122.0 s](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39074851613) |    -9% |
+| 4 × 4            |  [95.5 s](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39039679822) |  [86.0 s](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39076034202) |   -10% |
+| 8 × 2            |  [94.0 s](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39076564278) |  [92.0 s](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39076694533) |    -2% |
+| 8 × 4            |  [68.0 s](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39079112300) |  [74.0 s](https://github.com/muratkeremozcan/pw-parallel-test/actions/runs/39077800664) |    +9% |
+
+[All runs](https://github.com/muratkeremozcan/pw-parallel-test/blob/625502a1962b3e1ddc6fb324e242586c6e003a77/RESULTS.md#run-links)
+
+Completion runs from the first job start to the last job end of the same runs, with the Action's finish step and without two steps that only record its outputs for the benchmark.
+At 8 × 4 the suite is short: the Action keeps whole spec files as units under `fullyParallel` while native splits by test, and its steps add about 2 to 4 s per shard, so completion is 9% slower.
+
+The first experiment ran with `fullyParallel` off, where whole files are the unit for both native and the Action, which made it simpler to read.
+There the Action at `410e55d` cut the slowest shard by 24% to 36% and completion by 3% to 13% at the same four layouts ([RESULTS.md](https://github.com/muratkeremozcan/pw-parallel-test/blob/625502a1962b3e1ddc6fb324e242586c6e003a77/RESULTS.md)).
+The 1-worker runs on an earlier 222-test suite are under History in [RESULTS.md](https://github.com/muratkeremozcan/pw-parallel-test/blob/625502a1962b3e1ddc6fb324e242586c6e003a77/RESULTS.md).
 
 ## Usage
 
@@ -46,7 +69,8 @@ jobs:
       - run: npx playwright test --shard=${{ matrix.shard }}/${{ strategy.job-total }} $PSP_ARGS
 ```
 
-Your command stays yours: an npm script works as `npm run test:e2e -- --shard=1/4 $PSP_ARGS`, and so do shell variables, filters and a project in a subdirectory.
+Your own `playwright test` command works as it is: an npm script as `npm run test:e2e -- --shard=1/4 $PSP_ARGS`, shell variables, filters and a project in a subdirectory.
+A command with `--last-failed` needs `enabled: false`; see [`docs/reference.md`](docs/reference.md).
 Each shard publishes its own test times from the default branch, so the next run balances with no extra job.
 
 For a cross-shard check that every test ran exactly once, and the shard times in the job summary, add the finish action to the job that merges your reports:
