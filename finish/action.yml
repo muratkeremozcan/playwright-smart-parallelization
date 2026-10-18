@@ -11,7 +11,7 @@ inputs:
     required: false
     default: ''
   github-token:
-    description: 'Reads the jobs API to measure the per-shard overhead for the summary.'
+    description: 'Reads the jobs API to measure the per-shard overhead for the summary, and the runs API for the age of a re-run that finds no artifacts.'
     required: false
     default: ${{ github.token }}
 

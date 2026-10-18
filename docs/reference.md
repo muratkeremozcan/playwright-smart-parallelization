@@ -34,7 +34,8 @@ Facts about the Action that the README example does not need. Every input is in 
 - `finish` reads the run records the shards upload as `psp-record-*` artifacts, so it needs no blob reports and merges none; your own merge step stays yours.
 - It checks every sharded job of the run; with several sharded jobs and a finish for each, give each job its own `history-key` and pass the same one to its finish.
 - A matrix with another dimension next to `shard` that runs the same tests, such as `node: [20, 22]`, needs its own `history-key` per leg, such as `history-key: node-${{ matrix.node }}`, so each leg keeps its own records and history.
-- A run in which no shard ran the Action's step, because an `if:` skipped it, leaves `finish` nothing to check: it reports `mode: disabled` and `exactly-once: not checked` and passes. A shard job that ran the step and left no record still fails it.
+- A run in which no shard ran the Action's step, because an `if:` skipped it, leaves `finish` nothing to check: it reports `mode: disabled` and `exactly-once: not checked` and passes. A shard job that ran the step and left no record still fails it, also one whose inputs the step refused. A re-run of `finish` passes so only while the run is younger than the artifact retention, which it reads with `github-token`, since expired artifacts look the same.
+- Keep the step's `if:` the same across the attempts of a run: a shard re-run with the step skipped leaves no trace, so its earlier record stands for tests it no longer ran.
 - It reads the jobs API for the per-shard overhead, so its job needs `permissions: actions: read`.
 
 ## History

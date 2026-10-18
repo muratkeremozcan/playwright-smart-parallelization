@@ -379,6 +379,41 @@ describe('the Action step skipped with an if:', () => {
     assert.ok(after.io.failed);
     assert.strictEqual(after.io.outputs['exactly-once'], 'failed');
   });
+
+  test('a main step that refuses its inputs still leaves a start marker, so finish fails', async () => {
+    requireFixture();
+    const world = newWorld();
+    const [job] = await run(world, 602, 1, { inputs: { 'publish-history': 'never' } });
+    assert.match(job.main.error.message, /publish-history input must be auto or true/);
+    const finish = await finishOf(world, 602);
+    assert.ok(finish.io.failed);
+    assert.strictEqual(finish.io.outputs['exactly-once'], 'failed');
+  });
+
+  test('a later attempt with no artifacts passes only while they cannot have expired', async () => {
+    requireFixture();
+    const world = newWorld();
+    const runsApi = (days) => async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ created_at: new Date(Date.now() - days * 86400000).toISOString() }),
+    });
+    const attempt2 = (days, retention = '7') =>
+      finishOf(world, 603, {
+        inputs: { 'github-token': 't' },
+        env: { GITHUB_RUN_ATTEMPT: '2', GITHUB_RETENTION_DAYS: retention },
+        fetchImpl: runsApi(days),
+      });
+    const young = await attempt2(1);
+    assert.strictEqual(young.io.failed, null, young.io.summaryText);
+    assert.strictEqual(young.io.outputs['exactly-once'], 'not checked');
+    const old = await attempt2(8);
+    assert.ok(old.io.failed);
+    assert.strictEqual(old.io.outputs['exactly-once'], 'failed');
+    assert.match(old.io.summaryText, /cannot rule out that the artifacts of its run expired/);
+    const unknown = await attempt2(1, '');
+    assert.ok(unknown.io.failed, 'no retention to compare the age with');
+  });
 });
 
 describe('history edge cases', () => {
