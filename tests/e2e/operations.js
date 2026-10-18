@@ -55,7 +55,7 @@ const none = () => Object.fromEntries(KINDS.map((kind) => [kind, 0]));
 
 /**
  * The most operations of each kind a step may make, from the Action's code paths. `run` is the
- * leg: `shards` its shard count, `enabled` false for a rollback, `artifacts` the run's record and
+ * leg: `shards` its shard count, `enabled` false for a disabled run, `artifacts` the run's record and
  * start marker artifacts when this check reads them, which is no fewer than the finish step found,
  * since it ran before, and `jobs` the jobs of the run, which the finish step reads. `step` is what
  * the step's own counts and job say about the path it took: `attempt` of its job, and the `lost`
@@ -75,7 +75,7 @@ const none = () => Object.fromEntries(KINDS.map((kind) => [kind, 0]));
  * - finish (lib/finish.js, lib/summary.js): one listing; each record and start marker of the run
  *   downloaded once, those of every leg, since it lists them all; one jobs API request per page of
  *   100 jobs.
- * - A rollback makes none, except the status record its post step uploads, and the finish step.
+ * - A disabled run makes none, except the status record its post step uploads, and the finish step.
  */
 function budgets(run, step = {}) {
   const { shards, enabled = true, artifacts = 0, jobs = 0 } = run;
@@ -213,11 +213,26 @@ function pipelineJobs(jobs, runner) {
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
- * The picked jobs once every one of them reports completed. The jobs API can list a job as in
- * progress for tens of seconds after its last step ended, and such a job has no conclusion and so
- * no log to read. Polls `fetchJobs` every `intervalMs` and picks from it with `pick`, which returns
- * `{ shards, finish }`, until every picked job is completed, and fails only after `boundMs`,
- * naming the jobs still not completed. Returns the pick and the jobs it was made from.
+ * Whether a job has ended. The jobs API can list a job as in progress for minutes after its last
+ * step, `Complete job`, ended, while its log is already readable (run 39123176372). It lists every
+ * step of a job from its start, so a job whose steps all completed has ended.
+ */
+const ended = (j) =>
+  j.status === 'completed' ||
+  (Array.isArray(j.steps) && j.steps.length > 0 && j.steps.every((s) => s.status === 'completed'));
+
+/** An ended job with its conclusion: the API's, or from its steps while it lags behind them. */
+const concluded = (j) =>
+  j.status === 'completed'
+    ? j
+    : { ...j, conclusion: j.steps.some((s) => s.conclusion === 'failure') ? 'failure' : 'success' };
+
+/**
+ * The picked jobs once every one of them has ended (`ended`): a job that has not has no
+ * conclusion and so no log to read. Polls `fetchJobs` every `intervalMs` and picks from it with
+ * `pick`, which returns `{ shards, finish }`, until every picked job has ended, and fails only
+ * after `boundMs`, naming the jobs still running. Returns the pick, each job with its conclusion,
+ * and the jobs it was made from.
  */
 async function settledJobs({
   fetchJobs,
@@ -232,8 +247,14 @@ async function settledJobs({
     const jobs = await fetchJobs();
     const picked = pick(jobs);
     const all = [...picked.shards, ...(picked.finish ? [picked.finish] : [])];
-    const open = all.filter((j) => j.status !== 'completed');
-    if (!open.length) return { ...picked, jobs };
+    const open = all.filter((j) => !ended(j));
+    if (!open.length) {
+      return {
+        shards: picked.shards.map(concluded),
+        finish: picked.finish && concluded(picked.finish),
+        jobs,
+      };
+    }
     if (now() >= deadline) {
       throw new Error(
         `the jobs API still lists ${open.map((j) => `${j.name} as ${j.status}`).join(', ')} ` +

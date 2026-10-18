@@ -182,7 +182,7 @@ describe('an explicitly selected dependency project', () => {
     );
   });
 
-  test('stays exempt from exactly-once coverage as an implicit dependency', () => {
+  test('stays exempt from the exactly-once check as an implicit dependency', () => {
     const implicit = [setup, teardown, a];
     const shards = [shard(1, [setup, a, teardown]), shard(2, [])];
     assert.deepStrictEqual(checks.checkCoverage(implicit, shards), []);

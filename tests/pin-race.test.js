@@ -41,6 +41,7 @@ const historyOf = (key, run) =>
       commit: 'c',
       fingerprint: 'f',
       date: '2026-10-16',
+      workers: 1,
       samples: new Map([[testKey('chromium', 'a.spec.js', [`run ${run}`]), 100 + run]]),
     }).history
   );

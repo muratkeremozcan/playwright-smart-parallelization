@@ -4,12 +4,13 @@
  * model of support/model.js, with real Playwright on a copy of the consumer fixture in a
  * subdirectory and a modeled Actions cache and artifact store. These are the rows of the plan:
  * cold start, a warm run from the history the shards published with no finish, a re-run shard,
- * a failed test, rollback, eight shards publishing at once, the command shapes a user writes, a
+ * a failed test, a disabled run, eight shards publishing at once, the command shapes a user writes, a
  * damaged history, a fork pull request and a run without a cache.
  */
 
 const { test, describe, before } = require('node:test');
 const assert = require('node:assert');
+const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -49,11 +50,15 @@ function workspace() {
   return ws;
 }
 
-/** Every shard job of one run, each in its own checkout, one after another. */
+/**
+ * Every shard job of one run, each in its own checkout, one after another. `pnp` adds a Yarn
+ * Plug'n'Play loader to each checkout, which disables the Action.
+ */
 async function run(world, runId, total, options = {}) {
   const jobs = [];
   for (let shard = 1; shard <= total; shard++) {
     const ctx = { ws: workspace(), world };
+    if (options.pnp) fs.writeFileSync(path.join(ctx.ws, '.pnp.cjs'), '');
     jobs.push(
       await shardJob(ctx, {
         runId,
@@ -83,7 +88,7 @@ const planSha = (job) => /plan ([0-9a-f]{12})/.exec(planLines(job.user.output)[0
 const samplesOf = (history, runId) =>
   Object.entries(history.tests).filter(([, t]) => t.samples.some(([id]) => id === runId));
 
-describe('cold start, a warm run without finish, a re-run shard, a failed test and rollback', () => {
+describe('cold start, a warm run without finish, a re-run shard, a failed test and a disabled run', () => {
   const world = newWorld();
   let cold;
   let warm;
@@ -148,7 +153,7 @@ describe('cold start, a warm run without finish, a re-run shard, a failed test a
     assert.match(again.post.lines.join('\n'), /already holds these samples|published/);
     const finish = await finishOf(world, 102);
     assert.strictEqual(finish.io.failed, null, finish.io.summaryText);
-    assert.strictEqual(finish.io.outputs.coverage, 'ok');
+    assert.strictEqual(finish.io.outputs['exactly-once'], 'ok');
     assert.strictEqual(finish.io.outputs.mode, 'balanced');
     assert.match(finish.io.summaryText, /\| 2 \| 2 \| /, 'the latest attempt of shard 2');
   });
@@ -173,13 +178,16 @@ describe('cold start, a warm run without finish, a re-run shard, a failed test a
     assert.ok(world.cache.has(key));
     const finish = await finishOf(world, 102);
     assert.strictEqual(finish.io.failed, null, finish.io.summaryText);
-    assert.strictEqual(finish.io.outputs.coverage, 'ok');
+    assert.strictEqual(finish.io.outputs['exactly-once'], 'ok');
   });
 
   test('finish over the cold run: every test ran exactly once', async () => {
     const finish = await finishOf(world, 101);
     assert.strictEqual(finish.io.failed, null, finish.io.summaryText);
-    assert.deepStrictEqual([finish.io.outputs.mode, finish.io.outputs.coverage], ['native', 'ok']);
+    assert.deepStrictEqual(
+      [finish.io.outputs.mode, finish.io.outputs['exactly-once']],
+      ['native', 'ok']
+    );
     assert.match(finish.io.summaryText, /Playwright Smart Parallelization, job `test`: ok/);
   });
 
@@ -195,9 +203,9 @@ describe('cold start, a warm run without finish, a re-run shard, a failed test a
     assert.match(finish.io.summaryText, /ended with status failed/);
   });
 
-  test('rollback: PSP_ARGS is empty, the run is plain Playwright, nothing pinned or published', async () => {
+  test('disabled: PSP_ARGS is empty, the run is plain Playwright, nothing pinned or published', async () => {
     const before = newest(world, keyOf(cold));
-    const off = await run(world, 104, 2, { inputs: { enabled: 'false' } });
+    const off = await run(world, 104, 2, { pnp: true });
     for (const job of off) {
       assert.strictEqual(job.main.io.exported.PSP_ARGS, '');
       assert.strictEqual(job.main.io.outputs.mode, 'disabled');
@@ -222,7 +230,7 @@ describe('cold start, a warm run without finish, a re-run shard, a failed test a
     assert.strictEqual(pages.length, 2, 'every page was read before finish returned');
     assert.strictEqual(finish.io.failed, null);
     assert.deepStrictEqual(
-      [finish.io.outputs.mode, finish.io.outputs.coverage],
+      [finish.io.outputs.mode, finish.io.outputs['exactly-once']],
       ['disabled', 'not checked']
     );
   });
@@ -313,7 +321,7 @@ describe('the command shapes a user writes', () => {
     assert.ok(![...world.cache.keys()].some((k) => k.startsWith('psp-history-')));
     const finish = await finishOf(world, 304);
     assert.match(finish.io.summaryText, /no shard of its job left a record.*\$PSP_ARGS is missing/);
-    assert.strictEqual(finish.io.outputs.coverage, 'failed');
+    assert.strictEqual(finish.io.outputs['exactly-once'], 'failed');
     assert.ok(finish.io.failed);
   });
 
@@ -327,6 +335,7 @@ describe('the command shapes a user writes', () => {
       inputs: { 'history-key': 'smoke' },
       command: (k) => command(k, 2),
     });
+    assert.strictEqual(other.main.error, null);
     assert.strictEqual(other.user.status, 0);
     const scoped = await finishOf(world, 305, { inputs: { 'history-key': 'e2e' } });
     assert.strictEqual(scoped.io.failed, null, scoped.io.summaryText);
@@ -335,11 +344,139 @@ describe('the command shapes a user writes', () => {
   });
 });
 
+describe('the Action step skipped with an if:', () => {
+  test('no main and no post step: plain Playwright, and finish passes with nothing to check', async () => {
+    requireFixture();
+    const world = newWorld();
+    // The user's command alone, as a job whose Action step an if: skipped runs it: $PSP_ARGS is
+    // unset, and no start marker, record or status reaches the run.
+    const env = Object.fromEntries(
+      Object.entries(process.env).filter(([name]) => !/^(PSP_|INPUT_|GITHUB_|RUNNER_)/.test(name))
+    );
+    for (const shard of [1, 2]) {
+      const ws = workspace();
+      const user = spawnSync('bash', ['-c', command(shard, 2)], {
+        cwd: path.join(ws, 'app'),
+        encoding: 'utf8',
+        env,
+      });
+      assert.strictEqual(user.status, 0, user.stderr);
+      assert.doesNotMatch(user.stdout, /playwright-smart-parallelization/);
+    }
+    assert.deepStrictEqual([...world.cache.keys()], []);
+    const finish = await finishOf(world, 601);
+    assert.strictEqual(finish.io.failed, null, finish.io.summaryText);
+    assert.deepStrictEqual(
+      [finish.io.outputs.mode, finish.io.outputs['exactly-once']],
+      ['disabled', 'not checked']
+    );
+    assert.match(finish.io.summaryText, /not run/);
+    assert.match(finish.io.summaryText, /No shard of this run ran the Action's step/);
+
+    // A shard job of the same run that ran the Action and left no record still fails finish.
+    await run(world, 601, 1, { command: () => `npx playwright test ${SELECT} --shard=1/2` });
+    const after = await finishOf(world, 601);
+    assert.ok(after.io.failed);
+    assert.strictEqual(after.io.outputs['exactly-once'], 'failed');
+  });
+
+  test('with history-key, finish passes a suite whose step was skipped beside one that ran', async () => {
+    requireFixture();
+    const world = newWorld();
+    await run(world, 606, 2, { job: 'e2e', inputs: { 'history-key': 'e2e' } });
+    const smoke = await finishOf(world, 606, { inputs: { 'history-key': 'smoke' } });
+    assert.strictEqual(smoke.io.failed, null, smoke.io.summaryText);
+    assert.strictEqual(smoke.io.outputs['exactly-once'], 'not checked');
+    assert.match(smoke.io.summaryText, /ran the Action's step with history key `smoke`/);
+    const e2e = await finishOf(world, 606, { inputs: { 'history-key': 'e2e' } });
+    assert.strictEqual(e2e.io.outputs['exactly-once'], 'ok');
+    const all = await finishOf(world, 606);
+    assert.strictEqual(all.io.outputs['exactly-once'], 'ok');
+  });
+
+  test('a main step that refuses its inputs still leaves a start marker, so finish fails', async () => {
+    requireFixture();
+    const world = newWorld();
+    const [job] = await run(world, 602, 1, { inputs: { 'publish-history': 'never' } });
+    assert.match(job.main.error.message, /publish-history input must be auto or true/);
+    const finish = await finishOf(world, 602);
+    assert.ok(finish.io.failed);
+    assert.strictEqual(finish.io.outputs['exactly-once'], 'failed');
+    // A re-run whose inputs pass answers that marker once every shard has a later record.
+    const rerun = [];
+    for (const shard of [1, 2]) {
+      rerun.push(
+        await shardJob(
+          { ws: workspace(), world },
+          { runId: 602, attempt: 2, cwd: 'app', command: command(shard, 2) }
+        )
+      );
+    }
+    assert.ok(rerun.every((j) => j.main.error === null && j.user.status === 0));
+    const recovered = await finishOf(world, 602, { env: { GITHUB_RUN_ATTEMPT: '2' } });
+    assert.strictEqual(recovered.io.failed, null, recovered.io.summaryText);
+    assert.strictEqual(recovered.io.outputs['exactly-once'], 'ok');
+    // Re-running only the shard that refused its inputs answers its marker too, while the shard
+    // that passed keeps its first record; without that re-run the run stays failed.
+    const partial = newWorld();
+    const shardOf = (shard, attempt, options = {}) =>
+      shardJob(
+        { ws: workspace(), world: partial },
+        { runId: 604, attempt, cwd: 'app', command: command(shard, 2), ...options }
+      );
+    await shardOf(1, 1);
+    await shardOf(2, 1, { inputs: { 'publish-history': 'never' } });
+    assert.ok((await finishOf(partial, 604)).io.failed);
+    await shardOf(2, 2);
+    const healed = await finishOf(partial, 604, { env: { GITHUB_RUN_ATTEMPT: '2' } });
+    assert.strictEqual(healed.io.failed, null, healed.io.summaryText);
+    // A re-run of the whole workflow deletes that marker, and the listing still returns it.
+    const whole = newWorld();
+    const wholeJob = (shard, attempt, options = {}) =>
+      shardJob(
+        { ws: workspace(), world: whole },
+        { runId: 605, attempt, cwd: 'app', command: command(shard, 2), ...options }
+      );
+    await wholeJob(1, 1);
+    await wholeJob(2, 1, { inputs: { 'publish-history': 'never' } });
+    rerunAll(whole, 605);
+    for (const shard of [1, 2]) await wholeJob(shard, 2);
+    const fresh = await finishOf(whole, 605, { env: { GITHUB_RUN_ATTEMPT: '2' } });
+    assert.strictEqual(fresh.io.failed, null, fresh.io.summaryText);
+    assert.strictEqual(fresh.io.outputs['exactly-once'], 'ok');
+  });
+
+  test('a later attempt with no artifacts passes only while they cannot have expired', async () => {
+    requireFixture();
+    const world = newWorld();
+    const runsApi = (days) => async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ created_at: new Date(Date.now() - days * 86400000).toISOString() }),
+    });
+    const attempt2 = (days, retention = '7') =>
+      finishOf(world, 603, {
+        inputs: { 'github-token': 't' },
+        env: { GITHUB_RUN_ATTEMPT: '2', GITHUB_RETENTION_DAYS: retention },
+        fetchImpl: runsApi(days),
+      });
+    const young = await attempt2(1);
+    assert.strictEqual(young.io.failed, null, young.io.summaryText);
+    assert.strictEqual(young.io.outputs['exactly-once'], 'not checked');
+    const old = await attempt2(8);
+    assert.ok(old.io.failed);
+    assert.strictEqual(old.io.outputs['exactly-once'], 'failed');
+    assert.match(old.io.summaryText, /cannot rule out that the artifacts of its run expired/);
+    const unknown = await attempt2(1, '');
+    assert.ok(unknown.io.failed, 'no retention to compare the age with');
+  });
+});
+
 describe('history edge cases', () => {
   test('a damaged newest entry: native with a warning, and the shards publish over it', async () => {
     requireFixture();
     const world = newWorld();
-    const [probe] = await run(world, 401, 1, { inputs: { enabled: 'false' } });
+    const [probe] = await run(world, 401, 1, { pnp: true });
     const key = probe.main.state.key;
     cacheSave(world, cacheKey(key, 1, 1), { 'history.json': Buffer.from('{"schema":') });
     const jobs = await run(world, 402, 2);
@@ -361,10 +498,7 @@ describe('history edge cases', () => {
       event,
       JSON.stringify({ pull_request: { head: { repo: { full_name: 'someone/fork' } } } })
     );
-    const before = newest(
-      world,
-      (await run(world, 502, 1, { inputs: { enabled: 'false' } }))[0].main.state.key
-    );
+    const before = newest(world, (await run(world, 502, 1, { pnp: true }))[0].main.state.key);
     const fork = await run(world, 503, 2, {
       env: {
         GITHUB_EVENT_NAME: 'pull_request',
@@ -489,7 +623,7 @@ describe('a re-run of the whole workflow, which deletes the artifacts of the run
     }
     const finish = await finishOf(world, 902, { env: { GITHUB_RUN_ATTEMPT: '2' } });
     assert.strictEqual(finish.io.failed, null, finish.io.summaryText);
-    assert.strictEqual(finish.io.outputs.coverage, 'ok');
+    assert.strictEqual(finish.io.outputs['exactly-once'], 'ok');
   });
 
   test('with the pin evicted too, the shards of the re-run pin afresh, one snapshot for all', async () => {

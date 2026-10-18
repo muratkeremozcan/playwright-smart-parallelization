@@ -74,14 +74,13 @@ jobs:
 
       # The main step of the Action from this checkout, then a short native Playwright run on the
       # consumer fixture with $PSP_ARGS. A history key of this run alone finds no history, so the
-      # shard plans native, and publish-history false keeps the post step from writing one.
+      # shard plans native, and no later run reads the entry its post step may publish.
       - name: Run the deterministic Action smoke
         id: smoke
         uses: ./
         with:
           working-directory: fixtures/consumer
           history-key: release-smoke-${{ github.run_id }}-${{ github.run_attempt }}
-          publish-history: 'false'
 
       - name: Run Playwright with PSP_ARGS
         working-directory: fixtures/consumer
@@ -370,14 +369,13 @@ jobs:
 
       # The main step of the Action from the published tag, then a short native Playwright run on the
       # consumer fixture with $PSP_ARGS. A history key of this run alone finds no history, so the
-      # shard plans native, and publish-history false keeps the post step from writing one.
+      # shard plans native, and no later run reads the entry its post step may publish.
       - name: Run the deterministic Action smoke
         id: smoke
         uses: ./
         with:
           working-directory: fixtures/consumer
           history-key: release-smoke-${{ github.run_id }}-${{ github.run_attempt }}
-          publish-history: 'false'
 
       - name: Run Playwright with PSP_ARGS
         working-directory: fixtures/consumer

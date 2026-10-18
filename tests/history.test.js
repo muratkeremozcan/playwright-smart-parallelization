@@ -42,6 +42,7 @@ const run = (id, samples, date = '2026-10-16') => ({
   commit: `commit-${id}`,
   fingerprint: 'fp',
   date,
+  workers: 1,
   samples: new Map(Object.entries(samples)),
 });
 
@@ -67,6 +68,8 @@ describe('validation', () => {
     ['unsorted runs', serializeHistory({ ...JSON.parse(good), runs: [2, 1] })],
     ['a key that is not a JSON title path', good.replace(JSON.stringify(T).slice(1, -1), 'plain')],
     ['pretty-printed bytes', `${JSON.stringify(JSON.parse(good), null, 2)}\n`],
+    ['a source without workers', good.replace(',"workers":1', '')],
+    ['a source of 0 workers', good.replace('"workers":1', '"workers":0')],
   ]) {
     test(`refuses ${name}`, () => assert.throws(() => parseHistory(text, { key: KEY })));
   }
@@ -178,7 +181,28 @@ describe('the window', () => {
       commit: 'commit-102',
       fingerprint: 'fp',
       date: '2026-10-16',
+      workers: 1,
     });
+  });
+});
+
+describe('the worker count shards plan for', () => {
+  test('is the count the newest run resolved, whatever order the runs merge in', () => {
+    const two = { ...run(102, { [T]: 1 }), workers: 2 };
+    const four = { ...run(101, { [T]: 1 }), workers: 4 };
+    assert.strictEqual(apply(emptyHistory(KEY), two, four).source.workers, 2);
+    assert.strictEqual(apply(emptyHistory(KEY), four, two).source.workers, 2);
+    const merged = mergeHistories(apply(emptyHistory(KEY), four), apply(emptyHistory(KEY), two));
+    assert.strictEqual(merged.source.workers, 2);
+  });
+
+  test('shards of one run that resolved different counts merge to one, in any order', () => {
+    const a = apply(emptyHistory(KEY), { ...run(101, { [T]: 1 }), workers: 2 });
+    const b = apply(emptyHistory(KEY), { ...run(101, { [U]: 1 }), workers: 4 });
+    assert.strictEqual(
+      serializeHistory(mergeHistories(a, b)),
+      serializeHistory(mergeHistories(b, a))
+    );
   });
 });
 

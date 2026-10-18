@@ -6,31 +6,20 @@ branding:
   color: 'green'
 
 inputs:
-  enabled:
-    description: 'false turns balancing off: PSP_ARGS is empty, so the run is plain Playwright, and nothing is pinned or published.'
-    required: false
-    default: 'true'
-  workers:
-    description: 'Workers per shard. Adds --workers to PSP_ARGS, and the plan packs for them. Empty leaves the config alone and plans for 1.'
-    required: false
-    default: ''
   working-directory:
-    description: 'The directory of the Playwright project, relative to the workspace, where its Playwright version is read. Empty searches from the workspace.'
+    description: 'The directory of the Playwright project, relative to the workspace, where its Playwright version is read. Set it only when the workspace holds projects on several Playwright versions; empty searches from the workspace.'
     required: false
     default: '.'
-  runner-label:
-    description: 'The runner class of the shard jobs, which the history belongs to. Empty means runner.os-runner.arch.'
-    required: false
-    default: ''
   history-key:
-    description: 'Any extra text that separates one history from another, such as a suite or an environment name.'
+    description: 'Any extra text that separates one sharded suite from another in one run, such as a matrix leg next to the shard or an environment name.'
     required: false
     default: ''
   publish-history:
     description: |
       auto publishes each shard's samples from the repository's default branch only; true also from
-      same-repository branches and pull requests, which write into their own cache scope; false
-      never. Fork pull requests and pull_request_target never publish.
+      same-repository branches and pull requests, which write into their own cache scope, for a
+      repository that runs its suite only on pull requests. Fork pull requests and
+      pull_request_target never publish.
     required: false
     default: 'auto'
   github-token:

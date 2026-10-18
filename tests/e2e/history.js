@@ -59,6 +59,7 @@ function seed(key, runId) {
     commit: 'seeded',
     fingerprint: 'seeded',
     date: new Date().toISOString().slice(0, 10),
+    workers: 1,
     samples: new Map([[testKey('chromium', 'seeded.spec.js', [`seeded run ${id}`]), 100]]),
   });
   fs.mkdirSync(path.dirname(file), { recursive: true });

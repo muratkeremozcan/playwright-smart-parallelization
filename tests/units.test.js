@@ -8,7 +8,7 @@ const assert = require('node:assert');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { actionInputs, readInputs, ACTION_INPUTS } = require('../lib/inputs');
+const { actionInputs, inputsKey, readInputs, ACTION_INPUTS } = require('../lib/inputs');
 const { decide, preliminary, reporterPath, runAgeDays } = require('../lib/setup');
 const { pin, pinText } = require('../lib/pin');
 const { onDefaultBranch, trust } = require('../lib/trust');
@@ -52,26 +52,41 @@ const someHistory = (key) =>
     commit: 'c',
     fingerprint: 'f',
     date: '2026-10-16',
+    workers: 1,
     samples: new Map([[testKey('chromium', 'a.spec.js', ['x']), 100]]),
   }).history;
 
 describe('inputs', () => {
-  test('the history key changes with the working directory, workers, runner label and history-key', () => {
+  test('the history key changes with the working directory and history-key only', () => {
     const j = job();
     fs.mkdirSync(path.join(j.ws, 'other'));
     const base = prepared(j).key;
-    assert.notStrictEqual(prepared(j, { workers: '2' }).key, base);
-    assert.notStrictEqual(prepared(j, { 'runner-label': 'big' }).key, base);
     assert.notStrictEqual(prepared(j, { 'history-key': 'staging' }).key, base);
     assert.notStrictEqual(prepared(j, { 'working-directory': 'other' }).key, base);
-    assert.strictEqual(prepared(j, { enabled: 'false' }).key, base);
+    // The shards of one job on an X64 and an ARM64 or macOS runner share one key, so one pin.
+    for (const env of [{ RUNNER_ARCH: 'ARM64' }, { RUNNER_OS: 'macOS' }, { RUNNER_NAME: 'b' }]) {
+      const other = prepared({ ...j, env: { ...j.env, ...env } }).key;
+      assert.strictEqual(other, base, JSON.stringify(env));
+      assert.strictEqual(pinKey(other, 'test', 7), pinKey(base, 'test', 7));
+    }
+    // The workers stay Playwright's, so an input of them no longer exists or keys anything.
+    assert.strictEqual(prepared(j, { workers: '2' }).key, base);
   });
 
-  test('refuses bad workers, enabled, publish-history and a directory outside the workspace', () => {
+  test('the key of refused inputs is the key the same inputs get once they pass', () => {
     const j = job();
-    assert.throws(() => prepared(j, { workers: '0' }), /workers input must be a whole number/);
-    assert.throws(() => prepared(j, { enabled: 'yes' }), /enabled input must be true or false/);
+    const inputs = { 'working-directory': 'later', 'history-key': 'e2e' };
+    const before = inputsKey(inputs, j.env);
+    assert.throws(() => prepared(j, inputs), /does not exist/);
+    fs.mkdirSync(path.join(j.ws, 'later'));
+    assert.strictEqual(prepared(j, inputs).key, before);
+    assert.strictEqual(inputsKey({ ...inputs, 'publish-history': 'never' }, j.env), before);
+  });
+
+  test('refuses a bad publish-history and a directory outside the workspace', () => {
+    const j = job();
     assert.throws(() => prepared(j, { 'publish-history': 'x' }), /publish-history input/);
+    assert.throws(() => prepared(j, { 'publish-history': 'false' }), /must be auto or true/);
     assert.throws(() => prepared(j, { 'working-directory': '..' }), /outside the workspace/);
     assert.throws(() => prepared(j, { 'working-directory': 'nope' }), /does not exist/);
   });
@@ -84,11 +99,7 @@ describe('inputs', () => {
 });
 
 describe('the main step decides the mode of its shard', () => {
-  test('enabled false, Playwright 1.62, no Playwright and Plug and Play: disabled', () => {
-    assert.match(
-      preliminary(prepared(job(), { enabled: 'false' })).reason,
-      /enabled input is false/
-    );
+  test('Playwright 1.62, no Playwright and Plug and Play: disabled', () => {
     assert.match(
       preliminary(prepared(job({ version: '1.62.0' }))).reason,
       /1\.62\.0 in app is below 1\.63\.0/
@@ -140,6 +151,11 @@ describe('the main step decides the mode of its shard', () => {
       /not a history entry of this key/
     );
     assert.strictEqual(decide({ unpinned: true, reason: 'no cache' }, key).mode, 'native');
+    const sourceless = serializeHistory({ ...someHistory(key), source: null });
+    assert.match(
+      decide({ matchedKey: matched, history: sourceless }, key).reason,
+      /names no run to take workers from/
+    );
   });
 
   test('the reporter is copied into a node_modules folder of the job temp, so Playwright loads it uncompiled', () => {
@@ -538,7 +554,6 @@ describe('publish-history', () => {
     assert.strictEqual(trusted(pr('o/r'), 'auto'), false);
     assert.ok(trusted(push('refs/heads/feature'), 'true'));
     assert.ok(trusted(pr('o/r'), 'true'));
-    assert.strictEqual(trusted(push('refs/heads/main'), 'false'), false);
     const schedule = {
       GITHUB_REPOSITORY: 'o/r',
       GITHUB_EVENT_NAME: 'schedule',
@@ -546,7 +561,6 @@ describe('publish-history', () => {
       GITHUB_EVENT_PATH: event({ schedule: '0 0 * * *' }),
     };
     assert.ok(trusted(schedule, 'auto'));
-    assert.strictEqual(trusted(schedule, 'false'), false);
     for (const mode of ['auto', 'true']) {
       assert.strictEqual(trusted(pr('fork/r'), mode), false);
       assert.strictEqual(trusted(pr(null), mode), false);
@@ -577,6 +591,7 @@ describe('the compare-and-swap steps', () => {
     commit: 'c',
     fingerprint: 'f',
     date: '2026-10-16',
+    workers: 1,
     samples: [[testKey('p', 'f', ['t']), 100 + id]],
   });
   const entry = (id) =>
@@ -962,7 +977,23 @@ describe('the toolkit cache adapter', () => {
       restoreCache: async (...args) => (calls.push(args), 'k-2'),
     });
     assert.strictEqual(await adapter.lookup('d', 'k-', ['k-']), 'k-2');
-    assert.deepStrictEqual(calls, [[['d'], 'k-', ['k-'], { lookupOnly: true }]]);
+    assert.deepStrictEqual(calls, [[['d'], 'k-', ['k-'], { lookupOnly: true }, true]]);
+  });
+
+  test('every restore and save allows cross-OS archives, so a Windows shard shares the version', async () => {
+    const calls = [];
+    const adapter = toolkitCache({
+      restoreCache: async (...args) => (calls.push(['restore', args.at(-1)]), ''),
+      saveCache: async (...args) => (calls.push(['save', args.at(-1)]), 1),
+    });
+    await adapter.restore('d', 'k', ['k']);
+    await adapter.lookup('d', 'k', ['k']);
+    await captured(() => adapter.save('d', 'k'));
+    assert.deepStrictEqual(calls, [
+      ['restore', true],
+      ['restore', true],
+      ['save', true],
+    ]);
   });
 });
 
@@ -974,6 +1005,7 @@ describe('the publish loop', () => {
     commit: 'c',
     fingerprint: 'f',
     date: '2026-10-16',
+    workers: 1,
     samples: [[testKey('p', `s${id}.spec.js`, ['t']), id]],
   });
   const entry = (id) =>

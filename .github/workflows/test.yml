@@ -111,17 +111,45 @@ jobs:
       expect-finish: failure
       expect-history: published
 
-  e2e-rollback:
-    name: e2e, rollback
+  e2e-disabled:
+    name: e2e, disabled by Yarn Plug'n'Play
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     uses: ./.github/workflows/e2e-pipeline.yml
     with:
-      history-key: e2e-rollback-${{ github.run_id }}
+      history-key: e2e-disabled-${{ github.run_id }}
       seed: true
-      enabled: 'false'
+      pnp: true
       expect-mode: disabled
-      expect-coverage: not checked
+      expect-exactly-once: not checked
       expect-history: unchanged
+
+  # The workers are Playwright's in both legs: the first job plans for the seeded count and runs
+  # with its own, and the warm job plans for the count the first job's shards published.
+  e2e-workers-config:
+    name: e2e, workers set only in the Playwright config
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    uses: ./.github/workflows/e2e-pipeline.yml
+    with:
+      history-key: e2e-workers-config-${{ github.run_id }}
+      playwright-args: --config=workers.config.js
+      expect-workers: '3'
+      seed: true
+      warm: true
+      expect-mode: balanced
+      expect-history: published
+
+  e2e-workers-cli:
+    name: e2e, --workers on the command line
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    uses: ./.github/workflows/e2e-pipeline.yml
+    with:
+      history-key: e2e-workers-cli-${{ github.run_id }}
+      playwright-args: --workers=3
+      expect-workers: '3'
+      seed: true
+      warm: true
+      expect-mode: balanced
+      expect-history: published
 
   e2e-shell:
     name: e2e, shell variables and --grep "$FILTER", no working-directory

@@ -18,8 +18,18 @@ inputs:
     default: ''
   history-key:
     required: true
-  enabled:
-    default: 'true'
+  pnp:
+    description: true adds a Yarn Plug'n'Play loader to the fixture, which disables the Action.
+    default: 'false'
+  playwright-args:
+    description: Arguments the Playwright command adds, such as --workers=3 or --config=FILE.
+    default: ''
+  expect-workers:
+    description: The worker count Playwright must resolve, as the run record names it; empty for any.
+    default: ''
+  expect-plan-workers:
+    description: The worker count a balanced shard must plan for; empty for any.
+    default: ''
   fail-test:
     description: A title the fixture fails on every attempt, empty for none.
     default: ''
@@ -50,12 +60,16 @@ runs:
         SHARD: ${{ inputs.shard }}
       run: node tests/e2e/history.js wait-until "$AT" "$(( (SHARD - 1) * 300 ))" >> "$GITHUB_OUTPUT"
 
+    - name: Add a Yarn Plug'n'Play loader, which disables the Action
+      if: inputs.pnp == 'true'
+      shell: bash
+      run: touch fixtures/consumer/.pnp.cjs
+
     - id: psp
       uses: ./
       with:
         working-directory: ${{ inputs.working-directory || '.' }}
         history-key: ${{ inputs.history-key }}
-        enabled: ${{ inputs.enabled }}
         # The pull requests of this repository publish into their own cache scope.
         publish-history: 'true'
 
@@ -72,7 +86,7 @@ runs:
         [ "$MODE" = "$EXPECTED" ] || fail "the main step chose $MODE, expected $EXPECTED"
         [ "$ARGS" = "$PSP_ARGS" ] || fail "the args output differs from PSP_ARGS"
         if [ "$MODE" = disabled ]; then
-          [ -z "$PSP_ARGS" ] || fail "rollback exported PSP_ARGS '$PSP_ARGS'"
+          [ -z "$PSP_ARGS" ] || fail "a disabled shard exported PSP_ARGS '$PSP_ARGS'"
         else
           case "$PSP_ARGS" in --add-reporter=/*reporter.js) ;; *) fail "PSP_ARGS is '$PSP_ARGS'" ;; esac
         fi
@@ -111,7 +125,8 @@ runs:
       working-directory: fixtures/consumer
       env:
         PSP_FIXTURE_FAIL: ${{ inputs.fail-test }}
-      run: npx playwright test --project=chromium --grep-invert=oversized --shard=${{ inputs.shard }}/${{ inputs.total }} $PSP_ARGS
+        PW_ARGS: ${{ inputs.playwright-args }}
+      run: npx playwright test --project=chromium --grep-invert=oversized --shard=${{ inputs.shard }}/${{ inputs.total }} $PW_ARGS $PSP_ARGS 2>&1 | tee "$RUNNER_TEMP/playwright.log"
 
     - id: shell
       if: inputs.shape == 'shell'
@@ -121,10 +136,11 @@ runs:
       env:
         PSP_FIXTURE_FAIL: ${{ inputs.fail-test }}
         SHARD: ${{ inputs.shard }}/${{ inputs.total }}
+        PW_ARGS: ${{ inputs.playwright-args }}
       run: |
         SUITES="tests/cart.spec.js tests/catalog.spec.js tests/checkout.spec.js"
         FILTER="item|catalog|checkout"
-        npx playwright test $SUITES --project=chromium --grep "$FILTER" --shard=$SHARD $PSP_ARGS
+        npx playwright test $SUITES --project=chromium --grep "$FILTER" --shard=$SHARD $PW_ARGS $PSP_ARGS 2>&1 | tee "$RUNNER_TEMP/playwright.log"
 
     - id: npm
       if: inputs.shape == 'npm'
@@ -133,7 +149,8 @@ runs:
       working-directory: fixtures/consumer
       env:
         PSP_FIXTURE_FAIL: ${{ inputs.fail-test }}
-      run: npm run test:pw -- --project=chromium --grep-invert=oversized --shard=${{ inputs.shard }}/${{ inputs.total }} $PSP_ARGS
+        PW_ARGS: ${{ inputs.playwright-args }}
+      run: npm run test:pw -- --project=chromium --grep-invert=oversized --shard=${{ inputs.shard }}/${{ inputs.total }} $PW_ARGS $PSP_ARGS 2>&1 | tee "$RUNNER_TEMP/playwright.log"
 
     - name: Require the outcome of the Playwright step
       shell: bash
@@ -146,6 +163,32 @@ runs:
         if [ -z "$FAIL_TEST" ] && [ "$OUTCOME" != success ]; then
           echo "::error::the Playwright step ended $OUTCOME"
           exit 1
+        fi
+
+    # The workers are Playwright's: the record names the count it resolved, and a balanced shard
+    # plans for the count of its pinned snapshot, naming its own when the two differ.
+    - name: Require the workers Playwright resolved and the plan packed for
+      if: inputs.expect-workers != '' || inputs.expect-plan-workers != ''
+      shell: bash
+      env:
+        WORKERS: ${{ inputs.expect-workers }}
+        PLANNED: ${{ inputs.expect-plan-workers }}
+        MODE: ${{ steps.psp.outputs.mode }}
+      run: |
+        fail() { echo "::error::$1"; exit 1; }
+        log="$RUNNER_TEMP/playwright.log"
+        resolved=$(jq -r .workers "$PSP_RECORD")
+        echo "Playwright resolved $resolved worker(s)"
+        if [ -n "$WORKERS" ]; then
+          [ "$resolved" = "$WORKERS" ] || fail "Playwright resolved $resolved worker(s), expected $WORKERS"
+        fi
+        if [ -n "$PLANNED" ] && [ "$MODE" = balanced ]; then
+          grep -q "planned for $PLANNED worker(s)" "$log" || fail "the plan did not pack for $PLANNED worker(s)"
+          if [ "$resolved" != "$PLANNED" ]; then
+            grep -q "Playwright resolved $resolved worker(s), the pinned snapshot $PLANNED" "$log" || fail "the shard did not name its other count"
+          else
+            ! grep -q "Playwright resolved" "$log" || fail "the shard named another count, though the counts agree"
+          fi
         fi
 
     - name: Wait for every shard, so the post steps publish at once

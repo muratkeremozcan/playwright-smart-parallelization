@@ -54,7 +54,7 @@ Playwright applies the flag to the projects whose own tests `--project`, `--grep
 It leaves a project it only pulled in as a dependency unchanged.
 A project whose leaf count grows between the two listings is primary.
 Any other listed project is a dependency.
-A dependency is exempt from exactly-once coverage, and every shard that runs a project needing it must run it.
+A dependency is exempt from the exactly-once check, and every shard that runs a project needing it must run it.
 
 So a setup or teardown project the filters left standing alone is primary.
 A dependency project that repeats because its config says `repeatEach` is still a dependency.

@@ -46,9 +46,18 @@ on:
         description: The working-directory input of the Action; empty searches from the workspace.
         type: string
         default: fixtures/consumer
-      enabled:
+      pnp:
+        description: Add a Yarn Plug'n'Play loader to the fixture, which disables the Action.
+        type: boolean
+        default: false
+      playwright-args:
+        description: Arguments the Playwright command adds, such as --workers=3 or --config=FILE.
         type: string
-        default: 'true'
+        default: ''
+      expect-workers:
+        description: The worker count Playwright must resolve on every shard, empty for any; the shards seed 1, so the first job plans for 1 and the warm job for this count.
+        type: string
+        default: ''
       fail-test:
         description: A title the fixture fails on every attempt, empty for none.
         type: string
@@ -78,8 +87,8 @@ on:
       expect-finish:
         type: string
         default: success
-      expect-coverage:
-        description: The coverage finish outputs, ok, failed or not checked.
+      expect-exactly-once:
+        description: The exactly-once output of finish, ok, failed or not checked.
         type: string
         default: ok
       expect-history:
@@ -229,7 +238,11 @@ jobs:
           shape: ${{ inputs.shape }}
           working-directory: ${{ inputs.working-directory }}
           history-key: ${{ inputs.history-key }}
-          enabled: ${{ inputs.enabled }}
+          pnp: ${{ inputs.pnp }}
+          playwright-args: ${{ inputs.playwright-args }}
+          expect-workers: ${{ inputs.expect-workers }}
+          # The seeded history carries 1 worker, so the shards plan for 1 whatever they resolve.
+          expect-plan-workers: ${{ inputs.expect-workers && '1' || '' }}
           fail-test: ${{ inputs.fail-test }}
           # A re-run reads the pin of the first attempt, so it expects the same mode.
           expect-mode: ${{ inputs.expect-mode }}
@@ -266,6 +279,10 @@ jobs:
           total: '4'
           working-directory: ${{ inputs.working-directory }}
           history-key: ${{ inputs.history-key }}
+          playwright-args: ${{ inputs.playwright-args }}
+          expect-workers: ${{ inputs.expect-workers }}
+          # The first job's shards published the count they resolved, so this job plans for it.
+          expect-plan-workers: ${{ inputs.expect-workers }}
           expect-mode: balanced
 
   # Gated the way a consumer gates it: finish runs whatever the shards did.
@@ -287,17 +304,17 @@ jobs:
         env:
           OUTCOME: ${{ steps.finish.outcome }}
           MODE: ${{ steps.finish.outputs.mode }}
-          COVERAGE: ${{ steps.finish.outputs.coverage }}
+          EXACTLY_ONCE: ${{ steps.finish.outputs.exactly-once }}
           OVERHEAD: ${{ steps.finish.outputs.overhead-ms }}
           EXPECTED: ${{ inputs.expect-finish }}
-          EXPECTED_COVERAGE: ${{ inputs.expect-coverage }}
+          EXPECTED_EXACTLY_ONCE: ${{ inputs.expect-exactly-once }}
         run: |
-          echo "finish ended $OUTCOME: mode $MODE, coverage $COVERAGE, overhead ${OVERHEAD:-none} ms"
+          echo "finish ended $OUTCOME: mode $MODE, exactly-once $EXACTLY_ONCE, overhead ${OVERHEAD:-none} ms"
           fail() { echo "::error::$1"; exit 1; }
           [ "$OUTCOME" = "$EXPECTED" ] || fail "finish ended $OUTCOME, expected $EXPECTED"
-          [ "$COVERAGE" = "$EXPECTED_COVERAGE" ] || fail "coverage $COVERAGE, expected $EXPECTED_COVERAGE"
+          [ "$EXACTLY_ONCE" = "$EXPECTED_EXACTLY_ONCE" ] || fail "exactly-once $EXACTLY_ONCE, expected $EXPECTED_EXACTLY_ONCE"
           # The jobs API is readable with actions: read, so a checked run measures its overhead.
-          if [ "$EXPECTED_COVERAGE" = ok ]; then
+          if [ "$EXPECTED_EXACTLY_ONCE" = ok ]; then
             [ -n "$OVERHEAD" ] || fail "the per-shard overhead was not measured"
           fi
 
@@ -370,7 +387,7 @@ jobs:
           AFTER: ${{ steps.after.outputs.cache-matched-key }}
           PINNED: ${{ steps.pin.outputs.cache-hit }}
           EXPECTED: ${{ inputs.expect-history }}
-          ENABLED: ${{ inputs.enabled }}
+          DISABLED: ${{ inputs.pnp }}
           FAIL_TEST: ${{ inputs.fail-test }}
           RUN_ID: ${{ github.run_id }}
           ATTEMPT: ${{ github.run_attempt }}
@@ -379,14 +396,14 @@ jobs:
         run: |
           echo "newest entry before: ${BEFORE:-none}, after: ${AFTER:-none}, pinned: ${PINNED:-false}"
           fail() { echo "::error::$1"; exit 1; }
-          if [ "$ENABLED" = false ]; then
-            [ "$PINNED" != true ] || fail "rollback pinned a snapshot"
-            [ -z "$(ls records 2>/dev/null | grep -v disabled)" ] || fail "rollback left run records"
+          if [ "$DISABLED" = true ]; then
+            [ "$PINNED" != true ] || fail "a disabled run pinned a snapshot"
+            [ -z "$(ls records 2>/dev/null | grep -v disabled)" ] || fail "a disabled run left run records"
           fi
           if [ -n "$FAIL_TEST" ]; then
             grep -rqs '"status":"failed"' records || fail "no shard recorded the failing test"
           fi
-          if [ "$ENABLED" != false ]; then
+          if [ "$DISABLED" != true ]; then
             [ "$PINNED" = true ] || fail "no pin was saved"
             node tests/e2e/history.js expect-pin "$RUN_ID" records
           fi
@@ -407,5 +424,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           SHARDS: ${{ inputs.shards }}
-          ENABLED: ${{ inputs.enabled }}
+          ENABLED: ${{ !inputs.pnp }}
         run: node tests/e2e/operations.js "$SHARDS" "$ENABLED"

@@ -178,12 +178,12 @@ test('on the uncontended path one more operation than the path makes fails', () 
   assert.deepStrictEqual(judge({ ...rerun, run: RUN }).problems, []);
 });
 
-test('a rollback makes no network operations but the status record of its post step', () => {
-  const rollback = { ...RUN, enabled: false };
+test('a disabled run makes no network operations but the status record of its post step', () => {
+  const off = { ...RUN, enabled: false };
   const disabled = pipeline({}, { 'artifact-upload': 1 });
-  assert.deepStrictEqual(judge({ ...disabled, run: rollback }).problems, []);
+  assert.deepStrictEqual(judge({ ...disabled, run: off }).problems, []);
   const leaked = pipeline({ 'cache-restore': 1 }, { 'artifact-upload': 1, 'cache-save': 1 });
-  assert.deepStrictEqual(judge({ ...leaked, run: rollback }).problems.slice(0, 2), [
+  assert.deepStrictEqual(judge({ ...leaked, run: off }).problems.slice(0, 2), [
     'leg / test (1, false) made 1 cache-restore in its main step, over the budget of 0',
     'leg / test (1, false) made 1 cache-save in its post step, over the budget of 0',
   ]);
@@ -306,6 +306,47 @@ test('waits until the jobs API lists every pipeline job as completed, then fails
     ]
   );
   assert.strictEqual(picked.finish.status, 'completed');
+
+  // A job whose steps all completed has ended, though the API still lists it in progress.
+  const steps = (conclusion) => [
+    { name: 'Run ./finish', status: 'completed', conclusion },
+    { name: 'Complete job', status: 'completed', conclusion: 'success' },
+  ];
+  clock = 0;
+  waits.length = 0;
+  for (const [conclusion, expected] of [
+    ['success', 'success'],
+    ['failure', 'failure'],
+  ]) {
+    const stuck = await settledJobs({
+      fetchJobs: async () => [
+        assertJob,
+        job('test (1, false)', 'completed'),
+        job('finish', 'in_progress', { steps: steps(conclusion) }),
+      ],
+      pick: (jobs) => pipelineJobs(jobs, 'runner assert'),
+      boundMs: 60_000,
+      wait,
+      now: () => clock,
+    });
+    assert.deepStrictEqual(waits, []);
+    assert.strictEqual(stuck.finish.conclusion, expected);
+  }
+  const running = [
+    { name: 'Run ./finish', status: 'in_progress', conclusion: null },
+    { name: 'Complete job', status: 'queued', conclusion: null },
+  ];
+  await assert.rejects(
+    settledJobs({
+      fetchJobs: async () => [assertJob, job('finish', 'in_progress', { steps: running })],
+      pick: (jobs) => pipelineJobs(jobs, 'runner assert'),
+      boundMs: 10_000,
+      intervalMs: 5_000,
+      wait,
+      now: () => clock,
+    }),
+    /still lists e2e, x \/ finish as in_progress/
+  );
 
   clock = 0;
   await assert.rejects(
