@@ -11,6 +11,3 @@ fixtures/consumer/blob-report/
 .psp/
 harness-report*.json
 _bmad/
-qualification/nsxbet/evidence.json
-qualification/flakiness/evidence.json
-research/shard-balancer/evidence.json

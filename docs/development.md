@@ -1,18 +1,17 @@
 # Development
 
-How to set up this repository, check it, and run the harness, the engine qualifications, the measurements and the research.
+How to set up this repository, check it, run the harness and release the Action.
 
 ## Setup
 
 Needs Node 22 or later, plus `zip` and `unzip`.
-`gh`, logged in, is needed only to collect measurements.
 
 ```sh
 npm run setup
 npm run validate
 ```
 
-`setup` runs `npm ci` in the root, in `fixtures/consumer` and in `qualification/flakiness`, the same installs CI runs.
+`setup` runs `npm ci` in the root and in `fixtures/consumer`, the same installs CI runs.
 `validate` runs ESLint, Prettier in check mode, the unit tests (`node --test`) and `check:public`.
 The unit tests include `tests/dist.test.js`, which fails when the committed `dist/` differs from a fresh `npm run build`.
 `npm test` loads `tests/support/temp.js`, so each test process and every process it starts make their temporary folders under one folder that is removed when the process exits.
@@ -102,7 +101,7 @@ The rejected shapes:
 
 Each error names the leaves.
 The load-only line that loads a helper's spec uses a title that no title path in the listing has.
-The limits and their reproductions, on Playwright 1.56.1, 1.60.0 and 1.64.1, are in [playwright-test-list-selection-limits.md](playwright-test-list-selection-limits.md).
+The limits and their reproductions, on Playwright 1.56.1, 1.60.0 and 1.64.1, are in [playwright-test-list-selection-limits.md](https://github.com/muratkeremozcan/playwright-smart-parallelization/blob/6164df685c3f13c5c6936d0473acfec10212e91f/docs/playwright-test-list-selection-limits.md), as of the last commit that has it.
 
 ### Leaf keys and serial groups
 
@@ -149,71 +148,8 @@ They need a suite whose setup project has a teardown project and a project that 
 A suite that skips tests by design fails the `not-executed` check, because the harness has no allowance for a leaf that is meant to skip.
 Other engines plug in as `{ args, env }` shards through `harness/partitions.js`.
 
-## Engine qualification
+## Releasing
 
-Each candidate engine is installed from npm in its own directory with a committed lockfile, and driven through the harness.
-`qualification/nsxbet` holds `@nsxbet/playwright-orchestrator` and `qualification/flakiness` holds `@flakiness/playwright`.
-Both run the same eight compatibility proofs, plus a damaged timing file and two runs racing to publish history.
-Both check that the engine makes no outbound connection, and measure balance and footprint against native sharding.
-Shared code lives in `qualification/lib`.
-
-- [`qualification/nsxbet.md`](qualification/nsxbet.md) holds the NSXBet verdict, the resolved versions and the evidence for every row.
-- [`qualification/flakiness.md`](qualification/flakiness.md) does the same for Flakiness.
-- [`qualification/comparison.md`](qualification/comparison.md) puts the two side by side.
-
-```sh
-npm run qualify:install
-npm run qualify:nsxbet
-npm run qualify:nsxbet:test
-npm run qualify:flakiness
-npm run qualify:flakiness:test
-```
-
-`qualify:ENGINE` writes `qualification/ENGINE/evidence.json`, and `--out FILE` picks another path.
-`--group NAME` collects one group: `coverage`, `serial`, `assignment`, `history` and `privacy` for both engines, plus `balance` for Flakiness.
-`--merge FILE...` joins the evidence of the groups.
-`qualify:ENGINE:test` asserts every result.
-With `PSP_NSX_EVIDENCE=FILE` or `PSP_FLK_EVIDENCE=FILE` it reads an earlier evidence file and skips the collection.
-The `Qualification` workflow runs both engines on pull requests that touch `qualification/`, `harness/` or the fixture, with every group on its own runner.
-
-## Measurements
-
-`measurements/` turns finished GitHub Actions runs of a Playwright workflow into the figures of [`measurements/baseline.md`](measurements/baseline.md), the before measurement of couture-cast.
-
-- `collect.js` reads one finished run through `gh api`: the run, every job with its steps, the runner image from each job log, and one blob report per shard.
-  It writes `docs/measurements/raw/LABEL-RUNID.json`.
-  It pages through every list, checks the counts the API reports, and records a shard whose blob report is missing or expired with the reason.
-  A blob report holds the whole environment of the web server, so `blob.js` copies only the fields it reads and never the environment.
-- `analyze.js` and `render.js` compute everything in the document from those records.
-  The document is generated whole and a test compares it with the committed file, so a figure cannot drift from its evidence.
-- `couture-cast.json` names the target: the repository, the shard job and artifact names, the step that runs the tests and the serial suites Playwright keeps whole.
-
-```sh
-npm run measurements:collect -- --label baseline-a --pair 1 --run RUN_ID
-npm run measurements:report
-```
-
-`gh` (logged in), `unzip` and, for the unit tests, `zip` must be on the `PATH`.
-Blob artifacts expire after the workflow's retention (five days for couture-cast), so collect a run before then.
-
-## Research
-
-`research/shard-balancer` studies [playwright-shard-balancer](https://github.com/qa-gary-parker/playwright-shard-balancer) for ideas to take into the Action.
-The package is installed there with `--ignore-scripts` and a committed lockfile.
-It runs only in the experiments of that directory, against temporary copies of the consumer fixture through the harness.
-[`research/shard-balancer-harvest.md`](research/shard-balancer-harvest.md) holds the decision for every gap of the qualifications, every workflow and history item and every mechanism.
-Each decision cites an upstream line and the experiment rows behind it.
-
-```sh
-npm run research:install
-npm run research:shard-balancer
-npm run research:shard-balancer:test
-```
-
-`research:shard-balancer` writes `research/shard-balancer/evidence.json`, and `--out FILE` picks another path.
-It exits 2 with a pointer to `research:install` when nothing is installed.
-`research:shard-balancer:test` asserts every row and citation.
-With `PSP_PSB_EVIDENCE=FILE` it reads an earlier evidence file and skips the collection.
-`research:shard-balancer:report` renders every generated table of the document from the committed evidence.
-The `Research` workflow collects and asserts on pull requests that touch the research code, the harness, the fixture or the code they reuse.
-`npm test` compares the document with the committed evidence and needs no install of the package.
+The steps are in the [README](../README.md#releasing).
+The `Release` workflow runs `npm run setup`, `npm run validate` and a smoke of the Action from the checkout before it drafts a release, and again on the published tag before it moves the major tag.
+`tests/release-workflow.test.js` checks its guards and runs its promote steps against a mocked API.

@@ -82,7 +82,7 @@ npm run validate
 ```
 
 `validate` runs lint, format check, unit tests, and a check that nothing private lands in this public repo.
-The harness, qualification, measurement and research commands are in [docs/development.md](docs/development.md).
+The harness and the release workflow are in [docs/development.md](docs/development.md).
 
 ### Releasing
 

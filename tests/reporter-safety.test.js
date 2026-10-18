@@ -28,8 +28,8 @@ const { FIXTURE, requireFixture } = require('./support/fixture');
 const { runPartition } = require('../harness/index.js');
 
 const FORWARD = ['--grep-invert=oversized'];
-const GUARD = path.join(__dirname, '..', 'qualification', 'lib', 'net-guard.js');
-const SLOW_CLOCK = path.join(__dirname, '..', 'qualification', 'lib', 'slow-clock.js');
+const GUARD = path.join(__dirname, 'support', 'net-guard.js');
+const SLOW_CLOCK = path.join(__dirname, 'support', 'slow-clock.js');
 
 let history;
 

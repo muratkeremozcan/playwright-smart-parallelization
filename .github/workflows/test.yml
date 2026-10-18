@@ -35,10 +35,9 @@ jobs:
           cache-dependency-path: |
             package-lock.json
             fixtures/consumer/package-lock.json
-            qualification/flakiness/package-lock.json
 
-      # The same setup as docs/development.md: the root, the consumer fixture the unit tests list
-      # and run with its real Playwright, and the Flakiness package its unit tests run.
+      # The same setup as docs/development.md: the root and the consumer fixture the unit tests list
+      # and run with its real Playwright.
       - name: Install dependencies
         run: npm run setup
 

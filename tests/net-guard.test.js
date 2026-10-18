@@ -1,4 +1,7 @@
-/** Tests for the network guard preload: it must record and refuse every kind of attempt. */
+/**
+ * Tests for the network guard preload `tests/reporter-safety.test.js` runs the reporter under: it
+ * must record and refuse every kind of attempt, so a run that logs none made none.
+ */
 
 const { test, describe, after } = require('node:test');
 const assert = require('node:assert');
@@ -6,25 +9,35 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
-const { GUARD, attemptsIn, guardEnv, readLog } = require('../netcheck');
+
+const GUARD = path.join(__dirname, 'support', 'net-guard.js');
+const ATTEMPTS = ['connect', 'dns.', 'fetch'];
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'psp-guard-test-'));
 after(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+function readLog(file) {
+  if (!fs.existsSync(file)) return [];
+  return fs
+    .readFileSync(file, 'utf8')
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
+}
+
+const attemptsIn = (log) =>
+  log.filter((entry) => ATTEMPTS.some((kind) => entry.kind.startsWith(kind)));
 
 function guarded(script, name) {
   const log = path.join(dir, `${name}.log`);
   const result = spawnSync(process.execPath, ['-e', script], {
     encoding: 'utf8',
-    env: { ...process.env, ...guardEnv(log) },
+    env: { ...process.env, NODE_OPTIONS: `--require "${GUARD}"`, PSP_NET_GUARD_LOG: log },
   });
   return { result, entries: readLog(log) };
 }
 
 describe('net-guard', () => {
-  test('is the file the scenarios preload', () => {
-    assert.ok(fs.existsSync(GUARD));
-  });
-
   for (const [name, script, kind] of [
     ['net.connect', "require('node:net').connect(80, 'vendor.invalid')", 'connect'],
     ['a port number', "require('node:net').connect(8080)", 'connect'],
@@ -67,31 +80,5 @@ describe('net-guard', () => {
     const { result, entries } = guarded("require('node:fs').readFileSync(__filename)", 'quiet');
     assert.strictEqual(result.status, 1);
     assert.deepStrictEqual(attemptsIn(entries), []);
-  });
-});
-
-describe('peak-rss', () => {
-  const PRELOAD = path.resolve(__dirname, '..', 'peak-rss.js');
-
-  test('appends the peak memory of a process to the log when it exits', () => {
-    const log = path.join(dir, 'rss.log');
-    spawnSync(process.execPath, ['-e', 'Buffer.alloc(50 * 1024 * 1024, 1)'], {
-      env: { ...process.env, NODE_OPTIONS: `--require "${PRELOAD}"`, PSP_RSS_LOG: log },
-    });
-    const [entry] = fs
-      .readFileSync(log, 'utf8')
-      .split('\n')
-      .filter(Boolean)
-      .map((line) => JSON.parse(line));
-    assert.ok(entry.maxRssKb > 50 * 1024, `peak ${entry.maxRssKb} KB`);
-  });
-
-  test('writes nothing without a log path', () => {
-    const result = spawnSync(process.execPath, ['--require', PRELOAD, '-e', '0'], {
-      env: { ...process.env, PSP_RSS_LOG: '' },
-      encoding: 'utf8',
-    });
-    assert.strictEqual(result.status, 0);
-    assert.strictEqual(result.stderr, '');
   });
 });

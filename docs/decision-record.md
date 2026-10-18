@@ -21,16 +21,16 @@ We build our own engine (CAP-7).
 
 ## Evidence
 
-- Fixture: [nsxbet.md](qualification/nsxbet.md), [flakiness.md](qualification/flakiness.md), [comparison.md](qualification/comparison.md). On three shards a duration split cut the slowest shard from 12.4 s to 9.9 s.
-- Harvest: [shard-balancer-harvest.md](research/shard-balancer-harvest.md). Its acceptance rows are listed below.
-- Real suite: [baseline.md](measurements/baseline.md). couture-cast completes in a median 602 s, 87% of it outside the critical test span; balancing can win at most the 23 s assignment gap (3.6%).
+- Fixture: [nsxbet.md](https://github.com/muratkeremozcan/playwright-smart-parallelization/blob/6164df685c3f13c5c6936d0473acfec10212e91f/docs/qualification/nsxbet.md), [flakiness.md](https://github.com/muratkeremozcan/playwright-smart-parallelization/blob/6164df685c3f13c5c6936d0473acfec10212e91f/docs/qualification/flakiness.md), [comparison.md](https://github.com/muratkeremozcan/playwright-smart-parallelization/blob/6164df685c3f13c5c6936d0473acfec10212e91f/docs/qualification/comparison.md). On three shards a duration split cut the slowest shard from 12.4 s to 9.9 s.
+- Harvest: [shard-balancer-harvest.md](https://github.com/muratkeremozcan/playwright-smart-parallelization/blob/6164df685c3f13c5c6936d0473acfec10212e91f/docs/research/shard-balancer-harvest.md). Its acceptance rows are listed below.
+- Real suite: [baseline.md](https://github.com/muratkeremozcan/playwright-smart-parallelization/blob/6164df685c3f13c5c6936d0473acfec10212e91f/docs/measurements/baseline.md). couture-cast completes in a median 602 s, 87% of it outside the critical test span; balancing can win at most the 23 s assignment gap (3.6%).
 - S6 stopped: the owner wants the Action proven on a synthetic suite, independent of couture-cast. The couture-cast before and after moves to S9.
 
 ## Shape
 
 One JavaScript action that drops into the user's own job: a main step before the user's Playwright command, which adds `$PSP_ARGS`, and a post step after it. The main step pins one history snapshot to the workflow run and decides the mode from its bytes. `$PSP_ARGS` adds a bundled preprocess reporter with `--add-reporter` and leaves the user's config and command alone. The post step uploads the shard's run record and publishes its samples. An optional `finish` action proves exactly-once coverage and writes the summary.
 
-Shape A (per-shard `--test-list` files) is rejected: `--test-list` is a lossy selector that cannot pick out titles with `›`, title prefixes or helper-defined tests exactly ([limits](playwright-test-list-selection-limits.md)).
+Shape A (per-shard `--test-list` files) is rejected: `--test-list` is a lossy selector that cannot pick out titles with `›`, title prefixes or helper-defined tests exactly ([limits](https://github.com/muratkeremozcan/playwright-smart-parallelization/blob/6164df685c3f13c5c6936d0473acfec10212e91f/docs/playwright-test-list-selection-limits.md)).
 
 ### Prepare dropped, finish optional (2026-10-17)
 
