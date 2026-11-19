@@ -153,3 +153,7 @@ Other engines plug in as `{ args, env }` shards through `harness/partitions.js`.
 The steps are in the [README](../README.md#releasing).
 The `Release` workflow runs `npm run setup`, `npm run validate` and a smoke of the Action from the checkout before it drafts a release, and again on the published tag before it moves the major tag.
 `tests/release-workflow.test.js` checks its guards and runs its promote steps against a mocked API.
+
+## Vendoring
+
+To run this Action from a reviewed copy in your own repository, follow [vendoring.md](vendoring.md).
