@@ -52,7 +52,8 @@ The runtime dependencies (`@actions/core`, `@actions/cache`, `@actions/artifact`
    npm ls --omit=dev --all > "$out/copy-tree"
    diff <(tail -n +2 "$out/upstream-tree") <(tail -n +2 "$out/copy-tree")
    files=(src lib reporter dist finish/main.js scripts/build.js LICENSE docs/reference.md action.yml finish/action.yml README.md package.json package-lock.json)
-   test -z "$(git ls-files --others --ignored --exclude-standard -- "${files[@]}")"
+   ignored=$(git ls-files --others --ignored --exclude-standard -- "${files[@]}")
+   if [ -n "$ignored" ]; then printf 'git ignores these copied files:\n%s\n' "$ignored" >&2; exit 1; fi
    git status --short --untracked-files=all
    ```
 
