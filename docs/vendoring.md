@@ -30,21 +30,30 @@ The runtime dependencies (`@actions/core`, `@actions/cache`, `@actions/artifact`
 3. Check out that SHA in a scratch directory, `up`. Replace each copied path with its upstream version, so a file deleted upstream disappears from the copy too.
 4. Copy both `action.yml` files whole, then set `author` again.
 5. Copy upstream's `package-lock.json`, then rebuild `package.json` from upstream's with the edits in the table: its `dependencies` as they are and its `esbuild` pin. Run `npm install --package-lock-only`. Starting from upstream's lockfile keeps every resolved version and only drops the development packages. Do this on every sync, because a lockfile can change while `package.json` does not.
-6. Verify from the copy's directory. Each command succeeds with exit status 0:
+6. Verify from the copy's directory with this Bash script. It stops at the first failed check and exits 0 only when every check passes:
 
-   ```sh
+   ```bash
+   #!/usr/bin/env bash
+   set -euo pipefail
    up=/path/to/upstream/checkout   # at the synced SHA, after npm ci
    for p in src lib reporter dist finish/main.js scripts/build.js LICENSE docs/reference.md; do
-     diff -r "$up/$p" "$p" || echo "differs: $p"
+     diff -r "$up/$p" "$p"
+   done
+   for f in action.yml finish/action.yml; do
+     diff <(grep -v '^author:' "$up/$f") <(grep -v '^author:' "$f")
    done
    npm ci
    out=$(mktemp -d)
-   node scripts/build.js --out "$out/dist" && diff -r dist "$out/dist"; rc=$?; rm -rf "$out"; test $rc -eq 0
-   diff <(cd "$up" && npm ls --omit=dev --all | tail -n +2) <(npm ls --omit=dev --all | tail -n +2)
+   trap 'rm -rf "$out"' EXIT
+   node scripts/build.js --out "$out/dist"
+   diff -r dist "$out/dist"
+   (cd "$up" && npm ls --omit=dev --all) > "$out/upstream-tree"
+   npm ls --omit=dev --all > "$out/copy-tree"
+   diff <(tail -n +2 "$out/upstream-tree") <(tail -n +2 "$out/copy-tree")
    git status --short --untracked-files=all
    ```
 
-   The loop prints nothing, the rebuilt bundle matches `dist/`, the runtime dependency trees match, and `git status` lists only the files you expect.
+   It checks that the copied paths match upstream, the `action.yml` files differ only in `author`, the rebuilt bundle matches `dist/` and the runtime dependency trees match. The last line lists every changed, staged and untracked file; it should name only the files you expect.
 
 7. Open the PR. Run the rebuild-and-diff check in the copy's CI too, so reviewers can trust `dist/` without reading it.
 8. In the PR description, give the upstream SHA range, the behavior change in a sentence or two, and for each dependency bump its name, old and new version and the reason.
@@ -59,4 +68,4 @@ The runtime dependencies (`@actions/core`, `@actions/cache`, `@actions/artifact`
 ## Tests
 
 The copy carries no tests; this repository's CI runs them on every SHA it syncs from.
-Running the suite in the copy needs more than `tests/`: it imports `harness/` and scripts the copy omits, reads `.github/` workflows and installs `fixtures/consumer/`.
+Running the suite in the copy needs more than `tests/`: it imports `harness/` and scripts the copy omits, reads `.github/` workflows, and needs `fixtures/consumer/` installed with `npm ci --prefix fixtures/consumer` before the tests run.
