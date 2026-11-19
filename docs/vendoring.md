@@ -36,12 +36,12 @@ The runtime dependencies (`@actions/core`, `@actions/cache`, `@actions/artifact`
    #!/usr/bin/env bash
    set -euo pipefail
    up=/path/to/upstream/checkout   # at the synced SHA, after npm ci
-   author=ACME                      # the author the copy's action.yml files set
+   author='ACME'                    # the author the copy's action.yml files set
    for p in src lib reporter dist finish/main.js scripts/build.js LICENSE docs/reference.md; do
      diff -r "$up/$p" "$p"
    done
    for f in action.yml finish/action.yml; do
-     diff <(sed "s/^author: .*/author: $author/" "$up/$f") "$f"
+     diff <(AUTHOR=$author awk '/^author: / { $0 = "author: " ENVIRON["AUTHOR"] } 1' "$up/$f") "$f"
    done
    npm ci
    out=$(mktemp -d)
