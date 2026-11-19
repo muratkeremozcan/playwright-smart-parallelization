@@ -38,7 +38,8 @@ The runtime dependencies (`@actions/core`, `@actions/cache`, `@actions/artifact`
      diff -r "$up/$p" "$p" || echo "differs: $p"
    done
    npm ci
-   out=$(mktemp -d) && node scripts/build.js --out "$out/dist" && diff -r dist "$out/dist"
+   out=$(mktemp -d)
+   node scripts/build.js --out "$out/dist" && diff -r dist "$out/dist"; rc=$?; rm -rf "$out"; test $rc -eq 0
    diff <(cd "$up" && npm ls --omit=dev --all | tail -n +2) <(npm ls --omit=dev --all | tail -n +2)
    git status --short --untracked-files=all
    ```
