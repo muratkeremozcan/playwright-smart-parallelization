@@ -36,7 +36,7 @@ The runtime dependencies (`@actions/core`, `@actions/cache`, `@actions/artifact`
    #!/usr/bin/env bash
    set -euo pipefail
    up=/path/to/upstream/checkout   # at the synced SHA, after npm ci
-   author='ACME'                    # the author the copy's action.yml files set
+   author='ACME'   # the author value exactly as the copy's action.yml files write it, YAML quotes included
    for p in src lib reporter dist finish/main.js scripts/build.js LICENSE docs/reference.md; do
      diff -r "$up/$p" "$p"
    done
@@ -51,10 +51,12 @@ The runtime dependencies (`@actions/core`, `@actions/cache`, `@actions/artifact`
    (cd "$up" && npm ls --omit=dev --all) > "$out/upstream-tree"
    npm ls --omit=dev --all > "$out/copy-tree"
    diff <(tail -n +2 "$out/upstream-tree") <(tail -n +2 "$out/copy-tree")
+   files=(src lib reporter dist finish/main.js scripts/build.js LICENSE docs/reference.md action.yml finish/action.yml README.md package.json package-lock.json)
+   test -z "$(git ls-files --others --ignored --exclude-standard -- "${files[@]}")"
    git status --short --untracked-files=all
    ```
 
-   It checks that the copied paths match upstream, the `action.yml` files differ only in `author`, the rebuilt bundle matches `dist/` and the runtime dependency trees match. The last line lists every changed, staged and untracked file; it should name only the files you expect.
+   It checks that the copied paths match upstream, the `action.yml` files differ only in `author`, the rebuilt bundle matches `dist/` and the runtime dependency trees match. It also fails when the copy's `.gitignore` hides a copied file, which would leave it out of the PR. The last line lists every changed, staged and untracked file; it should name only the files you expect.
 
 7. Open the PR. Run the rebuild-and-diff check in the copy's CI too, so reviewers can trust `dist/` without reading it.
 8. In the PR description, give the upstream SHA range, the behavior change in a sentence or two, and for each dependency bump its name, old and new version and the reason.
